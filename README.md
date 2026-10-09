@@ -29,8 +29,8 @@ log_types/
       ...
 ```
 
-- [Manifest](content.yaml): repository format and official content version.
-- [Metadata](log_types/linux_auth/log_type.yaml): description and OCSF schema declaration.
+- [Manifest](content.yaml): repository format.
+- [Metadata](log_types/linux_auth/log_type.yaml): name, description, vendor, and product.
 - [Parser](log_types/linux_auth/parser.vrl): VRL source.
 - [Regression cases](log_types/linux_auth/tests/): exact sample input and expected field assertions.
 

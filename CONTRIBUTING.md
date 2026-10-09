@@ -32,8 +32,6 @@ Browser-only preview is not a substitute.
 
 ## Publish a reviewed update
 
-- Maintainers increment the official `content_version` for a new reviewed snapshot. Never reuse
-  a published content version for different bytes.
 - Keep `format_version: 1` until a coordinated reader/format upgrade exists.
 - Keep content within the documented repository format.
 - Document parser retirement explicitly; do not use an empty parser as a retirement signal.
