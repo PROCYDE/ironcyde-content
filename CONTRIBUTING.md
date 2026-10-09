@@ -35,7 +35,6 @@ Browser-only preview is not a substitute.
 - Maintainers increment the official `content_version` for a new reviewed snapshot. Never reuse
   a published content version for different bytes.
 - Keep `format_version: 1` until a coordinated reader/format upgrade exists.
-- Declare accurate OCSF and minimum Vector requirements in metadata.
 - Keep content within the documented repository format.
 - Document parser retirement explicitly; do not use an empty parser as a retirement signal.
 - Require review and passing validation before updating the branch used by deployments.

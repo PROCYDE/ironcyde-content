@@ -30,12 +30,9 @@ log_types/
 ```
 
 - [Manifest](content.yaml): repository format and official content version.
-- [Metadata](log_types/linux_auth/log_type.yaml): description and OCSF/Vector requirements.
+- [Metadata](log_types/linux_auth/log_type.yaml): description and OCSF schema declaration.
 - [Parser](log_types/linux_auth/parser.vrl): VRL source.
 - [Regression cases](log_types/linux_auth/tests/): exact sample input and expected field assertions.
-
-The repository uses `format_version: 1` and `content_version: 1`. The included content targets
-OCSF 1.9.0 and declares a minimum Vector version of 0.57.0.
 
 ## Contribute
 
