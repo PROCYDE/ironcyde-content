@@ -1,0 +1,9 @@
+# A link-local address carries its zone; src_endpoint.ip holds the address alone.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Failed password for root from fe80::1234%eth0 port 51000 ssh2'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'root'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: 'fe80::1234'

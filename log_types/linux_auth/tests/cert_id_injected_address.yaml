@@ -1,0 +1,9 @@
+# A certificate's key ID is chosen by whoever made the certificate and is logged after the real address.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Failed publickey for bob from 203.0.113.9 port 51000 ssh2: ED25519-CERT SHA256:abc ID x from 6.6.6.6: y (serial 0) CA ED25519 SHA256:def'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

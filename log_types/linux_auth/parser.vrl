@@ -1,0 +1,210 @@
+# Linux authentication (sshd, sudo, login, PAM) -> OCSF Authentication (class_uid 3002), and the commands sudo runs
+# -> OCSF Process Activity (class_uid 1007).
+#
+# .message is either a raw auth.log line ("Jun 14 15:16:01 host sshd[123]: Failed password for root from 10.0.0.7 ...")
+# or a JSON object with message, program and hostname fields. Only lines that record an authentication outcome
+# become OCSF events; everything else from these programs (connection resets, key exchange, reverse-DNS warnings)
+# is aborted: a parse failure the log type's failure list shows as "not ...".
+
+text = string(.message) ?? ""
+# The ingestion time, from the pipeline's lineage, completes timestamps and stands in for a missing one.
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+msg = ""
+program = ""
+host = ""
+user = ""
+src_ip = ""
+event_time = null
+
+fields = parse_json(text) ?? null
+if is_object(fields) {
+  msg = string(fields.message) ?? string(fields.MESSAGE) ?? ""
+  program = downcase(string(fields.program) ?? string(fields.SYSLOG_IDENTIFIER) ?? string(fields.ident) ?? "")
+  host = string(fields.hostname) ?? string(fields.host) ?? ""
+  user = string(fields.user) ?? ""
+  src_ip = string(fields.src_ip) ?? ""
+  event_time = parse_timestamp(string(fields.timestamp) ?? string(fields.time) ?? "", format: "%+") ?? null
+} else {
+  line = parse_linux_authorization(text) ?? null
+  if is_object(line) {
+    msg = string(line.message) ?? ""
+    program = downcase(string(line.appname) ?? "")
+    host = string(line.hostname) ?? ""
+    event_time = timestamp(line.timestamp) ?? null
+    # Syslog timestamps carry no year. Take the year of ingestion, which a replay keeps, not the current one; a line
+    # more than a day ahead of ingestion is from the year before, like a December line ingested in January.
+    if is_timestamp(event_time) {
+      day_and_time = format_timestamp!(timestamp!(event_time), format: "-%m-%dT%H:%M:%S%.fZ")
+      year = to_int(format_timestamp!(ingested, format: "%Y")) ?? 0
+      event_time = parse_timestamp(to_string(year) + day_and_time, format: "%+") ?? null
+      if is_timestamp(event_time) && to_unix_timestamp(timestamp!(event_time)) > to_unix_timestamp(ingested) + 86400 {
+        event_time = parse_timestamp(to_string(year - 1) + day_and_time, format: "%+") ?? null
+      }
+    }
+  }
+}
+
+if host == "" {
+  host = "unknown"
+}
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+if is_timestamp(event_time) {
+  time_ms = to_unix_timestamp(timestamp!(event_time), unit: "milliseconds")
+}
+
+msg_l = downcase(msg)
+# The appname may carry a PAM module suffix, as in "sshd(pam_unix)" or "su(pam_unix)".
+auth_program = match(program, r'^(sshd|sshd-session|sudo|su|login)\b') || contains(program, "pam")
+
+# activity_id: 1 Logon, 2 Logoff. status_id: 1 Success, 2 Failure.
+activity_id = 0
+status_id = 0
+if contains(msg_l, "failed password") || contains(msg_l, "failed publickey") ||
+  contains(msg_l, "authentication failure") || contains(msg_l, "invalid user") ||
+  contains(msg_l, "maximum authentication attempts exceeded") {
+  activity_id = 1
+  status_id = 2
+} else if contains(msg_l, "accepted password") || contains(msg_l, "accepted publickey") ||
+  contains(msg_l, "accepted keyboard-interactive") || contains(msg_l, "session opened for user") {
+  activity_id = 1
+  status_id = 1
+} else if contains(msg_l, "session closed for user") {
+  activity_id = 2
+  status_id = 1
+}
+
+# Every command sudo runs, or refuses to run, as sudo's own log format writes it (lib/eventlog/eventlog.c):
+#   "alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx"
+#   "bob : 3 incorrect password attempts ; TTY=pts/1 ; PWD=/home/bob ; USER=root ; COMMAND=/bin/bash"
+# A refusal carries its reason before TTY (user NOT in sudoers, command not allowed, incorrect password attempts).
+sudo_run = null
+if starts_with(program, "sudo") {
+  sudo_run = parse_regex(msg, r'^\s*(?P<user>\S+) : (?:(?P<reason>[^;]*?) ; )?(?:HOST=\S+ ; )?TTY=(?P<tty>\S+) ; (?:CHROOT=\S+ ; )?PWD=(?P<pwd>.*?) ; USER=(?P<runas>\S+) ; (?:GROUP=\S+ ; )?(?:TSID=\S+ ; )?(?:ENV=.*? ; )?COMMAND=(?P<cmd>.+)$') ?? null
+}
+
+# Lines that restate attempts already logged on their own are not counted again: input_userauth_request is sshd's
+# debug-level echo of an "Invalid user" line, and "Disconnecting/Disconnected ... invalid user" closes a connection
+# whose failed attempts came before it.
+if is_object(sudo_run) {
+  run = object!(sudo_run)
+  cmd = string!(run.cmd)
+  # An optional group that did not match comes back null.
+  reason = ""
+  if is_string(run.reason) {
+    reason = string!(run.reason)
+  }
+  executable = string(split(cmd, " ")[0]) ?? cmd
+  executable_name = string(split(executable, "/")[-1]) ?? executable
+  # status_id: 1 Success (sudo ran it), 2 Failure (sudo refused). A refusal is worth a look on its own.
+  # sudo does not log the command's PID. OCSF's process.uid is an identifier the producer assigns to the process
+  # record, so the event's own ID serves, and satisfies the process object's pid/uid/cpid constraint.
+  process_uid = string(%ironcyde.event_id) ?? ""
+  status_id = 1
+  severity_id = 1
+  if reason != "" {
+    status_id = 2
+    severity_id = 3
+  }
+  . = {
+    "category_uid": 1,
+    "class_uid": 1007,
+    "type_uid": 100701,
+    "activity_id": 1,
+    "status_id": status_id,
+    "severity_id": severity_id,
+    "time": time_ms,
+    "message": msg,
+    "actor": {"user": {"name": string!(run.user)}},
+    # type_id 0 (Unknown): the log does not say what kind of device the host is.
+    "device": {"hostname": host, "type_id": 0},
+    "process": {
+      "uid": process_uid,
+      "cmd_line": cmd,
+      "name": executable_name,
+      "file": {"path": executable, "name": executable_name, "type_id": 1},
+      "user": {"name": string!(run.runas)},
+    },
+    "metadata": {
+      "product": {"name": "sudo", "vendor_name": "linux"},
+      "version": "1.9.0",
+    },
+    "unmapped": {"program": program, "tty": run.tty, "pwd": run.pwd},
+  }
+  if reason != "" {
+    .status_detail = reason
+  }
+} else if !auth_program || activity_id == 0 || contains(msg_l, "input_userauth_request") || starts_with(msg_l, "disconnect") {
+  abort "not an authentication outcome or a sudo command"
+} else {
+  # sshd's own login lines end in "from <address> port <n>" after a login name the client chose freely, spaces
+  # included, so they are read from the end: a name like "x from 10.0.0.1 port 22" cannot hide or replace the real
+  # source. Invalid-user lines of older sshd and sshd's PAM failures end at the address, without a port.
+  # A certificate's key ID comes after the address, is chosen by whoever made the certificate and may be cut short,
+  # so a publickey or hostbased line with a certificate is read only at its "<address> port <n> ssh2: <type>-CERT
+  # <fingerprint> ID" marker, and gives no address if the login name or key ID names a second "from <address> port".
+  # sshd cuts lines at 500 bytes, and escaping can make a login name four times longer, so the protocol word after the
+  # port may be cut short. With LogVerbose, a "file.c:function():line (...)" prefix comes first.
+  # Matching ignores surrounding whitespace (rsyslog's leading space, a CRLF line's "\r"); an IPv6 zone is dropped.
+  trimmed = strip_whitespace(msg)
+  caps = {}
+  if src_ip == "" && match(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:Failed|Accepted) (?:publickey|hostbased) for .* ssh2: \S+-CERT \S+ ID ') {
+    if !match(trimmed, r'from [0-9a-fA-F:.]+(?:%[\w.-]+)? port \d+.* from [0-9a-fA-F:.]+(?:%[\w.-]+)? port \d+') {
+      caps = parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:Failed|Accepted) \S+ for(?: invalid user)? (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)? port \d+ ssh2: \S+-CERT \S+ ID ') ?? {}
+    }
+  } else if src_ip == "" {
+    caps = parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:(?:Invalid|Illegal) user|Failed \S+ for(?: invalid user)?|Accepted \S+ for|(?:error: )?maximum authentication attempts exceeded for(?: invalid user)?) (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)? port \d+(?: ssh[12](?:: .*)?| s(?:sh?)?)?(?: \[preauth\])?\s*\]?$') ??
+      parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:(?:Invalid|Illegal) user|(?:error: )?PAM: Authentication failure for(?: illegal user)?) (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)?\s*\]?$') ?? {}
+  }
+  if user == "" {
+    user = string(caps.user) ?? ""
+  }
+  if src_ip == "" {
+    src_ip = string(caps.ip) ?? ""
+  }
+  if user == "" {
+    caps = parse_regex(msg, r'(?i)(?:invalid|illegal) user (?P<user>[A-Za-z0-9._@-]+)') ??
+      parse_regex(msg, r'for (?:user )?(?P<user>[A-Za-z0-9._@-]+)') ??
+      parse_regex(msg, r'\buser=(?P<user>[A-Za-z0-9._@-]+)') ?? {}
+    user = string(caps.user) ?? ""
+  }
+  if user == "" {
+    user = "unknown"
+  }
+  # Elsewhere only PAM names the client, as rhost. PAM does not quote its fields, so a line with "rhost=" twice cannot
+  # say which one PAM wrote, and gives none.
+  if src_ip == "" && !match(trimmed, r'rhost=.*rhost=') {
+    caps = parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:pam_\w+\([^)]*\): )?(?:authentication failure|(?:PAM )?\d+ more authentication failures?); logname=.* rhost=(?P<ip>[^\s\]%]*)') ?? {}
+    src_ip = string(caps.ip) ?? ""
+  }
+  # rhost may name a host rather than an address; only an IP belongs in src_endpoint.ip.
+  if src_ip != "" && !(is_ipv4(src_ip) || is_ipv6(src_ip)) {
+    src_ip = ""
+  }
+
+  # Failed logons are low-signal one by one; correlation raises the severity of a burst.
+  severity_id = 1
+  if status_id == 2 {
+    severity_id = 2
+  }
+  . = {
+    "category_uid": 3,
+    "class_uid": 3002,
+    "type_uid": 300200 + activity_id,
+    "activity_id": activity_id,
+    "status_id": status_id,
+    "severity_id": severity_id,
+    "time": time_ms,
+    "message": msg,
+    "user": {"name": user},
+    "actor": {"user": {"name": user}},
+    "dst_endpoint": {"hostname": host},
+    "metadata": {
+      "product": {"name": program, "vendor_name": "linux"},
+      "version": "1.9.0",
+    },
+    "unmapped": {"program": program},
+  }
+  if src_ip != "" {
+    .src_endpoint = {"ip": src_ip}
+  }
+}

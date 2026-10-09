@@ -1,0 +1,9 @@
+# With LogVerbose, sshd puts the source location before the message.
+raw_sample: 'Oct  6 10:00:01 web1 sshd-session[4242]: auth.c:auth_log():277 (bin=sshd-session, pid=4242): Failed password for bob from 203.0.113.9 port 51000 ssh2'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

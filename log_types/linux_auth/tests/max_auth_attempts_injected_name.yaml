@@ -1,0 +1,9 @@
+# The login name is attacker-chosen here too; the real source is the last "from <address> port <n>".
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: error: maximum authentication attempts exceeded for invalid user x from 6.6.6.6 port 1 from 203.0.113.9 port 51000 ssh2 [preauth]'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'x from 6.6.6.6 port 1'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

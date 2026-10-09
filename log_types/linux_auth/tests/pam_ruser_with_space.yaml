@@ -1,0 +1,9 @@
+# PAM does not quote ruser, which may contain a space.
+raw_sample: 'Oct  6 10:00:01 web1 login[4242]: pam_unix(login:auth): authentication failure; logname= uid=0 euid=0 tty=tty1 ruser=Jane Doe rhost=203.0.113.9  user=bob'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

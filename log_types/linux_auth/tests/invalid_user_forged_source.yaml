@@ -1,0 +1,8 @@
+# The login name is attacker-chosen and may itself read "from <address> port <n>"; the real source is the last one.
+raw_sample: 'Sep 29 10:00:00 web-01 sshd[811]: Invalid user deploy from 10.20.0.5 port 22 from 203.0.113.9 port 51000'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'deploy from 10.20.0.5 port 22'
+  src_endpoint.ip: '203.0.113.9'

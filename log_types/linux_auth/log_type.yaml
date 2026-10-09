@@ -1,0 +1,6 @@
+name: Linux authentication
+description: Linux sshd, PAM, login, and sudo authentication outcomes and sudo command activity.
+vendor: Linux
+product: auth
+ocsf_version: 1.9.0
+min_vector_version: 0.57.0

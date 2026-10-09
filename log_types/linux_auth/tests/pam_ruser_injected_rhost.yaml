@@ -1,0 +1,9 @@
+# PAM does not quote ruser, so one containing " rhost=" leaves two candidates, and the line names no source.
+raw_sample: 'Oct  6 10:00:01 web1 su[4242]: pam_unix(su:auth): authentication failure; logname=root uid=1000 euid=0 tty=/dev/pts/0 ruser=bob rhost=6.6.6.6 rhost=  user=root'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'root'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: null

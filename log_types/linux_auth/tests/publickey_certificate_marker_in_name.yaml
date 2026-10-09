@@ -1,0 +1,8 @@
+# On a publickey line a marker in the login name looks like a real certificate with a forged key ID, so the line names no source.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Failed publickey for invalid user x from 6.6.6.6 port 1 ssh2: ED25519-CERT SHA256:abc ID z from 203.0.113.9 port 51000 ssh2: RSA SHA256:real'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: null

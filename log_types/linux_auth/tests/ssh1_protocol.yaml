@@ -1,0 +1,9 @@
+# OpenSSH 7.3 and older name protocol 1 as ssh1.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Failed password for root from 203.0.113.9 port 51000 ssh1'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'root'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

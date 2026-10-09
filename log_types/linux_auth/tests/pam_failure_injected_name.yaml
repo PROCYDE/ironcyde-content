@@ -1,0 +1,9 @@
+# sshd's own PAM failure ends at the address, without a port; the attacker-chosen name before it may name another.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: error: PAM: Authentication failure for illegal user x from 6.6.6.6 from 203.0.113.9'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'x from 6.6.6.6'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

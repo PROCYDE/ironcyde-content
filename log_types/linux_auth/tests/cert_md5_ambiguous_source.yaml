@@ -1,0 +1,9 @@
+# With MD5 fingerprints (sshd's FingerprintHash md5) a key ID naming a second address is just as ambiguous.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Failed publickey for bob from 203.0.113.9 port 51000 ssh2: ED25519-CERT MD5:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff ID x from 6.6.6.6 port 1 ssh2: z (serial 0) CA ED25519 MD5:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: null

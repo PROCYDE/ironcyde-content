@@ -1,0 +1,9 @@
+# A security-key certificate adds a signature count after the CA; a key ID naming a second address stays ambiguous.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Accepted publickey for bob from 203.0.113.9 port 51000 ssh2: ED25519-SK-CERT SHA256:abc ID x from 6.6.6.6 port 1 ssh2: z (serial 0) CA ED25519 SHA256:def, signature count = 1'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 1
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: null

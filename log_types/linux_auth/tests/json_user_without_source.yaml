@@ -1,0 +1,9 @@
+# A shipper may send the user as a field but leave the source in the message.
+raw_sample: '{"message":"Failed password for bob from 10.1.1.1 port 2 ssh2","program":"sshd","hostname":"h1","user":"bob","timestamp":"2026-09-29T09:00:00Z"}'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'h1'
+  src_endpoint.ip: '10.1.1.1'

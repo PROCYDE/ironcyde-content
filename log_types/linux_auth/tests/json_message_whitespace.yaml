@@ -1,0 +1,9 @@
+# rsyslog can prefix the message with a space, and a CRLF line keeps its carriage return.
+raw_sample: '{"message":" Failed password for bob from 203.0.113.9 port 51000 ssh2\r","program":"sshd","hostname":"h1"}'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'h1'
+  src_endpoint.ip: '203.0.113.9'

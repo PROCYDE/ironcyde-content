@@ -1,0 +1,8 @@
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Accepted publickey for bob from 203.0.113.9 port 51000 ssh2: ED25519-CERT SHA256:abc ID bob@corp (serial 7) CA ED25519 SHA256:def'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 1
+  actor.user.name: 'bob'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

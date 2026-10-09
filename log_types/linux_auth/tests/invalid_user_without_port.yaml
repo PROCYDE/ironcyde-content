@@ -1,0 +1,9 @@
+# Older sshd versions log an invalid user without the client port.
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Invalid user admin from 203.0.113.9'
+expected:
+  class_uid: 3002
+  activity_id: 1
+  status_id: 2
+  actor.user.name: 'admin'
+  dst_endpoint.hostname: 'web1'
+  src_endpoint.ip: '203.0.113.9'

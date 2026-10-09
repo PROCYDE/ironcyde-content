@@ -1,0 +1,9 @@
+raw_sample: 'Sep 29 10:00:01 web-01 sudo:    alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx'
+expected:
+  class_uid: 1007
+  activity_id: 1
+  status_id: 1
+  actor.user.name: 'alice'
+  process.name: 'systemctl'
+  process.cmd_line: '/usr/bin/systemctl restart nginx'
+  device.hostname: 'web-01'
