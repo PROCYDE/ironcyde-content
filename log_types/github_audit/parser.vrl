@@ -65,7 +65,7 @@ if org_id > 0 {
 } else if business_id > 0 {
   account_uid = to_string(business_id)
 }
-account = {"type_id": 99, "type": "Other"}
+account = {"type_id": 99, "type": "GitHub Organization"}
 if account_name != "" {
   account.name = account_name
 }
@@ -253,6 +253,10 @@ if class_uid == 3002 {
   class_name = "Entity Management"
 }
 
+if class_uid == 6003 {
+  activity_name = action
+}
+
 out = {
   "class_uid": class_uid,
   "class_name": class_name,
@@ -311,7 +315,11 @@ if class_uid == 3002 {
     out.auth_protocol = "SAML"
   }
   out.logon_type_id = 99
-  out.logon_type = "Other"
+  if contains(downcase(issuer), "saml") {
+    out.logon_type = "SAML SSO"
+  } else {
+    out.logon_type = "Web SSO"
+  }
 } else if class_uid == 3007 {
   if length(keys(target_user)) == 0 {
     abort "GitHub user event without a user"
@@ -327,7 +335,7 @@ if class_uid == 3002 {
   }
   out.group = group
   if length(keys(target_user)) > 0 {
-    out.user = target_user
+    out.users = [target_user]
   }
 } else if class_uid == 3004 {
   entity = {"type_id": 4, "type": "Organization"}

@@ -28,9 +28,13 @@ expected:
     severity_id: 5
     classifications:
     - Trojan
-    path: D:\New folder\mal.exe
     classification_ids:
     - 18
+    files:
+    - name: mal.exe
+      path: D:\New folder\mal.exe
+      type_id: 1
+      type: Regular File
   metadata.log_name: Windows Defender/Operational
   metadata.original_time: '2024-02-10T05:45:09.829Z'
   metadata.profiles:

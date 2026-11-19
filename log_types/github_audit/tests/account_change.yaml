@@ -48,7 +48,7 @@ expected:
   actor.user.type: User
   actor.user.account:
     type_id: 99
-    type: Other
+    type: GitHub Organization
     name: businessname
     uid: '1'
   actor.session.uid: '3495'

@@ -109,7 +109,6 @@ expected:
   src_endpoint.location.country: United States
   src_endpoint.location.region: New York
   src_endpoint.location.postal_code: '10013'
-  src_endpoint.location.isp: google
   src_endpoint.autonomous_system.name: ASN 0000
   src_endpoint.autonomous_system.number: 394089
   actor.user.name: John Doe
@@ -119,9 +118,6 @@ expected:
   actor.session.uid: idxBager62CSveUkTxvgRtonA
   group.name: TEST Group
   group.uid: 00phjos6i2N0LcrqO1d7
-  user.name: TEST User
-  user.uid: 00phjos6i2N0LcrqO1d71
-  user.email_addr: test_user@example[.]com
   http_request.uid: ab609228fe84ce59cdcbfa690bcce016
   http_request.url.path: /api/v1/groups/11111/users/222222
   message: Add user to group membership
@@ -133,3 +129,7 @@ expected:
   status: Success
   status_detail: Add user to group membership
   metadata.uid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a
+  src_endpoint.isp: google
+  users:
+  - name: TEST User
+    uid: 00phjos6i2N0LcrqO1d71

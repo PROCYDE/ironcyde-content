@@ -73,7 +73,7 @@ expected:
   connection_info.direction: Inbound
   connection_info.direction_id: 1
   connection_info.protocol_num: 6
-  connection_info.protocol_ver: IPv4
+  connection_info.protocol_ver: Internet Protocol version 4 (IPv4)
   connection_info.tcp_flags: 2
   dst_endpoint.instance_uid: i-000000000000000000
   dst_endpoint.interface_uid: eni-000000000000000000

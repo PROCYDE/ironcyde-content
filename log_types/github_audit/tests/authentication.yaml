@@ -38,7 +38,7 @@ expected:
     email_addr: test_user@acme.com
     account:
       type_id: 99
-      type: Other
+      type: GitHub Organization
       name: acme-inc
       uid: '11'
   user.name: test_user
@@ -49,7 +49,7 @@ expected:
   auth_protocol_id: 5
   auth_protocol: SAML
   logon_type_id: 99
-  logon_type: Other
+  logon_type: SAML SSO
   http_request.user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
     (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
   metadata.event_code: business.sso_response

@@ -42,7 +42,7 @@ expected:
     email_addr: test_user@acme.com
     account:
       type_id: 99
-      type: Other
+      type: GitHub Organization
       name: acme
       uid: '11111'
   entity.name: acme

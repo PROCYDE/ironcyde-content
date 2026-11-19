@@ -101,7 +101,7 @@ expected:
   - PCI DSS 11.5
   compliance.standards:
   - standards/pci-dss/v/3.2.1
-  compliance.status: FAILED
+  compliance.status: Fail
   finding_info.desc: This AWS control checks whether AWS Config is enabled in current
     account and region.
   finding_info.title: PCI.Config.1 AWS Config should be enabled
@@ -119,6 +119,8 @@ expected:
     Hub controls documentation.
   remediation.references:
   - https://docs.aws.amazon.com/console/securityhub/Config.1/remediation
-  resource.cloud_partition: aws
-  resource.region: us-east-2
-  resource.type: AwsAccount
+  resources:
+  - cloud_partition: aws
+    region: us-east-2
+    type: AwsAccount
+    uid: AWS::::Account:111111111111

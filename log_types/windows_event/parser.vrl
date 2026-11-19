@@ -222,7 +222,7 @@ if event_code == "4624" || event_code == "4625" {
     logon_type = "Batch"
   } else if logon_number == 5 {
     logon_type_id = 5
-    logon_type = "Service"
+    logon_type = "OS Service"
   } else if logon_number == 7 {
     logon_type_id = 7
     logon_type = "Unlock"
@@ -352,7 +352,7 @@ if event_code == "4624" || event_code == "4625" {
     "category_uid": 6,
     "category_name": "Application Activity",
     "activity_id": 99,
-    "activity_name": "Other",
+    "activity_name": operation,
     "type_uid": 600399,
     "time": time_ms,
     "severity_id": 1,

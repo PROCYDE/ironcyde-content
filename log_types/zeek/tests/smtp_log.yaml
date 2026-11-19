@@ -106,16 +106,16 @@ expected:
   src_endpoint.port: 49817
   dst_endpoint.ip: 202.124.241.204
   dst_endpoint.port: 25
-  email.from: info <richq@resultslifecoaching.com.au>
+  email.from: richq@resultslifecoaching.com.au
   email.to:
-  - Warren Lutze <estimating@beenleighinterior.com.au>
+  - estimating@beenleighinterior.com.au
   email.subject: 'RE: Lot 49 Green Road Estate, Regents Park'
   email.message_uid: <0d64537c-c0aa-4573-b69a-aee01a03efc4@local>
-  smtp_hello: localhost
   metadata.log_name: smtp
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
-  metadata.original_time: "2024-10-16T01:45:13.466361Z"
+  metadata.original_time: '2024-10-16T01:45:13.466361Z'
   timezone_offset: 0
   metadata.reporter.hostname: sensor
   metadata.uid: CeeTpA1FJhH0qqvUsb
+  command: localhost

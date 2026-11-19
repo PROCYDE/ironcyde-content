@@ -134,7 +134,6 @@ expected:
   src_endpoint.location.country: United States
   src_endpoint.location.region: New York
   src_endpoint.location.postal_code: '10013'
-  src_endpoint.location.isp: google
   src_endpoint.autonomous_system.name: ASN 0000
   src_endpoint.autonomous_system.number: 394089
   actor.user.name: John Doe
@@ -157,3 +156,4 @@ expected:
   status: Success
   status_detail: User login to Okta
   metadata.uid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a
+  src_endpoint.isp: google

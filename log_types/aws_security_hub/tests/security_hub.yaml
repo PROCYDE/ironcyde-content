@@ -212,7 +212,7 @@ expected:
   compliance.control: EC2.19
   compliance.requirements:
   - PCI1.2
-  compliance.status: PASSED
+  compliance.status: Pass
   compliance.status_id: 1
   compliance.status_details:
   - CloudWatch alarms do not exist in the account
@@ -225,10 +225,6 @@ expected:
     Hub Foundational Security Best Practices documentation.
   remediation.references:
   - https://docs.aws.amazon.com/console/securityhub/EC2.19/remediation
-  resource.uid: arn:aws:ec2:us-east-1:522536594833:security-group/sg-0daf160f08dfed499
-  resource.type: AwsEc2SecurityGroup
-  resource.region: us-east-1
-  resource.cloud_partition: aws
   metadata.log_version: '2018-10-08'
   metadata.product.feature.uid: aws-foundational-security-best-practices/v/1.0.0/EC2.19
   metadata.product.feature.name: Security Hub
@@ -237,3 +233,25 @@ expected:
   metadata.product.vendor_name: AWS
   metadata.original_time: '2022-08-04T18:09:19.100Z'
   metadata.tenant_uid: '522536594833'
+  resources:
+  - cloud_partition: aws
+    data:
+      AwsEc2SecurityGroup:
+        GroupId: sg-0daf160f08dfed499
+        GroupName: eks-cluster-sg-detective-test-486840310
+        IpPermissions:
+        - IpProtocol: '-1'
+          UserIdGroupPairs:
+          - GroupId: sg-0daf160f08dfed499
+            UserId: '522536594833'
+          - GroupId: sg-0e92935097ad2f657
+            UserId: '522536594833'
+        IpPermissionsEgress:
+        - IpProtocol: '-1'
+          IpRanges:
+          - CidrIp: 0.0.0.0/0
+        OwnerId: '522536594833'
+        VpcId: vpc-0ccabdde7ace9327a
+    region: us-east-1
+    type: AwsEc2SecurityGroup
+    uid: arn:aws:ec2:us-east-1:522536594833:security-group/sg-0daf160f08dfed499

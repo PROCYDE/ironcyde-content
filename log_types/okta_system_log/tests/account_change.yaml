@@ -104,7 +104,6 @@ expected:
   src_endpoint.location.country: France
   src_endpoint.location.region: Paris
   src_endpoint.location.postal_code: '01111'
-  src_endpoint.location.isp: NAITWAYS SAS
   src_endpoint.autonomous_system.name: NAITWAYS SAS
   src_endpoint.autonomous_system.number: 57119
   actor.user.name: OKTA Test user
@@ -127,3 +126,4 @@ expected:
   status_detail: Max sign in attempts exceeded
   metadata.uid: a8daaacb-7f18-1111-1111-11111111
   metadata.correlation_uid: ZvqAhyEXAMPLE
+  src_endpoint.isp: NAITWAYS SAS

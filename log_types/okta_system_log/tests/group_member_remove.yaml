@@ -102,11 +102,12 @@ expected:
   status_id: 1
   group.name: TEST Group
   group.uid: 00phjos6i2N0LcrqO1d7
-  user.name: TEST User
-  user.uid: 00phjos6i2N0LcrqO1d71
   message: Remove user from group membership
   metadata.event_code: group.user_membership.remove
   metadata.original_time: '2024-08-13T15:58:20.353Z'
   timezone_offset: 0
   status: Success
   status_detail: Remove user from group membership
+  users:
+  - name: TEST User
+    uid: 00phjos6i2N0LcrqO1d71

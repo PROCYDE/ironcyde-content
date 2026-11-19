@@ -26,9 +26,6 @@ expected:
   direction_id: 0
   email.message_uid: <ZG9VBXKJSOU4.FA3ANQQ6AFVL1@sj0pr06mb7776>
   email.size: 0
-  email.smtp_from: ttsender@microsoft.com
-  email.smtp_to:
-  - first_last@testdomain2.com
   email.subject: test subject
   message_trace_uid: 46734309-b552-45a6-c4ec-08dd14bf1534
   metadata.product.name: O365

@@ -27,9 +27,6 @@ expected:
   direction_id: 0
   email.message_uid: <-1485666524.89606.1729702511228.JavaMail.vending@testing.com>
   email.size: 26921
-  email.smtp_from: vending@testing.com
-  email.smtp_to:
-  - testuser@testdomain.com
   email.subject: Asset Overdue Alert
   message_trace_uid: 6a285e92-b85c-4e0f-a262-08dcf3837710
   metadata.product.name: O365

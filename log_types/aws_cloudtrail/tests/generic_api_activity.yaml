@@ -47,7 +47,6 @@ expected:
   actor.user.account.uid: '1111111111111'
   actor.user.account.type_id: 10
   actor.user.account.type: AWS Account
-  actor.user.credential_uid: AKIA3Z2XBVEXAMPLE
   actor.user.type_id: 1
   api.operation: DescribeDirectConnectGateways
   api.request.uid: 1c8a6220-4263-4763-b526-example
@@ -68,4 +67,7 @@ expected:
   metadata.original_time: '2023-09-21T22:22:52Z'
   metadata.tenant_uid: '1111111111111'
   timezone_offset: 0
-  actor.user.type: IAMUser
+  actor.user.type: User
+  actor.user.programmatic_credentials:
+  - uid: AKIA3Z2XBVEXAMPLE
+    type: AWS Access Key

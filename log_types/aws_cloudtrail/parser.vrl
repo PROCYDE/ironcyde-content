@@ -48,7 +48,13 @@ if type_raw == "IAMUser" || type_raw == "IdentityCenterUser" || type_raw == "SAM
 }
 
 actor_user = {"type_id": type_id}
-if type_raw != "" {
+if type_id == 1 {
+  actor_user.type = "User"
+} else if type_id == 2 {
+  actor_user.type = "Admin"
+} else if type_id == 4 {
+  actor_user.type = "Service"
+} else if type_raw != "" {
   actor_user.type = type_raw
 }
 arn = string(identity.arn) ?? ""
@@ -83,7 +89,7 @@ if credential == "" {
   credential = string(identity.credentialId) ?? ""
 }
 if credential != "" {
-  actor_user.credential_uid = credential
+  actor_user.programmatic_credentials = [{"uid": credential, "type": "AWS Access Key"}]
 }
 
 actor = {"user": actor_user}

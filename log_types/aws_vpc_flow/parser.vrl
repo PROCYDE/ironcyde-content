@@ -82,10 +82,13 @@ if end_seconds >= start_seconds {
 
 protocol_ver = string(fields.type) ?? ""
 protocol_ver_id = 99
+protocol_ver_caption = protocol_ver
 if protocol_ver == "IPv4" {
   protocol_ver_id = 4
+  protocol_ver_caption = "Internet Protocol version 4 (IPv4)"
 } else if protocol_ver == "IPv6" {
   protocol_ver_id = 6
+  protocol_ver_caption = "Internet Protocol version 6 (IPv6)"
 }
 
 action_raw = upcase(string(fields.action) ?? "")
@@ -232,8 +235,6 @@ out = {
   "dst_endpoint": dst,
   "connection_info": {
     "protocol_num": protocol,
-    "protocol_ver": string(fields.type) ?? "",
-    "protocol_ver_id": protocol_ver_id,
     "direction_id": direction_id,
     "direction": direction,
     "tcp_flags": tcp_flags,
@@ -256,6 +257,10 @@ out = {
 }
 if end_ms >= time_ms {
   out.end_time = end_ms
+}
+if protocol_ver != "" {
+  out.connection_info.protocol_ver = protocol_ver_caption
+  out.connection_info.protocol_ver_id = protocol_ver_id
 }
 if status_id == 1 {
   out.status = "Success"

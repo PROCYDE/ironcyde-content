@@ -166,14 +166,17 @@ if is_array(compliance_raw.AssociatedStandards) {
 }
 status = string(compliance_raw.Status) ?? ""
 if status != "" {
-  compliance.status = status
   if status == "PASSED" {
+    compliance.status = "Pass"
     compliance.status_id = 1
   } else if status == "WARNING" {
+    compliance.status = "Warning"
     compliance.status_id = 2
   } else if status == "FAILED" {
+    compliance.status = "Fail"
     compliance.status_id = 3
   } else {
+    compliance.status = status
     compliance.status_id = 99
   }
 }
@@ -369,12 +372,10 @@ if class_uid == 2002 {
   out.vulnerabilities = vulnerabilities
   if length(resources) > 0 {
     out.resources = resources
-    out.resource = get(resources, [0]) ?? {}
   }
 } else if class_uid == 2003 {
   out.compliance = compliance
   if length(resources) > 0 {
-    out.resource = get(resources, [0]) ?? {}
     out.resources = resources
   }
   if length(keys(remediation)) > 0 {

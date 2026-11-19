@@ -56,11 +56,9 @@ expected:
   actor.user.account.uid: '123456789012'
   actor.user.account.type_id: 10
   actor.user.account.type: AWS Account
-  actor.user.credential_uid: da3f6703-d424-sasf-848d-b0f3384681d64
   actor.user.type_id: 1
   user.uid: e3644802-3061-7018-86c3-USERID
   user.account.uid: '123456789012'
-  user.credential_uid: da3f6703-d424-sasf-848d-b0f3384681d64
   user.type_id: 1
   service.name: AWS Console
   message: CredentialChallenge
@@ -75,5 +73,11 @@ expected:
   metadata.original_time: '2024-09-19T16:32:46Z'
   metadata.tenant_uid: '123456789012'
   timezone_offset: 0
-  actor.user.type: IdentityCenterUser
-  user.type: IdentityCenterUser
+  actor.user.type: User
+  user.type: User
+  actor.user.programmatic_credentials:
+  - uid: da3f6703-d424-sasf-848d-b0f3384681d64
+    type: AWS Access Key
+  user.programmatic_credentials:
+  - uid: da3f6703-d424-sasf-848d-b0f3384681d64
+    type: AWS Access Key

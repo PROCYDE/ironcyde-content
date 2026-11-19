@@ -65,7 +65,6 @@ expected:
   actor.user.account.type_id: 10
   actor.user.account.type: AWS Account
   actor.user.has_mfa: false
-  actor.user.credential_uid: ASIA2W7SOKHEXAMPLE
   actor.user.type_id: 99
   actor.application.name: ecs.amazonaws.com
   status: Success
@@ -95,3 +94,6 @@ expected:
   metadata.original_time: '2025-07-18T15:02:39Z'
   metadata.tenant_uid: '112233445566'
   actor.user.type: AssumedRole
+  actor.user.programmatic_credentials:
+  - uid: ASIA2W7SOKHEXAMPLE
+    type: AWS Access Key

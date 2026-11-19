@@ -400,7 +400,7 @@ if path == "conn" {
     "category_uid": 4,
     "category_name": "Network Activity",
     "activity_id": 99,
-    "activity_name": "Other",
+    "activity_name": "SSH Session",
     "type_uid": 400799,
     "time": time_ms,
     "severity_id": 1,
@@ -460,7 +460,13 @@ if path == "conn" {
   activity_id = 4
   email = {}
   if (string(raw.from) ?? "") != "" {
-    email.from = string(raw.from) ?? ""
+    from_raw = string(raw.from) ?? ""
+    from_match = parse_regex(from_raw, r'<(?P<email>[^>]+)>') ?? null
+    if is_object(from_match) {
+      email.from = string(from_match.email) ?? ""
+    } else {
+      email.from = from_raw
+    }
   }
   if is_array(raw.to) {
     recipients = []
@@ -468,7 +474,16 @@ if path == "conn" {
       recipients = push(recipients, string(item) ?? "")
     }
     if length(recipients) > 0 {
-      email.to = recipients
+      bare = []
+      for_each(recipients) -> |_i, item| {
+        item_match = parse_regex(item, r'<(?P<email>[^>]+)>') ?? null
+        if is_object(item_match) {
+          bare = push(bare, string(item_match.email) ?? "")
+        } else {
+          bare = push(bare, item)
+        }
+      }
+      email.to = bare
     }
   }
   if (string(raw.subject) ?? "") != "" {
@@ -495,7 +510,7 @@ if path == "conn" {
     "metadata": metadata,
   }
   if (string(raw.helo) ?? "") != "" {
-    out.smtp_hello = string(raw.helo) ?? ""
+    out.command = string(raw.helo) ?? ""
   }
 } else if path == "ssl" {
   class_uid = 4001
@@ -594,7 +609,7 @@ if path == "conn" {
     "category_uid": 4,
     "category_name": "Network Activity",
     "activity_id": 99,
-    "activity_name": "Other",
+    "activity_name": "Certificate Observation",
     "type_uid": 400199,
     "time": time_ms,
     "severity_id": 1,

@@ -27,9 +27,6 @@ expected:
   direction_id: 0
   email.message_uid: <SA9PR09MB5838517C85310ECE43856647DB4D2@SA9PR09MB5838.tstprd09.prod.outlook.com>
   email.size: 56562
-  email.smtp_from: user@testdomain.com
-  email.smtp_to:
-  - user@testdomain.com
   email.subject: 'FW: Request for proposal*'
   message_trace_uid: f8290baa-c368-4c82-a18e-08dcf394db3d
   metadata.product.name: O365

@@ -104,7 +104,7 @@ if actor_name != "" {
 if actor_uid != "" {
   actor_user.uid = actor_uid
 }
-if actor_email != "" {
+if actor_email != "" && (parse_regex(actor_email, r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') ?? null) != null {
   actor_user.email_addr = actor_email
 }
 if actor_type_id > 0 {
@@ -220,7 +220,7 @@ if target_user_name != "" {
 if target_user_uid != "" {
   target_user.uid = target_user_uid
 }
-if target_user_email != "" {
+if target_user_email != "" && (parse_regex(target_user_email, r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') ?? null) != null {
   target_user.email_addr = target_user_email
 }
 
@@ -418,9 +418,6 @@ if src_ip != "" {
   if (string(geo.postalCode) ?? "") != "" {
     location.postal_code = string(geo.postalCode) ?? ""
   }
-  if (string(security.isp) ?? "") != "" {
-    location.isp = string(security.isp) ?? ""
-  }
   if is_float(geo_loc.lat) || is_integer(geo_loc.lat) {
     location.lat = to_float!(geo_loc.lat)
   }
@@ -429,6 +426,9 @@ if src_ip != "" {
   }
   if length(keys(location)) > 0 {
     endpoint.location = location
+  }
+  if (string(security.isp) ?? "") != "" {
+    endpoint.isp = string(security.isp) ?? ""
   }
   as_obj = {}
   as_org = string(security.asOrg) ?? ""
@@ -488,7 +488,7 @@ if class_uid == 3002 {
   }
   out.group = group_obj
   if length(keys(target_user)) > 0 {
-    out.user = target_user
+    out.users = [target_user]
   }
 } else if class_uid == 3004 {
   entity_obj = {}

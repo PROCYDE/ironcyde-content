@@ -27,9 +27,6 @@ expected:
   direction_id: 0
   email.message_uid: <-1747485340.246114.1729710607409.JavaMail.root@ip-10-90-64-46.ec2.internal>
   email.size: 167735
-  email.smtp_from: remote.diagnostics@testing.com
-  email.smtp_to:
-  - johndoe1@testdomain.com
   email.subject: R2 / * / 2023 / Wed 10/23/2024 14:09:57 EST / Hot Engine Problems (WC)
     / Z163817-01 / EOA Problem
   message_trace_uid: 8ff3175d-d59a-462f-6651-08dcf3967f1f

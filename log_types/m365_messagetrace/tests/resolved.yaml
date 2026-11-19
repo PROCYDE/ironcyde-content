@@ -27,9 +27,6 @@ expected:
   direction_id: 0
   email.message_uid: <-LbY7S0UTGWCu_rrqO-tSQ@geopod-ismtpd-29>
   email.size: 544560
-  email.smtp_from: shop@somefakeoutlet.com
-  email.smtp_to:
-  - testuser@testdomain.com
   email.subject: 'ALL ACCESS: Sporti Granny Sweater Collection Out Now 💧'
   message_trace_uid: 61826cd8-944b-48c0-add2-08dceeb00f28
   metadata.product.name: O365

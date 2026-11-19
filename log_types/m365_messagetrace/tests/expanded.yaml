@@ -27,9 +27,6 @@ expected:
   direction_id: 0
   email.message_uid: <SJ0PR06MB7116E976D2AECD1432BABAC8F3302@SJ0PR06MB7116.namprd06.prod.outlook.com>
   email.size: 53238
-  email.smtp_from: first.last@testdomain2.com
-  email.smtp_to:
-  - first_last@testdomain2.com
   email.subject: Subject Line
   message_trace_uid: de9b1f4e-175a-4324-034a-08dd14c42e5b
   metadata.product.name: O365

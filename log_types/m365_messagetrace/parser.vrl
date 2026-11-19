@@ -50,11 +50,9 @@ if message_uid != "" {
 }
 if sender != "" {
   email.from = sender
-  email.smtp_from = sender
 }
 if recipient != "" {
   email.to = [recipient]
-  email.smtp_to = [recipient]
 }
 if subject != "" {
   email.subject = subject

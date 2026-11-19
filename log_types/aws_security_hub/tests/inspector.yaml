@@ -177,17 +177,6 @@ expected:
   metadata.product.vendor_name: Amazon
   metadata.original_time: '2024-01-26T22:59:56.923Z'
   metadata.tenant_uid: '111111111111'
-  resource.cloud_partition: aws
-  resource.data:
-    AwsEcrContainerImage:
-      Architecture: amd64
-      ImageDigest: sha256:e9e2afad74f4e80511a5cff33d3d989b9797a718425f27e549f5b1f862c058a8
-      ImagePublishedAt: '2023-04-11T21:07:55Z'
-      RegistryId: '111111111111'
-      RepositoryName: browserhostingstack-EXAMPLE-btb1o54yh1jr
-  resource.region: us-east-2
-  resource.type: AwsEcrContainerImage
-  resource.uid: arn:aws:ecr:us-east-2:111111111111:repository/browserhostingstack-EXAMPLE-btb1o54yh1jr/sha256:e9e2afad74f4e80511a5cff33d3d989b9797a718425f27e549f5b1f862c058a8
   class_name: Vulnerability Finding
   type_uid: 200202
   vulnerabilities:
@@ -236,3 +225,15 @@ expected:
     first_seen_time: 1682092744000
     last_seen_time: 1706307554000
     vendor_name: NVD
+  resources:
+  - cloud_partition: aws
+    data:
+      AwsEcrContainerImage:
+        Architecture: amd64
+        ImageDigest: sha256:e9e2afad74f4e80511a5cff33d3d989b9797a718425f27e549f5b1f862c058a8
+        ImagePublishedAt: '2023-04-11T21:07:55Z'
+        RegistryId: '111111111111'
+        RepositoryName: browserhostingstack-EXAMPLE-btb1o54yh1jr
+    region: us-east-2
+    type: AwsEcrContainerImage
+    uid: arn:aws:ecr:us-east-2:111111111111:repository/browserhostingstack-EXAMPLE-btb1o54yh1jr/sha256:e9e2afad74f4e80511a5cff33d3d989b9797a718425f27e549f5b1f862c058a8

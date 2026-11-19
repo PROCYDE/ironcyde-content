@@ -182,7 +182,12 @@ if category_name != "" {
   }
 }
 if file_path != "" {
-  malware.path = file_path
+  file_name = file_path
+  if contains(file_path, "\\") {
+    parts = split(file_path, "\\")
+    file_name = string(get(parts, [length(parts) - 1]) ?? file_path) ?? file_path
+  }
+  malware.files = [{"name": file_name, "path": file_path, "type_id": 1, "type": "Regular File"}]
 }
 
 metadata = {
