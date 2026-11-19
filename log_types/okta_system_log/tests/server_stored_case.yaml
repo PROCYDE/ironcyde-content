@@ -1,0 +1,20 @@
+# stored deployment test case for okta_system_log
+# source: ironcyde registry (custom parser v1)
+
+raw_sample: |-
+  {"actor":{"id":"00uV3IQKeu5D6nX3hl07","type":"User","alternateId":"rsanchez@citadel.example","displayName":"Rick Sanchez"},"client":{"ipAddress":"146.70.199.12","userAgent":{"rawUserAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0","os":"Windows 10","browser":"CHROME"},"geographicalContext":{"country":"SC","city":"Unknown"}},"device":{"name":"CTDL-WKS-23"},"displayMessage":"User login failed","eventType":"user.session.start","outcome":{"result":"FAILURE","reason":"INVALID_CREDENTIALS"},"published":"2026-10-15T09:44:48.000Z","severity":"WARN","authenticationContext":{"authenticationStep":0,"externalSessionId":"2hIax8BS62GW6ruh6DwJp4Mex"},"uuid":"ec716a02-9cdc-4813-87fe-d2b4d8b9d427"}
+
+expected:
+  class_uid: 3002
+  category_uid: 3
+  activity_id: 1
+  status_id: 2
+  severity_id: 2
+  actor.user.name: Rick Sanchez
+  user.name: Rick Sanchez
+  actor.session.uid: 2hIax8BS62GW6ruh6DwJp4Mex
+  src_endpoint.ip: 146.70.199.12
+  src_endpoint.location.country: SC
+  service.name: okta
+  message: User login failed
+  metadata.event_code: user.session.start

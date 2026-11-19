@@ -1,0 +1,4 @@
+name: Okta System Log
+description: Okta System Log authentication, admin, and lifecycle events.
+vendor: Okta
+product: System Log

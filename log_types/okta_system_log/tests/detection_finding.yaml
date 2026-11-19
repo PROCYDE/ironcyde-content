@@ -1,0 +1,100 @@
+# source: mappings/markdown/Okta/v1.3.0/System Logs/Detection Finding/samples/detection_finding.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Okta/v1.3.0/System Logs/Detection Finding/samples/detection_finding.ocsf
+# reference issue: time looks like seconds, OCSF wants epoch milliseconds
+# reference issue: declares profiles datetime, host, security_control (fill them or drop the declaration)
+
+raw_sample: |
+  {
+    "actor": {
+      "id": "10.0.0.1",
+      "type": "IP address",
+      "alternateId": "unknown",
+      "displayName": "10.0.0.1"
+    },
+    "client": {
+      "userAgent": {
+        "rawUserAgent": "unknown",
+        "os": "unknown",
+        "browser": "unknown"
+      },
+      "zone": null,
+      "device": "Computer",
+      "id": null,
+      "ipAddress": "10.0.0.1",
+      "geographicalContext": {
+        "city": "New York",
+        "state": "New York",
+        "country": "United States",
+        "postalCode": "10013",
+        "geolocation": {
+          "lat": 40.3157,
+          "lon": -74.01
+        }
+      }
+    },
+    "authenticationContext": {
+      "authenticationStep": 0
+    },
+    "displayMessage": "Request from suspicious actor",
+    "eventType": "security.threat.detected",
+    "outcome": {
+      "result": "DENY",
+      "reason": "Login Failures"
+    },
+    "published": "2024-08-13T15:58:20.353Z",
+    "securityContext": {
+      "asNumber": 394089,
+      "asOrg": "ASN 0000",
+      "isp": "google",
+      "isProxy": false
+    },
+    "severity": "WARN",
+    "debugContext": {
+      "debugData": {
+        "dtHash": "11111111111111",
+        "requestUri": "/app/office365/1111111111/sso/wsfed/active",
+        "threatSuspected": "true",
+        "threatDetections": "{\"Login Failures\":\"HIGH\"}",
+        "url": "/app/office365/1111111111/sso/wsfed/active"
+      }
+    },
+    "legacyEventType": "security.threat.detected",
+    "transaction": {
+      "type": "WEB",
+      "id": "ab609228fe84ce59cdcbfa690bgce016"
+    },
+    "uuid": "dc9fd3c0-598c-11ef-8478-2b7584bf8d5a",
+    "version": 0,
+    "request": {
+      "ipChain": [
+        {
+          "ip": "10.0.0.1",
+          "geographicalContext": {
+            "city": "New York",
+            "state": "New York",
+            "country": "United States",
+            "postalCode": 10013,
+            "geolocation": {
+              "lat": 40.3157,
+              "lon": -74.01
+            }
+          },
+          "version": "V4",
+          "source": null
+        }
+      ]
+    }
+  }
+
+expected:
+  class_uid: 2004
+  category_uid: 2
+  activity_id: 1
+  severity_id: 3
+  finding_info.title: Request from suspicious actor
+  finding_info.uid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a
+  message: Request from suspicious actor
+  metadata.event_code: security.threat.detected
+  metadata.product.name: Okta System Log
+  metadata.product.vendor_name: Okta
+  metadata.uid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a

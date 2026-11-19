@@ -1,0 +1,131 @@
+# source: mappings/markdown/Okta/v1.3.0/System Logs/Group Management/samples/group_management.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Okta/v1.3.0/System Logs/Group Management/samples/group_management.ocsf
+# reference issue: time looks like seconds, OCSF wants epoch milliseconds
+# reference issue: declares profiles datetime, host (fill them or drop the declaration)
+
+raw_sample: |-
+  {
+      "actor": {
+        "id": "00uttidj01jqL21aM1d6",
+        "type": "User",
+        "alternateId": "john.doe@example.com",
+        "displayName": "John Doe"
+      },
+      "client": {
+        "userAgent": {
+          "rawUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+          "os": "Mac OS X",
+          "browser": "CHROME"
+        },
+        "device": "Computer",
+        "ipAddress": "10.0.0.1",
+        "geographicalContext": {
+          "city": "New York",
+          "state": "New York",
+          "country": "United States",
+          "postalCode": "10013",
+          "geolocation": {
+            "lat": 40.3157,
+            "lon": -74.01
+          }
+        }
+      },
+      "authenticationContext": {
+        "authenticationStep": 0,
+        "rootSessionId": "idxBager62CSveUkTxvgRtonA",
+        "externalSessionId": "idxBager62CSveUkTxvgRtonA"
+      },
+      "displayMessage": "Add user to group membership",
+      "eventType": "group.user_membership.add",
+      "outcome": {
+        "result": "SUCCESS"
+      },
+      "published": "2024-08-13T15:58:20.353Z",
+      "securityContext": {
+        "asNumber": 394089,
+        "asOrg": "ASN 0000",
+        "isp": "google",
+        "isProxy": false
+      },
+      "severity": "INFO",
+      "debugContext": {
+        "debugData": {
+          "requestId": "ab609228fe84ce59cdcbfa690bcce016",
+          "requestUri": "/api/v1/groups/11111/users/222222",
+          "url": "/api/v1/groups/11111/users/222222"
+        }
+      },
+      "legacyEventType": "core.user_group_member.user_add",
+      "transaction": {
+        "type": "WEB",
+        "id": "ab609228fe84ce59cdcbfa690bgce016"
+      },
+      "target": [
+        {
+          "alternateId": "unknown",
+          "displayName": "TEST Group",
+          "id": "00phjos6i2N0LcrqO1d7",
+          "type": "UserGroup"
+        },
+        {
+          "alternateId": "test_user@example[.]com",
+          "displayName": "TEST User",
+          "id": "00phjos6i2N0LcrqO1d71",
+          "type": "User"
+        }
+      ],
+      "uuid": "dc9fd3c0-598c-11ef-8478-2b7584bf8d5a",
+      "version": 0,
+      "request": {
+        "ipChain": [
+          {
+            "ip": "10.0.0.1",
+            "geographicalContext": {
+              "city": "New York",
+              "state": "New York",
+              "country": "United States",
+              "postalCode": 10013,
+              "geolocation": {
+                "lat": 40.3157,
+                "lon": -74.01
+              }
+            },
+            "version": "V4",
+            "source": null
+          }
+        ]
+      }
+    }
+    
+
+expected:
+  class_uid: 3006
+  category_uid: 3
+  activity_id: 3
+  status_id: 1
+  severity_id: 1
+  src_endpoint.ip: 10.0.0.1
+  src_endpoint.location.city: New York
+  src_endpoint.location.country: United States
+  src_endpoint.location.region: New York
+  src_endpoint.location.postal_code: '10013'
+  src_endpoint.location.isp: google
+  src_endpoint.autonomous_system.name: ASN 0000
+  src_endpoint.autonomous_system.number: 394089
+  actor.user.name: John Doe
+  actor.user.uid: 00uttidj01jqL21aM1d6
+  actor.user.email_addr: john.doe@example.com
+  actor.user.type_id: 1
+  actor.session.uid: idxBager62CSveUkTxvgRtonA
+  group.name: TEST Group
+  group.uid: 00phjos6i2N0LcrqO1d7
+  user.name: TEST User
+  user.uid: 00phjos6i2N0LcrqO1d71
+  user.email_addr: test_user@example[.]com
+  http_request.uid: ab609228fe84ce59cdcbfa690bcce016
+  http_request.url.path: /api/v1/groups/11111/users/222222
+  message: Add user to group membership
+  metadata.event_code: group.user_membership.add
+  metadata.product.name: Okta System Log
+  metadata.product.vendor_name: Okta
+  metadata.uid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a
