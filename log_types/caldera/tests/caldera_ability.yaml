@@ -1,0 +1,4 @@
+---
+raw_sample: '{"host":"mail-citadel-01","username":"msmith","command":"whoami; id; uname -a","ability":{"name":"System Information Discovery","technique_id":"T1082","technique_name":"System Information Discovery","tactic":"discovery","tactic_id":"TA0007"},"paw":"f19da2","link_id":"7be01349-e447-4028-ac44-faf6a47cde43","agent_reported_time":"2026-10-15T09:20:44Z"}'
+expected:
+  class_uid: 1007

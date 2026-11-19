@@ -1,0 +1,93 @@
+raw = string(.message) ?? ""
+e = parse_json(raw) ?? {}
+if !is_object(e) {
+  abort "not a JSON object"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+ts_str = string(e.created) ?? ""
+ts = parse_timestamp(ts_str, "%+") ?? ingested
+time_ms = to_unix_timestamp(ts, unit: "milliseconds")
+
+action = string(e.action) ?? ""
+
+activity_id = 1
+type_uid = 300201
+status_id = 1
+severity_id = 1
+activity_name = null
+if action == "logout" {
+  activity_id = 2
+  type_uid = 300202
+} else if match(action, r'login_failed|auth_fail') {
+  status_id = 2
+  severity_id = 3
+} else if action != "login" && action != "authorize_application" {
+  activity_id = 99
+  type_uid = 300299
+  activity_name = action
+}
+
+auth_protocol_id = 0
+auth_protocol = null
+if match(action, r'oauth|authorize|token') {
+  auth_protocol_id = 6
+  auth_protocol = "OAUTH 2.0"
+} else if match(action, r'oidc') {
+  auth_protocol_id = 4
+  auth_protocol = "OpenID"
+}
+
+ctx = e.context
+app_name = if is_object(ctx) { string(ctx.authorized_application.name) ?? "" } else { "" }
+app_pk = if is_object(ctx) { string(ctx.authorized_application.pk) ?? "" } else { "" }
+flow = if is_object(ctx) { string(ctx.flow) ?? null } else { null }
+scopes = if is_object(ctx) { string(ctx.scopes) ?? null } else { null }
+client_id = if is_object(ctx) { string(ctx.http_request.args.client_id) ?? null } else { null }
+auth_method = if is_object(ctx) { string(ctx.auth_method) ?? null } else { null }
+
+is_mfa = null
+if is_object(ctx) && is_object(ctx.auth_method_args) && is_array(ctx.auth_method_args.mfa_devices) && length(array!(ctx.auth_method_args.mfa_devices)) > 0 {
+  is_mfa = true
+}
+
+s_name = app_name
+if s_name == "" {
+  s_name = "authentik"
+}
+s_uid = app_pk
+if s_uid == "" {
+  s_uid = client_id
+}
+if s_uid == "" {
+  s_uid = "authentik"
+}
+svc = { "name": s_name, "uid": s_uid }
+
+. = {
+  "class_uid": 3002,
+  "category_uid": 3,
+  "activity_id": activity_id,
+  "activity_name": activity_name,
+  "type_uid": type_uid,
+  "time": time_ms,
+  "severity_id": severity_id,
+  "status_id": status_id,
+  "message": "Authentik: " + action + " by " + (string(e.user_email) ?? "unknown"),
+  "auth_protocol_id": auth_protocol_id,
+  "auth_protocol": auth_protocol,
+  "is_mfa": is_mfa,
+  "metadata": { "product": { "name": "authentik", "vendor_name": "goauthentik.io" }, "version": "1.9.0" },
+  "user": { "name": string(e.user_email) ?? null },
+  "src_endpoint": { "ip": string(e.client_ip) ?? null },
+  "service": svc,
+  "session": { "uid": flow },
+  "unmapped": {
+    "action": action,
+    "app": e.app,
+    "context": ctx,
+    "scopes": scopes,
+    "client_id": client_id,
+    "auth_method": auth_method
+  }
+}

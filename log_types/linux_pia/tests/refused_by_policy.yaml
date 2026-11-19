@@ -1,0 +1,10 @@
+---
+raw_sample: 'Sep 29 10:00:03 web-01 sudo:      eve : user NOT in sudoers ; TTY=pts/2 ; PWD=/tmp ; USER=root ; COMMAND=/usr/bin/id'
+expected:
+  activity_id: 1
+  actor.user.name: eve
+  class_uid: 1007
+  device.hostname: web-01
+  process.cmd_line: /usr/bin/id
+  process.name: id
+  status_id: 2

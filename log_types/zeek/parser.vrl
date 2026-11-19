@@ -1,0 +1,138 @@
+# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
+# source: go/internal/api/vector/vrl/zeek_to_ocsf.vrl
+# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
+# REVIEW before promote: run gate tests with synth samples.
+
+# Zeek conn.log JSON → OCSF Network Activity (class_uid 4001).
+#
+# Gateway envelope: event_id, source_id, source_type, ingested_at, event=<conn JSON>
+# Supports Zeek JSON keys id.orig_h / id.resp_h (quoted) and flat orig_h / resp_h.
+# Scale: one parse_json, cheap port severity, bounded unmapped. Never class 2001.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if ."id.orig_h" != null || .orig_h != null || .uid != null {
+        raw = .
+    }
+}
+if !is_object(raw) {
+    abort "no_match"
+}
+    src_ip = to_string(raw."id.orig_h") ?? ""
+    if src_ip == "" {
+        src_ip = to_string(raw.orig_h) ?? to_string(raw.src) ?? ""
+    }
+    dst_ip = to_string(raw."id.resp_h") ?? ""
+    if dst_ip == "" {
+        dst_ip = to_string(raw.resp_h) ?? to_string(raw.dst) ?? ""
+    }
+
+    if src_ip != "" {
+        ipv4_ok = is_ipv4(src_ip)
+        ipv6_ok = is_ipv6(src_ip)
+        if !ipv4_ok && !ipv6_ok {
+            src_ip = ""
+        }
+    }
+    if dst_ip != "" {
+        ipv4_ok = is_ipv4(dst_ip)
+        ipv6_ok = is_ipv6(dst_ip)
+        if !ipv4_ok && !ipv6_ok {
+            dst_ip = ""
+        }
+    }
+
+    sport = to_int(raw."id.orig_p") ?? 0
+    if sport == 0 {
+        sport = to_int(raw.orig_p) ?? to_int(raw.sport) ?? 0
+    }
+    dport = to_int(raw."id.resp_p") ?? 0
+    if dport == 0 {
+        dport = to_int(raw.resp_p) ?? to_int(raw.dport) ?? 0
+    }
+
+    proto = downcase(to_string(raw.proto) ?? "tcp")
+    service = to_string(raw.service) ?? ""
+    if service == "-" {
+        service = ""
+    }
+    uid = to_string(raw.uid) ?? ""
+
+    severity_id = 2
+    if dport == 4444 || dport == 8080 || dport == 8443 || dport == 31337 {
+        severity_id = 4
+    }
+
+    class_uid = 4001
+    category_uid = 4
+    activity_id = 1
+    type_uid = class_uid * 100 + activity_id
+
+    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+    ts_raw = raw.ts
+    if is_float(ts_raw) || is_integer(ts_raw) {
+        # Zeek epoch seconds (possibly fractional)
+        secs = to_float(ts_raw) ?? 0.0
+        time_ms = to_int(secs * 1000.0)
+    } else {
+        ts_str = to_string(ts_raw) ?? ""
+        if ts_str != "" {
+            parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+            if parsed_ts != null {
+                time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+            } else {
+                # numeric string epoch
+                secs = to_float(ts_str) ?? 0.0
+                if secs > 0.0 {
+                    time_ms = to_int(secs * 1000.0)
+                }
+            }
+        }
+    }
+
+    msg = proto + " " + src_ip + ":" + to_string(sport) + "->" + dst_ip + ":" + to_string(dport)
+    if uid != "" {
+        msg = msg + " uid=" + uid
+    }
+
+    . = {
+        "category_uid": category_uid,
+        "class_uid": class_uid,
+        "class_name": "Network Activity",
+        "category_name": "Network Activity",
+        "type_uid": type_uid,
+        "activity_id": activity_id,
+        "severity_id": severity_id,
+        "status_id": 1,
+        "time": time_ms,
+        "message": msg,
+        "src_endpoint": {
+            "ip": src_ip,
+            "port": sport,
+        },
+        "dst_endpoint": {
+            "ip": dst_ip,
+            "port": dport,
+        },
+        "connection_info": {
+            "protocol_name": proto,
+            "direction_id": 1,
+        },
+        "metadata": {
+            "version": "1.9.0",
+            "uid": uid,
+            "log_name": "conn",
+            "log_provider": "Zeek",
+            "product": {
+                "name": "Zeek",
+                "vendor_name": "Zeek",
+            },
+        },
+        "unmapped": {
+            "zeek_uid": uid,
+            "service": service,
+            "proto": proto,
+        },
+    }

@@ -1,0 +1,9 @@
+---
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Invalid user admin from 203.0.113.9'
+expected:
+  activity_id: 1
+  actor.user.name: admin
+  class_uid: 3002
+  dst_endpoint.hostname: web1
+  src_endpoint.ip: 203.0.113.9
+  status_id: 2

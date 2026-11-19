@@ -1,0 +1,167 @@
+# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
+# source: go/internal/api/vector/vrl/falco_to_ocsf.vrl
+# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
+# REVIEW before promote: run gate tests with synth samples.
+
+# Falco runtime-security alerts → OCSF (Vector parser remap).
+#
+# Input is a gateway Kafka envelope:
+#   event_id, source_id, source_type, ingested_at, event=<Falco JSON string>
+# Offline/tests may also pass Falco fields already flattened on the root.
+#
+# Sets parse_status=ok so the events_ocsf filter admits the row; lineage is
+# preserved for events_ocsf_final.vrl. Never emits deprecated security_finding 2001.
+# category_uid always tracks class_uid/1000. Class-illegal attributes go to unmapped.
+
+# Prefer the gateway raw payload; fall back to flattened Falco fields on `.`.
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .rule != null {
+        raw = .
+    }
+}
+if raw == null {
+    abort "no_match"
+} else {
+    priority = downcase(to_string(raw.priority) ?? "")
+    severity_id = if priority == "emergency" || priority == "alert" {
+        5
+    } else if priority == "critical" {
+        4
+    } else if priority == "error" {
+        3
+    } else if priority == "warning" {
+        2
+    } else {
+        1
+    }
+
+    rule = to_string(raw.rule) ?? ""
+    rule_lower = downcase(rule)
+    output_fields = if is_object(raw.output_fields) { raw.output_fields } else { {} }
+
+    # Default File Activity; heuristics override class (and category follows class).
+    class_uid = 1001
+    activity_id = 1
+
+    if contains(rule_lower, "exec") || contains(rule_lower, "process") || contains(rule_lower, "shell") || contains(rule_lower, "spawn") || contains(rule_lower, "ptrace") || contains(rule_lower, "terminal") {
+        class_uid = 1007
+        activity_id = 1
+    } else if contains(rule_lower, "connect") || contains(rule_lower, "bind") || contains(rule_lower, "listen") || contains(rule_lower, "outbound") || contains(rule_lower, "inbound") || contains(rule_lower, "dns") {
+        class_uid = 4001
+        activity_id = 1
+    } else if contains(rule_lower, "write") || contains(rule_lower, "read") || contains(rule_lower, "open") || contains(rule_lower, "mkdir") || contains(rule_lower, "modify") || contains(rule_lower, "file") || contains(rule_lower, "sensitive") {
+        class_uid = 1001
+        activity_id = 1
+    } else if contains(rule_lower, "privilege") || contains(rule_lower, "policy") || contains(rule_lower, "compliance") || contains(rule_lower, "drift") {
+        class_uid = 2004
+        activity_id = 1
+    }
+
+    category_uid = 1
+    if class_uid == 2004 {
+        category_uid = 2
+    } else if class_uid == 4001 {
+        category_uid = 4
+    } else if class_uid == 3002 || class_uid == 3003 {
+        category_uid = 3
+    }
+    type_uid = class_uid * 100 + activity_id
+
+    actor_user = to_string(output_fields.user.name) ?? ""
+    if actor_user == "" {
+        actor_user = to_string(output_fields."k8s.pod.serviceaccount") ?? ""
+    }
+
+    device_hostname = to_string(output_fields."k8s.pod.name") ?? ""
+    if device_hostname == "" {
+        device_hostname = to_string(output_fields."container.name") ?? ""
+    }
+
+    src_ip = to_string(output_fields."fd.sip") ?? ""
+    if src_ip == "" {
+        src_ip = to_string(output_fields."fd.cip") ?? ""
+    }
+
+    dst_ip = to_string(output_fields."fd.dip") ?? ""
+    if dst_ip == "" {
+        dst_ip = to_string(output_fields."fd.rip") ?? ""
+    }
+
+    process_name = to_string(output_fields."proc.name") ?? ""
+    process_cmdline = to_string(output_fields."proc.cmdline") ?? ""
+
+    falco_time = raw.time
+    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+    ts_str = to_string(falco_time) ?? ""
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    if parsed_ts != null {
+        time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+    }
+
+    profiles = []
+    if class_uid == 2004 {
+        profiles = ["security_control"]
+    }
+
+    unmapped = {
+        "falco_rule": rule,
+        "falco_priority": to_string(raw.priority) ?? "",
+        "container_id": to_string(output_fields."container.id") ?? "",
+        "container_name": to_string(output_fields."container.name") ?? "",
+        "k8s_ns_name": to_string(output_fields."k8s.ns.name") ?? "",
+        "k8s_pod_name": to_string(output_fields."k8s.pod.name") ?? "",
+        "proc_cmdline": process_cmdline,
+        "evt_type": to_string(output_fields."evt.type") ?? "",
+        "fd_name": to_string(output_fields."fd.name") ?? "",
+        "src_ip": src_ip,
+        "dst_ip": dst_ip,
+        "process_name": process_name,
+    }
+
+    . = {
+        "category_uid": category_uid,
+        "class_uid": class_uid,
+        "type_uid": type_uid,
+        "activity_id": activity_id,
+        "severity_id": severity_id,
+        "time": time_ms,
+        "message": to_string(raw.output) ?? rule,
+        "metadata": {
+            "product": {
+                "name": "Falco",
+                "vendor_name": "Sysdig",
+            },
+            "version": "1.9.0",
+            "profiles": profiles,
+        },
+        "unmapped": unmapped,
+    }
+
+    if class_uid == 2004 {
+        .finding_info = {
+            "title": rule,
+            "uid": "falco-" + rule,
+            "types": ["TTPs/Detection"],
+        }
+    } else if class_uid == 4001 {
+        .src_endpoint = { "ip": src_ip, "hostname": device_hostname }
+        .dst_endpoint = { "ip": dst_ip }
+        .unmapped.device_hostname = device_hostname
+    } else if class_uid == 1007 {
+        .actor = { "user": { "name": actor_user } }
+        .device = { "hostname": device_hostname, "type_id": 99, "type": "Other" }
+        .process = { "name": process_name, "cmd_line": process_cmdline, "uid": process_name }
+    } else {
+        # File Activity 1001
+        fname = to_string(output_fields."fd.name") ?? ""
+        if fname == "" {
+            fname = "unknown"
+        }
+        .actor = { "user": { "name": actor_user } }
+        .device = { "hostname": device_hostname, "type_id": 99, "type": "Other" }
+        .file = { "name": fname, "path": fname, "type_id": 1, "uid": fname }
+    }
+}

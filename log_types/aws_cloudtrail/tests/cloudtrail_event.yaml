@@ -1,0 +1,4 @@
+---
+raw_sample: '{"eventVersion":"1.09","userIdentity":{"type":"IAMUser","principalId":"AIDAEXAMPLEUSER00000","arn":"arn:aws:iam::123456789012:user/svc-example","accountId":"123456789012","accessKeyId":"AKIAIOSFODNN7EXAMPLE","userName":"svc-example"},"eventTime":"2026-10-15T09:49:43Z","eventSource":"iam.amazonaws.com","eventName":"PutUserPolicy","awsRegion":"eu-central-1","sourceIPAddress":"198.51.100.78","userAgent":"Boto3/1.34.0 Python/3.11","requestParameters":null,"responseElements":null,"requestID":"00000000-0000-4000-8000-000000000002","eventID":"00000000-0000-4000-8000-000000000003","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"123456789012","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.3","cipherSuite":"TLS_AES_128_GCM_SHA256","clientProvidedHostHeader":"cloudtrail.eu-central-1.amazonaws.com"}}'
+expected:
+  class_uid: 6003

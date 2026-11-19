@@ -1,0 +1,4 @@
+name: Windows Sysmon
+description: Windows Sysmon operational events (process, network, file, DNS, registry, module).
+vendor: Microsoft
+product: Sysmon

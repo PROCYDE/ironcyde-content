@@ -1,0 +1,153 @@
+# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
+# source: go/internal/api/vector/vrl/scanner_finding_to_ocsf.vrl
+# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
+# REVIEW before promote: run gate tests with synth samples.
+
+# IRONCYDE scanner/recon finding envelope → OCSF Detection Finding (2004).
+#
+# Input is a gateway Kafka envelope:
+#   event_id, source_id, source_type, ingested_at, event=<JSON string>
+# Schema: ironcyde.scanner_finding.v1 (see dev/synth/scanners/SCHEMA.md).
+# Offline/tests may also pass finding fields already flattened on the root.
+#
+# One shared remap for nuclei/nmap/trivy/gitleaks/… — tool identity lives in
+# the payload, not as 20 invented parsers. Never emits deprecated class 2001.
+# Fail-closed: missing schema or tool → parse_status=no_match.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .schema != null || .tool != null {
+        raw = .
+    }
+}
+if !is_object(raw) {
+    abort "no_match"
+}
+    schema = to_string(raw.schema) ?? ""
+    tool = downcase(to_string(raw.tool) ?? "")
+    title = to_string(raw.title) ?? ""
+
+    if schema != "ironcyde.scanner_finding.v1" || tool == "" || title == "" {
+        abort "no_match"
+    } else {
+        severity_raw = downcase(to_string(raw.severity) ?? "medium")
+        severity_id = 3
+        if severity_raw == "info" || severity_raw == "informational" {
+            severity_id = 1
+        } else if severity_raw == "low" {
+            severity_id = 2
+        } else if severity_raw == "medium" {
+            severity_id = 3
+        } else if severity_raw == "high" {
+            severity_id = 4
+        } else if severity_raw == "critical" {
+            severity_id = 5
+        }
+
+        category_uid = 2
+        class_uid = 2004
+        activity_id = 1
+        type_uid = class_uid * 100 + activity_id
+
+        target = if is_object(raw.target) { raw.target } else { {} }
+        host = to_string(target.host) ?? ""
+        if host == "" {
+            host = to_string(target.hostname) ?? ""
+        }
+        url = to_string(target.url) ?? ""
+        dst_ip = to_string(target.ip) ?? ""
+        if dst_ip != "" {
+            ok4 = is_ipv4(dst_ip)
+            ok6 = is_ipv6(dst_ip)
+            if !ok4 && !ok6 { dst_ip = "" }
+        }
+        src_ip = to_string(raw.src_ip) ?? ""
+        if src_ip != "" {
+            ok4s = is_ipv4(src_ip)
+            ok6s = is_ipv6(src_ip)
+            if !ok4s && !ok6s { src_ip = "" }
+        }
+
+        finding_id = to_string(raw.finding_id) ?? ""
+        if finding_id == "" {
+            finding_id = to_string(raw.uid) ?? ""
+        }
+        category = to_string(raw.category) ?? ""
+        run_id = to_string(raw.run_id) ?? ""
+
+        time_ms = 0
+        ts_str = to_string(raw.observed_at) ?? ""
+        if ts_str == "" {
+            ts_str = to_string(raw.timestamp) ?? ""
+        }
+        if ts_str != "" {
+            parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+            if parsed_ts != null {
+                time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+            }
+        }
+        if time_ms == 0 {
+            time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+        }
+
+        msg = "scanner/" + tool + " " + title
+        if url != "" {
+            msg = msg + " url=" + url
+        } else if host != "" {
+            msg = msg + " host=" + host
+        }
+
+        tech = []
+        if is_array(raw.technique_ids) {
+            tech = raw.technique_ids
+        }
+        cves = []
+        if is_array(raw.cve) {
+            cves = raw.cve
+        }
+
+        lab = if is_object(raw.lab) { raw.lab } else { {} }
+        lab_mode = to_string(lab.mode) ?? "fixture"
+
+        . = {
+            "category_uid": category_uid,
+            "class_uid": class_uid,
+            "class_name": "Detection Finding",
+            "category_name": "Findings",
+            "type_uid": type_uid,
+            "activity_id": activity_id,
+            "severity_id": severity_id,
+            "status_id": 1,
+            "time": time_ms,
+            "message": msg,
+            "finding_info": {
+                "title": title,
+                "uid": finding_id,
+                "types": ["Vulnerability/Scanner"],
+            },
+            "metadata": {
+                "version": "1.9.0",
+                "uid": finding_id,
+                "log_name": "ScannerFinding",
+                "log_provider": "IRONCYDE Scanner Lab",
+                "product": { "name": tool, "vendor_name": "IRONCYDE Lab Fixture" },
+                "profiles": ["security_control"],
+            },
+            "unmapped": {
+                "scanner_tool": tool,
+                "scanner_category": category,
+                "scanner_run_id": run_id,
+                "scanner_lab_mode": lab_mode,
+                "severity": severity_raw,
+                "device_hostname": host,
+                "process_name": tool,
+                "dst_ip": dst_ip,
+                "src_ip": src_ip,
+                "target_url": url,
+                "technique_ids": tech,
+                "cve": cves,
+            },
+        }
+    }

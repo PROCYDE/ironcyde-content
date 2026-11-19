@@ -1,0 +1,417 @@
+# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
+# source: go/internal/api/vector/vrl/windows_event_to_ocsf.vrl
+# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
+# REVIEW before promote: run gate tests with synth samples.
+
+# Windows Security Event Log JSON → OCSF.
+#
+# Gateway envelope: event=<winevt JSON> with event_id / EventID, event_data / EventData,
+# computer / Computer. Ported from nano windows_event_log OCSF remap (cheap Event-ID switch).
+# Never emits class_uid 2001.
+# Class-shaped attributes only: Auth keeps user+dst_endpoint; Process keeps
+# process+device.type_id and drops Auth-only fields.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .EventID != null || .event_data != null || .EventData != null || .channel != null {
+        raw = .
+    }
+}
+if !is_object(raw) {
+    abort "no_match"
+}
+    ed = {}
+    if is_object(raw.event_data) {
+        ed = raw.event_data
+    } else if is_object(raw.EventData) {
+        ed = raw.EventData
+    }
+
+    eid = to_int(raw.EventID) ?? 0
+    if eid == 0 {
+        eid = to_int(raw.EventId) ?? 0
+    }
+    wevt = to_int(raw.event_id) ?? 0
+    if eid == 0 && wevt > 0 && wevt < 100000 {
+        eid = wevt
+    }
+
+    # Fluent Bit winevtlog sends the event data as a positional list (StringInserts) without names.
+    # Name the values by the event template's field order, so the rest of the parser works unchanged.
+    if ed == {} && is_array(raw.StringInserts) {
+        field_names = get({"4624": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "LogonType", "LogonProcessName", "AuthenticationPackageName", "WorkstationName", "LogonGuid", "TransmittedServices", "LmPackageName", "KeyLength", "ProcessId", "ProcessName", "IpAddress", "IpPort", "ImpersonationLevel", "RestrictedAdminMode", "TargetOutboundUserName", "TargetOutboundDomainName", "VirtualAccount", "TargetLinkedLogonId", "ElevatedToken", "RemoteCredentialGuard"], "4625": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "TargetUserSid", "TargetUserName", "TargetDomainName", "Status", "FailureReason", "SubStatus", "LogonType", "LogonProcessName", "AuthenticationPackageName", "WorkstationName", "TransmittedServices", "LmPackageName", "KeyLength", "ProcessId", "ProcessName", "IpAddress", "IpPort"], "4634": ["TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "LogonType"], "4648": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "LogonGuid", "TargetUserName", "TargetDomainName", "TargetLogonGuid", "TargetServerName", "TargetInfo", "ProcessId", "ProcessName", "IpAddress", "IpPort"], "4672": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "PrivilegeList"], "4688": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "NewProcessId", "NewProcessName", "TokenElevationType", "ProcessId", "CommandLine", "TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "ParentProcessName", "MandatoryLabel"], "4768": ["TargetUserName", "TargetDomainName", "TargetSid", "ServiceName", "ServiceSid", "TicketOptions", "Status", "TicketEncryptionType", "PreAuthType", "IpAddress", "IpPort", "CertIssuerName", "CertSerialNumber", "CertThumbprint"], "4769": ["TargetUserName", "TargetDomainName", "ServiceName", "ServiceSid", "TicketOptions", "TicketEncryptionType", "IpAddress", "IpPort", "Status", "LogonGuid", "TransmittedServices"], "4776": ["PackageName", "TargetUserName", "Workstation", "Status"], "5156": ["ProcessID", "Application", "Direction", "SourceAddress", "SourcePort", "DestAddress", "DestPort", "Protocol", "FilterRTID", "LayerName", "LayerRTID", "RemoteUserID", "RemoteMachineID"], "4104": ["MessageNumber", "MessageTotal", "ScriptBlockText", "ScriptBlockId", "Path"]}, [to_string(eid)]) ?? []
+        inserts = array(raw.StringInserts) ?? []
+        for_each(array(field_names) ?? []) -> |i, n| {
+            v = get(inserts, [i]) ?? null
+            if v != null && v != "" && v != "-" {
+                ed = set(ed, [string(n) ?? ""], v) ?? ed
+            }
+        }
+    }
+
+    computer = downcase(to_string(raw.computer) ?? "")
+    if computer == "" {
+        computer = downcase(to_string(raw.Computer) ?? to_string(raw.host) ?? "")
+    }
+    if computer == "" {
+        computer = "windows-host"
+    }
+
+    msg = to_string(raw.message) ?? ""
+    if msg == "" {
+        msg = "windows event " + to_string(eid)
+    }
+
+    time_ms = 0
+    ts_str = to_string(raw.timestamp) ?? ""
+    if ts_str == "" {
+        ts_str = to_string(raw.TimeCreated) ?? ""
+    }
+    if ts_str != "" {
+        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+        if parsed_ts != null {
+            time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+        }
+    }
+    if time_ms == 0 {
+        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+    }
+
+    # Fail closed: only allowlisted Security EventIDs promote. Unknown / CBS
+    # (EventID 0) / Application text must not become fake Authentication.
+    # Also promote Kerberos (4768/4769), WFP connect (5156), and Sysmon-shaped
+    # ProcessAccess (10 + SourceImage) when mis-tagged as windows_event.
+    known = false
+    if eid == 4688 || eid == 4672 || eid == 4624 || eid == 4625 || eid == 4634 || eid == 4768 || eid == 4769 || eid == 5156 || eid == 4104 || eid == 4776 || eid == 4648 {
+        known = true
+    }
+    if eid == 10 {
+        src_img = to_string(ed.SourceImage) ?? ""
+        if src_img != "" {
+            known = true
+        }
+    }
+    if !known {
+        abort "no_match"
+    } else {
+    category_uid = 3
+    class_uid = 3002
+    class_name = "Authentication"
+    category_name = "Identity & Access Management"
+    activity_id = 99
+    severity_id = 1
+    status_id = 1
+    actor_name = ""
+    actor_uid = ""
+    actor_domain = ""
+    process_name = ""
+    process_cmd = ""
+    process_pid = 0
+    parent_name = ""
+    src_ip = ""
+    src_port = 0
+    src_host = ""
+    dst_ip = ""
+    dst_port = 0
+    dst_host = computer
+
+    if eid == 4688 {
+        category_uid = 1
+        category_name = "System Activity"
+        class_uid = 1007
+        class_name = "Process Activity"
+        activity_id = 1
+        npn = to_string(ed.NewProcessName) ?? ""
+        process_cmd = to_string(ed.CommandLine) ?? ""
+        process_pid = to_int(ed.NewProcessId) ?? 0
+        process_name = npn
+        if process_name == "" {
+            process_name = "unknown"
+        }
+        ppn = to_string(ed.ParentProcessName) ?? ""
+        parent_name = ppn
+        actor_name = downcase(to_string(ed.SubjectUserName) ?? "")
+        actor_uid = to_string(ed.SubjectUserSid) ?? ""
+        actor_domain = downcase(to_string(ed.SubjectDomainName) ?? "")
+    } else if eid == 4672 {
+        class_uid = 3003
+        class_name = "Authorize Session"
+        activity_id = 1
+        actor_name = downcase(to_string(ed.SubjectUserName) ?? "")
+        actor_uid = to_string(ed.SubjectUserSid) ?? ""
+        actor_domain = downcase(to_string(ed.SubjectDomainName) ?? "")
+    } else if eid == 4624 {
+        activity_id = 1
+        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
+        actor_uid = to_string(ed.TargetUserSid) ?? ""
+        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
+        src_ip = to_string(ed.IpAddress) ?? ""
+        src_port = to_int(ed.IpPort) ?? 0
+        src_host = downcase(to_string(ed.WorkstationName) ?? "")
+    } else if eid == 4625 {
+        activity_id = 1
+        status_id = 2
+        severity_id = 2
+        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
+        actor_uid = to_string(ed.TargetUserSid) ?? ""
+        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
+        src_ip = to_string(ed.IpAddress) ?? ""
+        src_port = to_int(ed.IpPort) ?? 0
+        src_host = downcase(to_string(ed.WorkstationName) ?? "")
+    } else if eid == 4648 {
+        # Explicit credentials: a process on this computer used TargetUserName's credentials towards TargetServerName.
+        activity_id = 1
+        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
+        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
+        src_ip = to_string(ed.IpAddress) ?? ""
+        src_port = to_int(ed.IpPort) ?? 0
+        src_host = computer
+        target = downcase(to_string(ed.TargetServerName) ?? "")
+        if target != "" && target != "localhost" && target != "-" {
+            dst_host = target
+        }
+    } else if eid == 4634 {
+        activity_id = 2
+        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
+        actor_uid = to_string(ed.TargetUserSid) ?? ""
+        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
+    } else if eid == 4768 || eid == 4769 {
+        activity_id = 1
+        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
+        actor_uid = to_string(ed.TargetSid) ?? to_string(ed.TargetUserSid) ?? ""
+        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
+        src_ip = to_string(ed.IpAddress) ?? ""
+        src_port = to_int(ed.IpPort) ?? 0
+        status_raw = downcase(to_string(ed.Status) ?? "0x0")
+        if status_raw != "" && status_raw != "0x0" && status_raw != "0" {
+            status_id = 2
+            severity_id = 2
+        }
+    } else if eid == 5156 {
+        category_uid = 4
+        category_name = "Network Activity"
+        class_uid = 4001
+        class_name = "Network Activity"
+        activity_id = 1
+        src_ip = to_string(ed.SourceAddress) ?? ""
+        src_port = to_int(ed.SourcePort) ?? 0
+        dst_ip = to_string(ed.DestAddress) ?? ""
+        dst_port = to_int(ed.DestPort) ?? 0
+        process_name = to_string(ed.Application) ?? "unknown"
+        process_pid = to_int(ed.ProcessID) ?? to_int(ed.ProcessId) ?? 0
+        actor_name = "unknown"
+    } else if eid == 10 {
+        category_uid = 1
+        category_name = "System Activity"
+        class_uid = 1007
+        class_name = "Process Activity"
+        activity_id = 3
+        process_name = to_string(ed.TargetImage) ?? "unknown"
+        process_pid = to_int(ed.TargetProcessId) ?? 0
+        parent_name = to_string(ed.SourceImage) ?? ""
+        actor_name = downcase(to_string(ed.SourceUser) ?? "")
+        if contains(actor_name, "\\") {
+            ap = split(actor_name, "\\")
+            actor_name = to_string(ap[-1])
+        }
+    } else if eid == 4104 {
+        # PowerShell script block — script_activity (1009), Execute (1).
+        # 4104 carries no user/process identity; actor.name falls through to
+        # "unknown" via the shared default.
+        category_uid = 1
+        category_name = "System Activity"
+        class_uid = 1009
+        class_name = "Script Activity"
+        activity_id = 1
+    } else if eid == 4776 {
+        # NTLM credential validation — authentication (3002), Logon (1).
+        activity_id = 1
+        status_id = 1
+        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
+        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
+        src_host = downcase(to_string(ed.Workstation) ?? "")
+    }
+
+    if actor_name == "" {
+        actor_name = "unknown"
+    }
+
+    if src_ip != "" {
+        ipv4_ok = is_ipv4(src_ip)
+        ipv6_ok = is_ipv6(src_ip)
+        if !ipv4_ok && !ipv6_ok {
+            src_ip = ""
+        }
+    }
+    if dst_ip != "" {
+        dst_v4 = is_ipv4(dst_ip)
+        dst_v6 = is_ipv6(dst_ip)
+        if !dst_v4 && !dst_v6 {
+            dst_ip = ""
+        }
+    }
+
+    type_uid = class_uid * 100 + activity_id
+
+    . = {
+        "category_uid": category_uid,
+        "class_uid": class_uid,
+        "class_name": class_name,
+        "category_name": category_name,
+        "type_uid": type_uid,
+        "activity_id": activity_id,
+        "severity_id": severity_id,
+        "status_id": status_id,
+        "time": time_ms,
+        "message": msg,
+        "metadata": {
+            "version": "1.9.0",
+            "uid": to_string(raw.record_id) ?? to_string(eid),
+            "log_name": to_string(raw.channel) ?? "Security",
+            "log_provider": to_string(raw.provider_name) ?? "Microsoft-Windows-Security-Auditing",
+            "product": {
+                "name": "Windows",
+                "vendor_name": "Microsoft",
+            },
+        },
+        "unmapped": {
+            "windows_event_id": to_string(eid),
+            "logon_type": to_string(ed.LogonType) ?? "",
+            "computer": computer,
+            "src_ip": src_ip,
+            "src_port": src_port,
+            "src_host": src_host,
+            "dst_ip": dst_ip,
+            "dst_port": dst_port,
+            "service_name": to_string(ed.ServiceName) ?? "",
+        },
+    }
+
+    if class_uid == 1007 {
+        # NewProcessName is typically a full path; Sigma Image → process.file.path.
+        process_path = process_name
+        process_basename = process_name
+        if contains(process_path, "\\") {
+            pp = split(process_path, "\\")
+            process_basename = to_string(pp[-1])
+        } else if contains(process_path, "/") {
+            pp = split(process_path, "/")
+            process_basename = to_string(pp[-1])
+        } else if process_path != "" && process_path != "unknown" {
+            process_path = "C:\\Windows\\System32\\" + process_path
+        }
+        parent_path = parent_name
+        parent_basename = parent_name
+        if contains(parent_path, "\\") {
+            ppp = split(parent_path, "\\")
+            parent_basename = to_string(ppp[-1])
+        } else if contains(parent_path, "/") {
+            ppp = split(parent_path, "/")
+            parent_basename = to_string(ppp[-1])
+        } else if parent_path != "" {
+            parent_path = "C:\\Windows\\System32\\" + parent_path
+        }
+        .device = { "hostname": computer, "type_id": 2 }
+        .process = {
+            "name": process_basename,
+            "cmd_line": process_cmd,
+            "file": { "path": process_path, "name": process_basename },
+            "pid": process_pid,
+            "uid": to_string(process_pid),
+        }
+        if process_pid == 0 {
+            .process.uid = process_basename
+        }
+        .actor = {
+            "user": {
+                "name": actor_name,
+                "uid": actor_uid,
+                "domain": actor_domain,
+            },
+        }
+        if parent_name != "" {
+            .actor.process = {
+                "name": parent_basename,
+                "file": { "path": parent_path, "name": parent_basename },
+                "uid": parent_basename,
+            }
+        }
+    } else if class_uid == 4001 {
+        process_path = process_name
+        process_basename = process_name
+        if contains(process_path, "\\") {
+            pp = split(process_path, "\\")
+            process_basename = to_string(pp[-1])
+        } else if contains(process_path, "/") {
+            pp = split(process_path, "/")
+            process_basename = to_string(pp[-1])
+        }
+        .device = { "hostname": computer, "type_id": 2 }
+        .src_endpoint = { "ip": src_ip, "port": src_port }
+        .dst_endpoint = { "ip": dst_ip, "port": dst_port }
+        .process = {
+            "name": process_basename,
+            "file": { "path": process_path, "name": process_basename },
+            "pid": process_pid,
+            "uid": to_string(process_pid),
+        }
+        if process_pid == 0 {
+            .process.uid = process_basename
+        }
+        .actor = { "user": { "name": actor_name } }
+        .unmapped.protocol = to_string(ed.Protocol) ?? ""
+    } else if class_uid == 3002 || class_uid == 3003 {
+        # Authentication / Authorize Session — OCSF 1.3 has no device on 3002/3003.
+        .user = {
+            "name": actor_name,
+            "uid": actor_uid,
+            "domain": actor_domain,
+        }
+        .actor = {
+            "user": {
+                "name": actor_name,
+                "uid": actor_uid,
+                "domain": actor_domain,
+            },
+        }
+        .dst_endpoint = { "hostname": dst_host }
+        if src_ip != "" || src_host != "" {
+            .src_endpoint = {
+                "ip": src_ip,
+                "port": src_port,
+                "hostname": src_host,
+            }
+            if src_ip == "" {
+                del(.src_endpoint.ip)
+            }
+        }
+        if eid == 4776 {
+            .service = { "name": to_string(ed.PackageName) ?? "NTLM" }
+        }
+    }
+
+    if class_uid == 1009 {
+        # script_activity requires device; 4104 carries the host in Computer.
+        .device = { "hostname": downcase(computer), "type_id": 2 }
+        .actor = { "user": { "name": actor_name } }
+        sb = to_string(ed.ScriptBlockText) ?? ""
+        .script = {
+            "uid": to_string(ed.ScriptBlockId) ?? "",
+            "type_id": 1,
+            "script_content": { "value": sb },
+        }
+        sp = to_string(ed.Path) ?? ""
+        if sp != "" {
+            if contains(sp, "\\") {
+                sp_parts = split(sp, "\\")
+                .script.name = to_string(sp_parts[-1])
+            } else {
+                .script.name = sp
+            }
+        }
+        .unmapped.message_number = to_string(ed.MessageNumber) ?? ""
+        .unmapped.message_total = to_string(ed.MessageTotal) ?? ""
+    }
+    }

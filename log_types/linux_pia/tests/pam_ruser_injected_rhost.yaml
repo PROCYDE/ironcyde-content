@@ -1,0 +1,9 @@
+---
+raw_sample: 'Oct  6 10:00:01 web1 su[4242]: pam_unix(su:auth): authentication failure; logname=root uid=1000 euid=0 tty=/dev/pts/0 ruser=bob rhost=198.51.100.6 rhost=  user=root'
+expected:
+  activity_id: 1
+  actor.user.name: root
+  class_uid: 3002
+  dst_endpoint.hostname: web1
+  src_endpoint.ip: null
+  status_id: 2

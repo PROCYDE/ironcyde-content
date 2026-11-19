@@ -1,0 +1,4 @@
+---
+raw_sample: '{"message":"2026-10-15 09:55:46 H=(scanner) [203.0.113.166] F=<> rejected VRFY failed for jsmith@citadel.example","program":"exim4","hostname":"mail-citadel-01","src_ip":"203.0.113.166"}'
+expected:
+  class_uid: 4009

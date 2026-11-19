@@ -1,0 +1,174 @@
+# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
+# source: go/internal/api/vector/vrl/suricata_to_ocsf.vrl
+# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
+# REVIEW before promote: run gate tests with synth samples.
+
+# Suricata EVE JSON → OCSF (gateway envelope).
+#
+# Input: event_id, source_id, source_type, ingested_at, event=<EVE JSON string>
+# Sets parse_status=ok|no_match. Never emits class_uid 2001.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .event_type != null {
+        raw = .
+    }
+}
+if raw == null {
+  abort "no_match"
+} else {
+  event_type = downcase(to_string(raw.event_type) ?? "alert")
+  src_ip = to_string(raw.src_ip) ?? ""
+  dst_ip = to_string(raw.dest_ip) ?? ""
+  if dst_ip == "" {
+    dst_ip = to_string(raw.dst_ip) ?? ""
+  }
+  src_port = to_int(raw.src_port) ?? 0
+  dst_port = to_int(raw.dest_port) ?? 0
+  proto = downcase(to_string(raw.proto) ?? "tcp")
+
+  category_uid = 4
+  class_uid = 4001
+  activity_id = 1
+  severity_id = 2
+  message = "e2e-suricata-" + event_type
+  finding_title = ""
+  finding_uid = ""
+
+  alert = {}
+  if is_object(raw.alert) {
+    alert = raw.alert
+  }
+
+  if event_type == "alert" {
+    category_uid = 2
+    class_uid = 2004
+    sev = to_int(alert.severity) ?? 2
+    if sev == 1 {
+      severity_id = 5
+    } else if sev == 2 {
+      severity_id = 4
+    } else {
+      severity_id = 3
+    }
+    finding_title = to_string(alert.signature) ?? "Suricata alert"
+    finding_uid = "suricata-" + (to_string(alert.signature_id) ?? "0")
+    message = "e2e-suricata-alert " + finding_title
+  } else if event_type == "dns" {
+    class_uid = 4003
+    severity_id = 2
+  } else if event_type == "http" {
+    class_uid = 4002
+    severity_id = 3
+  }
+
+  type_uid = class_uid * 100 + activity_id
+
+  time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+  ts_str = to_string(raw.timestamp) ?? ""
+  parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+  if parsed_ts != null {
+    time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+  }
+
+  . = {
+    "category_uid": category_uid,
+    "class_uid": class_uid,
+    "type_uid": type_uid,
+    "activity_id": activity_id,
+    "severity_id": severity_id,
+    "time": time_ms,
+    "message": message,
+    "metadata": {
+      "version": "1.9.0",
+      "product": {"name": "Suricata", "vendor_name": "OISF"},
+      "profiles": [],
+    },
+    "unmapped": {
+      "suricata_event_type": event_type,
+      "flow_id": raw.flow_id,
+      "community_id": raw.community_id,
+      "src_ip": src_ip,
+      "src_port": src_port,
+      "dst_ip": dst_ip,
+      "dst_port": dst_port,
+      "proto": proto,
+    },
+  }
+
+  if class_uid == 2004 {
+    .metadata.profiles = ["security_control"]
+    .finding_info = {
+      "title": finding_title,
+      "uid": finding_uid,
+      "types": ["TTPs/Detection"],
+    }
+  } else {
+    .src_endpoint = {"ip": src_ip, "port": src_port}
+    .dst_endpoint = {"ip": dst_ip, "port": dst_port}
+    .connection_info = {"protocol_name": proto, "direction_id": 1}
+  }
+
+  if class_uid == 4002 {
+    # http_activity requires at_least_one of http_request/http_response, and the
+    # http object carries the fields detection consumes (url, method, user agent,
+    # status). Emit both objects whenever the EVE http object is present.
+    http = {}
+    if is_object(raw.http) {
+      http = raw.http
+    }
+    if is_object(raw.http_request) {
+      http = raw.http_request
+    }
+    req = {}
+    resp = {}
+    url_obj = {}
+    http_url = to_string(get(http, ["url"]) ?? null) ?? ""
+    if http_url != "" {
+      url_obj.url_string = http_url
+      host = to_string(get(http, ["hostname"]) ?? null) ?? ""
+      if host != "" {
+        url_obj.hostname = host
+      }
+    }
+    method = to_string(get(http, ["http_method"]) ?? null) ?? ""
+    if method != "" {
+      req.http_method = upcase(method)
+    }
+    if length(url_obj) > 0 {
+      req.url = url_obj
+    }
+    ua = to_string(get(http, ["http_user_agent"]) ?? null) ?? ""
+    if ua != "" {
+      req.user_agent = ua
+    }
+    ver = to_string(get(http, ["protocol"]) ?? null) ?? ""
+    if ver != "" {
+      req.version = ver
+    }
+    ref = to_string(get(http, ["http_refer"]) ?? null) ?? ""
+    if ref != "" {
+      req.referrer = ref
+    }
+    code = to_int(get(http, ["status"]) ?? null) ?? 0
+    if code > 0 {
+      resp.code = code
+    }
+    resp_len = to_int(get(http, ["length"]) ?? null) ?? 0
+    if resp_len > 0 {
+      resp.length = resp_len
+    }
+    ct = to_string(get(http, ["http_content_type"]) ?? null) ?? ""
+    if ct != "" {
+      resp.content_type = ct
+    }
+    if length(req) > 0 {
+      .http_request = req
+    }
+    if length(resp) > 0 {
+      .http_response = resp
+    }
+  }
+}

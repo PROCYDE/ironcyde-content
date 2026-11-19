@@ -1,0 +1,771 @@
+# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
+# source: go/internal/api/vector/vrl/windows_sysmon_to_ocsf.vrl
+# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
+# REVIEW before promote: run gate tests with synth samples.
+
+# Windows Sysmon JSON → OCSF (allowlisted EventIDs only).
+#
+# EventID 1  → Process Activity (1007) launch
+# EventID 3  → Network Activity (4001)
+# EventID 5  → Process Activity (1007) terminate
+# EventID 10 → Process Activity (1007) open / process access
+# EventID 11 → File System Activity (1001) when path present
+# EventID 22 → DNS Activity (4003)
+# Everything else → explicit no_match (no fake Auth).
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .EventID != null || .event_data != null || .EventData != null {
+        raw = .
+    }
+}
+if !is_object(raw) {
+    abort "no_match"
+}
+    ed = {}
+    if is_object(raw.event_data) {
+        ed = raw.event_data
+    } else if is_object(raw.EventData) {
+        ed = raw.EventData
+    }
+
+    eid = to_int(raw.EventID) ?? 0
+    if eid == 0 {
+        eid = to_int(raw.EventId) ?? 0
+    }
+
+    computer = downcase(to_string(raw.Computer) ?? to_string(raw.computer) ?? to_string(raw.host) ?? "sysmon-host")
+    msg = to_string(raw.message) ?? ""
+    if msg == "" {
+        msg = "sysmon event " + to_string(eid)
+    }
+    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+    ts_str = to_string(raw.TimeCreated) ?? to_string(raw.timestamp) ?? ""
+    # Process GUIDs: fall back to PID, then "0" — a plain ?? never fires because
+    # to_string(null) is "".
+    puid = to_string(ed.ProcessGuid) ?? to_string(ed.ProcessId) ?? ""
+    if puid == "" {
+        puid = "0"
+    }
+    ppuid = to_string(ed.ParentProcessGuid) ?? to_string(ed.ParentProcessId) ?? ""
+    if ppuid == "" {
+        ppuid = "0"
+    }
+    if ts_str != "" {
+        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+        if parsed_ts != null {
+            time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+        }
+    }
+    if time_ms == 0 {
+        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+    }
+
+    if eid == 1 {
+        # Image is a full path; Sigma maps Image → process.file.path. Keep basename in
+        # process.name so the promoted process_name column stays a short executable name.
+        process_path = to_string(ed.Image) ?? ""
+        if process_path == "" {
+            process_path = to_string(ed.OriginalFileName) ?? "unknown"
+        }
+        process_name = process_path
+        if contains(process_path, "\\") {
+            path_parts = split(process_path, "\\")
+            process_name = to_string(path_parts[-1])
+        } else if contains(process_path, "/") {
+            path_parts = split(process_path, "/")
+            process_name = to_string(path_parts[-1])
+        }
+        cmd = to_string(ed.CommandLine) ?? ""
+        user = downcase(to_string(ed.User) ?? "unknown")
+        if contains(user, "\\") {
+            user_parts = split(user, "\\")
+            user = to_string(user_parts[-1])
+        }
+        parent_path = to_string(ed.ParentImage) ?? ""
+        parent_name = parent_path
+        if contains(parent_path, "\\") {
+            parent_parts = split(parent_path, "\\")
+            parent_name = to_string(parent_parts[-1])
+        } else if contains(parent_path, "/") {
+            parent_parts = split(parent_path, "/")
+            parent_name = to_string(parent_parts[-1])
+        }
+        class_uid = 1007
+        category_uid = 1
+        activity_id = 1
+        type_uid = class_uid * 100 + activity_id
+        . = {
+            "category_uid": category_uid,
+            "class_uid": class_uid,
+            "class_name": "Process Activity",
+            "category_name": "System Activity",
+            "type_uid": type_uid,
+            "activity_id": activity_id,
+            "severity_id": 2,
+            "status_id": 1,
+            "time": time_ms,
+            "message": msg,
+            "actor": {
+                "user": { "name": user },
+                "process": {
+                    "name": parent_name,
+                    "file": { "path": parent_path, "name": parent_name, "type_id": 1 },
+                    "uid": ppuid,
+                },
+            },
+            "process": {
+                "name": process_name,
+                "cmd_line": cmd,
+                "file": { "path": process_path, "name": process_name, "type_id": 1 },
+                "uid": puid,
+                "parent_process": {
+                    "name": parent_name,
+                    "file": { "path": parent_path, "name": parent_name, "type_id": 1 },
+                    "uid": ppuid,
+                },
+            },
+            "device": { "hostname": computer, "type_id": 1 },
+            "metadata": {
+                "version": "1.9.0",
+                "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                "log_provider": "Microsoft-Windows-Sysmon",
+            },
+            "unmapped": {
+                "windows_event_id": "1",
+                "computer": computer,
+            },
+        }
+    } else if eid == 3 {
+        src_ip = to_string(ed.SourceIp) ?? ""
+        dst_ip = to_string(ed.DestinationIp) ?? ""
+        src_port = to_int(ed.SourcePort) ?? 0
+        dst_port = to_int(ed.DestinationPort) ?? 0
+        process_name = to_string(ed.Image) ?? "unknown"
+        user = downcase(to_string(ed.User) ?? "unknown")
+        if contains(user, "\\") {
+            user_parts = split(user, "\\")
+            user = to_string(user_parts[-1])
+        }
+        class_uid = 4001
+        category_uid = 4
+        activity_id = 1
+        type_uid = class_uid * 100 + activity_id
+        . = {
+            "category_uid": category_uid,
+            "class_uid": class_uid,
+            "class_name": "Network Activity",
+            "category_name": "Network Activity",
+            "type_uid": type_uid,
+            "activity_id": activity_id,
+            "severity_id": 2,
+            "status_id": 1,
+            "time": time_ms,
+            "message": msg,
+            "actor": {
+                "user": { "name": user },
+                "process": {
+                    "name": process_name,
+                    "uid": puid,
+                },
+            },
+            "src_endpoint": { "ip": src_ip, "port": src_port },
+            "dst_endpoint": { "ip": dst_ip, "port": dst_port },
+            "device": { "hostname": computer, "type_id": 1 },
+            "metadata": {
+                "version": "1.9.0",
+                "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                "log_provider": "Microsoft-Windows-Sysmon",
+                "profiles": ["host"],
+            },
+            "unmapped": {
+                "windows_event_id": "3",
+                "computer": computer,
+                "protocol": to_string(ed.Protocol) ?? "",
+            },
+        }
+    } else if eid == 5 {
+        process_path = to_string(ed.Image) ?? "unknown"
+        process_name = process_path
+        if contains(process_path, "\\") {
+            path_parts = split(process_path, "\\")
+            process_name = to_string(path_parts[-1])
+        } else if contains(process_path, "/") {
+            path_parts = split(process_path, "/")
+            process_name = to_string(path_parts[-1])
+        }
+        user = downcase(to_string(ed.User) ?? "unknown")
+        if contains(user, "\\") {
+            user_parts = split(user, "\\")
+            user = to_string(user_parts[-1])
+        }
+        class_uid = 1007
+        category_uid = 1
+        activity_id = 2
+        type_uid = class_uid * 100 + activity_id
+        . = {
+            "category_uid": category_uid,
+            "class_uid": class_uid,
+            "class_name": "Process Activity",
+            "category_name": "System Activity",
+            "type_uid": type_uid,
+            "activity_id": activity_id,
+            "severity_id": 1,
+            "status_id": 1,
+            "time": time_ms,
+            "message": msg,
+            "actor": { "user": { "name": user } },
+            "process": {
+                "name": process_name,
+                "file": { "path": process_path, "name": process_name, "type_id": 1 },
+                "uid": puid,
+                "pid": to_int(ed.ProcessId) ?? 0,
+            },
+            "device": { "hostname": computer, "type_id": 1 },
+            "metadata": {
+                "version": "1.9.0",
+                "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                "log_provider": "Microsoft-Windows-Sysmon",
+            },
+            "unmapped": {
+                "windows_event_id": "5",
+                "computer": computer,
+            },
+        }
+    } else if eid == 10 {
+        target_path = to_string(ed.TargetImage) ?? "unknown"
+        target_name = target_path
+        if contains(target_path, "\\") {
+            tp = split(target_path, "\\")
+            target_name = to_string(tp[-1])
+        } else if contains(target_path, "/") {
+            tp = split(target_path, "/")
+            target_name = to_string(tp[-1])
+        }
+        source_path = to_string(ed.SourceImage) ?? ""
+        source_name = source_path
+        if contains(source_path, "\\") {
+            sp = split(source_path, "\\")
+            source_name = to_string(sp[-1])
+        } else if contains(source_path, "/") {
+            sp = split(source_path, "/")
+            source_name = to_string(sp[-1])
+        }
+        user = downcase(to_string(ed.SourceUser) ?? to_string(ed.User) ?? "unknown")
+        if contains(user, "\\") {
+            up = split(user, "\\")
+            user = to_string(up[-1])
+        }
+        class_uid = 1007
+        category_uid = 1
+        activity_id = 3
+        type_uid = class_uid * 100 + activity_id
+        . = {
+            "category_uid": category_uid,
+            "class_uid": class_uid,
+            "class_name": "Process Activity",
+            "category_name": "System Activity",
+            "type_uid": type_uid,
+            "activity_id": activity_id,
+            "severity_id": 2,
+            "status_id": 1,
+            "time": time_ms,
+            "message": msg,
+            "actor": {
+                "user": { "name": user },
+                "process": {
+                    "name": source_name,
+                    "file": { "path": source_path, "name": source_name, "type_id": 1 },
+                    "uid": to_string(ed.SourceProcessGUID) ?? to_string(ed.SourceProcessId) ?? "0",
+                },
+            },
+            "process": {
+                "name": target_name,
+                "file": { "path": target_path, "name": target_name, "type_id": 1 },
+                "uid": to_string(ed.TargetProcessGUID) ?? to_string(ed.TargetProcessId) ?? "0",
+                "pid": to_int(ed.TargetProcessId) ?? 0,
+            },
+            "device": { "hostname": computer, "type_id": 1 },
+            "metadata": {
+                "version": "1.9.0",
+                "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                "log_provider": "Microsoft-Windows-Sysmon",
+            },
+            "unmapped": {
+                "windows_event_id": "10",
+                "computer": computer,
+                "granted_access": to_string(ed.GrantedAccess) ?? "",
+            },
+        }
+    } else if eid == 11 {
+        path = to_string(ed.TargetFilename) ?? ""
+        if path == "" {
+            abort "no_match"
+        } else {
+            process_name = to_string(ed.Image) ?? "unknown"
+            if contains(process_name, "\\") {
+                name_parts = split(process_name, "\\")
+                process_name = to_string(name_parts[-1])
+            } else if contains(process_name, "/") {
+                name_parts = split(process_name, "/")
+                process_name = to_string(name_parts[-1])
+            }
+            user = downcase(to_string(ed.User) ?? "unknown")
+            if contains(user, "\\") {
+                user_parts = split(user, "\\")
+                user = to_string(user_parts[-1])
+            }
+            class_uid = 1001
+            category_uid = 1
+            activity_id = 1
+            type_uid = class_uid * 100 + activity_id
+            . = {
+                "category_uid": category_uid,
+                "class_uid": class_uid,
+                "class_name": "File System Activity",
+                "category_name": "System Activity",
+                "type_uid": type_uid,
+                "activity_id": activity_id,
+                "severity_id": 1,
+                "status_id": 1,
+                "time": time_ms,
+                "message": msg,
+                "actor": {
+                    "user": { "name": user },
+                    "process": {
+                        "name": process_name,
+                        "uid": puid,
+                    },
+                },
+                "file": { "path": path, "name": path, "type_id": 1 },
+                "device": { "hostname": computer, "type_id": 1 },
+                "metadata": {
+                    "version": "1.9.0",
+                    "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                    "log_provider": "Microsoft-Windows-Sysmon",
+                },
+                "unmapped": {
+                    "windows_event_id": "11",
+                    "computer": computer,
+                },
+            }
+        }
+    } else if eid == 22 {
+        query_name = to_string(ed.QueryName) ?? ""
+        if query_name == "" {
+            abort "no_match"
+        } else {
+            process_path = to_string(ed.Image) ?? "unknown"
+            process_name = process_path
+            if contains(process_path, "\\") {
+                path_parts = split(process_path, "\\")
+                process_name = to_string(path_parts[-1])
+            } else if contains(process_path, "/") {
+                path_parts = split(process_path, "/")
+                process_name = to_string(path_parts[-1])
+            }
+            user = downcase(to_string(ed.User) ?? "unknown")
+            if contains(user, "\\") {
+                user_parts = split(user, "\\")
+                user = to_string(user_parts[-1])
+            }
+            class_uid = 4003
+            category_uid = 4
+            activity_id = 1
+            type_uid = class_uid * 100 + activity_id
+            # dns_activity requires at_least_one of src_endpoint/dst_endpoint. Sysmon
+            # DNS events carry no sockets; the first resolvable QueryResults entry
+            # (often IPv4-mapped IPv6) becomes dst_endpoint.ip.
+            dst_ip_dns = ""
+            qr_all = string!(replace(to_string(ed.QueryResults) ?? "", r'::ffff:', ""))
+            m4 = parse_regex(qr_all, r'(?P<ip>\d{1,3}(\.\d{1,3}){3})') ?? null
+            if m4 != null {
+                dst_ip_dns = to_string(get(m4, ["ip"]) ?? null) ?? ""
+            } else {
+                # No IPv4 anywhere; a bare IPv6 entry (hex/colons only) qualifies.
+                qr_first = to_string(get(split(qr_all, ";"), [0]) ?? "") ?? ""
+                if qr_first != "" && match(qr_first, r'^[0-9a-fA-F:]+$') {
+                    dst_ip_dns = qr_first
+                }
+            }
+            . = {
+                "category_uid": category_uid,
+                "class_uid": class_uid,
+                "class_name": "DNS Activity",
+                "category_name": "Network Activity",
+                "type_uid": type_uid,
+                "activity_id": activity_id,
+                "severity_id": 1,
+                "status_id": 1,
+                "time": time_ms,
+                "message": msg,
+                "actor": {
+                    "user": { "name": user },
+                    "process": {
+                        "name": process_name,
+                        "file": { "path": process_path, "name": process_name, "type_id": 1 },
+                        "uid": puid,
+                        "pid": to_int(ed.ProcessId) ?? 0,
+                    },
+                },
+                "query": { "hostname": query_name, "type": "A" },
+                "device": { "hostname": computer, "type_id": 1 },
+                "metadata": {
+                    "version": "1.9.0",
+                    "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                    "log_provider": "Microsoft-Windows-Sysmon",
+                    "profiles": ["host"],
+                },
+                "unmapped": {
+                    "windows_event_id": "22",
+                    "computer": computer,
+                    "query_status": to_string(ed.QueryStatus) ?? "",
+                    "query_results": to_string(ed.QueryResults) ?? "",
+                },
+            }
+            if dst_ip_dns == "" {
+                # No resolvable address: 4003 cannot satisfy
+                # at_least_one(src_endpoint, dst_endpoint) — fail closed.
+                abort "no_match"
+            } else {
+                .dst_endpoint = {"ip": dst_ip_dns}
+            }
+        }
+    } else if eid == 23 {
+        # FileDelete — file_activity (1001), Delete (4).
+        path = to_string(ed.TargetFilename) ?? ""
+        if path == "" {
+            abort "no_match"
+        } else {
+            class_uid = 1001
+            category_uid = 1
+            activity_id = 4
+            type_uid = class_uid * 100 + activity_id
+            severity_id = 1
+            user = downcase(to_string(ed.User) ?? "unknown")
+            if contains(user, "\\") {
+                user_parts = split(user, "\\")
+                user = to_string(user_parts[-1])
+            }
+            proc_path = to_string(ed.Image) ?? "unknown"
+            proc_name = proc_path
+            if contains(proc_path, "\\") {
+                proc_parts = split(proc_path, "\\")
+                proc_name = to_string(proc_parts[-1])
+            } else if contains(proc_path, "/") {
+                proc_parts = split(proc_path, "/")
+                proc_name = to_string(proc_parts[-1])
+            }
+            file_name = path
+            if contains(path, "\\") {
+                fn_parts = split(path, "\\")
+                file_name = to_string(fn_parts[-1])
+            } else if contains(path, "/") {
+                fn_parts = split(path, "/")
+                file_name = to_string(fn_parts[-1])
+            }
+            md5 = ""
+            sha256 = ""
+            hv = to_string(ed.Hashes) ?? ""
+            if hv != "" {
+                m5 = parse_regex(hv, r'(?i)MD5=(?P<h>[0-9A-F]{32})') ?? null
+                if m5 != null {
+                    md5 = downcase(to_string(get(m5, ["h"]) ?? null) ?? "")
+                }
+                s25 = parse_regex(hv, r'(?i)SHA256=(?P<h>[0-9A-F]{64})') ?? null
+                if s25 != null {
+                    sha256 = downcase(to_string(get(s25, ["h"]) ?? null) ?? "")
+                }
+            }
+            . = {
+                "category_uid": category_uid,
+                "class_uid": class_uid,
+                "class_name": "File Activity",
+                "category_name": "System Activity",
+                "type_uid": type_uid,
+                "activity_id": activity_id,
+                "severity_id": severity_id,
+                "status_id": 1,
+                "time": time_ms,
+                "message": msg,
+                "actor": {
+                    "user": { "name": user },
+                    "process": {
+                        "name": proc_name,
+                        "file": { "path": proc_path, "name": proc_name, "type_id": 1 },
+                        "uid": puid,
+                        "pid": to_int(ed.ProcessId) ?? 0,
+                    },
+                },
+                "file": { "path": path, "name": file_name, "type_id": 1 },
+                "device": { "hostname": computer, "type_id": 1 },
+                "metadata": {
+                    "version": "1.9.0",
+                    "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                    "log_provider": "Microsoft-Windows-Sysmon",
+                    "profiles": ["host"],
+                },
+                "unmapped": {
+                    "windows_event_id": "23",
+                    "computer": computer,
+                    "is_executable": to_string(ed.IsExecutable) ?? "",
+                    "archived": to_string(ed.Archived) ?? "",
+                },
+            }
+            hashes = []
+            if md5 != "" {
+                hashes = push(hashes, {"algorithm_id": 1, "value": md5})
+            }
+            if sha256 != "" {
+                hashes = push(hashes, {"algorithm_id": 3, "value": sha256})
+            }
+            if length(hashes) > 0 {
+                . = set!(., ["file", "hashes"], hashes)
+            }
+        }
+    } else if eid == 7 {
+        # ImageLoad — module_activity (1005), Load (1).
+        mod_path = to_string(ed.ImageLoaded) ?? ""
+        if mod_path == "" {
+            abort "no_match"
+        } else {
+            class_uid = 1005
+            category_uid = 1
+            activity_id = 1
+            type_uid = class_uid * 100 + activity_id
+            severity_id = 1
+            user = downcase(to_string(ed.User) ?? "unknown")
+            if contains(user, "\\") {
+                user_parts = split(user, "\\")
+                user = to_string(user_parts[-1])
+            }
+            proc_path = to_string(ed.Image) ?? "unknown"
+            proc_name = proc_path
+            if contains(proc_path, "\\") {
+                proc_parts = split(proc_path, "\\")
+                proc_name = to_string(proc_parts[-1])
+            } else if contains(proc_path, "/") {
+                proc_parts = split(proc_path, "/")
+                proc_name = to_string(proc_parts[-1])
+            }
+            mod_name = mod_path
+            if contains(mod_path, "\\") {
+                mn_parts = split(mod_path, "\\")
+                mod_name = to_string(mn_parts[-1])
+            } else if contains(mod_path, "/") {
+                mn_parts = split(mod_path, "/")
+                mod_name = to_string(mn_parts[-1])
+            }
+            orig_name = to_string(ed.OriginalFileName) ?? ""
+            if orig_name == "" {
+                orig_name = mod_name
+            }
+            md5 = ""
+            sha256 = ""
+            hv = to_string(ed.Hashes) ?? ""
+            if hv != "" {
+                m5 = parse_regex(hv, r'(?i)MD5=(?P<h>[0-9A-F]{32})') ?? null
+                if m5 != null {
+                    md5 = downcase(to_string(get(m5, ["h"]) ?? null) ?? "")
+                }
+                s25 = parse_regex(hv, r'(?i)SHA256=(?P<h>[0-9A-F]{64})') ?? null
+                if s25 != null {
+                    sha256 = downcase(to_string(get(s25, ["h"]) ?? null) ?? "")
+                }
+            }
+            . = {
+                "category_uid": category_uid,
+                "class_uid": class_uid,
+                "class_name": "Module Activity",
+                "category_name": "System Activity",
+                "type_uid": type_uid,
+                "activity_id": activity_id,
+                "severity_id": severity_id,
+                "status_id": 1,
+                "time": time_ms,
+                "message": msg,
+                "actor": {
+                    "user": { "name": user },
+                    "process": {
+                        "name": proc_name,
+                        "file": { "path": proc_path, "name": proc_name, "type_id": 1 },
+                        "uid": puid,
+                        "pid": to_int(ed.ProcessId) ?? 0,
+                    },
+                },
+                "module": {
+                    "file": { "path": mod_path, "name": orig_name, "type_id": 3 },
+                },
+                "device": { "hostname": computer, "type_id": 1 },
+                "metadata": {
+                    "version": "1.9.0",
+                    "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                    "log_provider": "Microsoft-Windows-Sysmon",
+                    "profiles": ["host"],
+                },
+                "unmapped": {
+                    "windows_event_id": "7",
+                    "computer": computer,
+                    "description": to_string(ed.Description) ?? "",
+                    "product": to_string(ed.Product) ?? "",
+                    "company": to_string(ed.Company) ?? "",
+                    "file_version": to_string(ed.FileVersion) ?? "",
+                    "signed": to_string(ed.Signed) ?? "",
+                    "signature": to_string(ed.Signature) ?? "",
+                },
+            }
+            base_addr = to_string(ed.ImageBase) ?? ""
+            if base_addr != "" {
+                . = set!(., ["module", "base_address"], base_addr)
+            } else {
+                . = set!(., ["module", "load_type_id"], 1)
+            }
+            hashes = []
+            if md5 != "" {
+                hashes = push(hashes, {"algorithm_id": 1, "value": md5})
+            }
+            if sha256 != "" {
+                hashes = push(hashes, {"algorithm_id": 3, "value": sha256})
+            }
+            if length(hashes) > 0 {
+                . = set!(., ["module", "file", "hashes"], hashes)
+            }
+        }
+    } else if eid == 12 {
+        # Registry key create — win/registry_key_activity (201001), Create (1).
+        reg_path = to_string(ed.TargetObject) ?? ""
+        if reg_path == "" {
+            abort "no_match"
+        } else {
+            class_uid = 201001
+            category_uid = 1
+            activity_id = 1
+            type_uid = class_uid * 100 + activity_id
+            severity_id = 1
+            user = downcase(to_string(ed.User) ?? "unknown")
+            if contains(user, "\\") {
+                user_parts = split(user, "\\")
+                user = to_string(user_parts[-1])
+            }
+            proc_path = to_string(ed.Image) ?? "unknown"
+            proc_name = proc_path
+            if contains(proc_path, "\\") {
+                proc_parts = split(proc_path, "\\")
+                proc_name = to_string(proc_parts[-1])
+            } else if contains(proc_path, "/") {
+                proc_parts = split(proc_path, "/")
+                proc_name = to_string(proc_parts[-1])
+            }
+            . = {
+                "category_uid": category_uid,
+                "class_uid": class_uid,
+                "class_name": "Registry Key Activity",
+                "category_name": "System Activity",
+                "type_uid": type_uid,
+                "activity_id": activity_id,
+                "severity_id": severity_id,
+                "status_id": 1,
+                "time": time_ms,
+                "message": msg,
+                "actor": {
+                    "user": { "name": user },
+                    "process": {
+                        "name": proc_name,
+                        "file": { "path": proc_path, "name": proc_name, "type_id": 1 },
+                        "uid": puid,
+                        "pid": to_int(ed.ProcessId) ?? 0,
+                    },
+                },
+                "reg_key": { "path": reg_path },
+                "device": { "hostname": computer, "type_id": 1 },
+                "metadata": {
+                    "version": "1.9.0",
+                    "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                    "log_provider": "Microsoft-Windows-Sysmon",
+                    "profiles": ["host"],
+                },
+                "unmapped": {
+                    "windows_event_id": "12",
+                    "computer": computer,
+                    "event_type": to_string(ed.EventType) ?? "",
+                },
+            }
+        }
+    } else if eid == 13 {
+        # Registry value set — win/registry_value_activity (201002), Set (2).
+        # TargetObject is "<key path>\<value name>"; reg_value requires both
+        # path (key) and name (value name).
+        reg_full = to_string(ed.TargetObject) ?? ""
+        if reg_full == "" {
+            abort "no_match"
+        } else {
+            class_uid = 201002
+            category_uid = 1
+            activity_id = 2
+            type_uid = class_uid * 100 + activity_id
+            severity_id = 1
+            reg_name = reg_full
+            if contains(reg_full, "\\") {
+                rn_parts = split(reg_full, "\\")
+                reg_name = to_string(rn_parts[-1])
+            }
+            reg_key_path = string!(replace(reg_full, r'\\[^\\]*$', ""))
+            if reg_key_path == reg_full {
+                reg_key_path = reg_full
+                reg_name = "Default"
+            }
+            user = downcase(to_string(ed.User) ?? "unknown")
+            if contains(user, "\\") {
+                user_parts = split(user, "\\")
+                user = to_string(user_parts[-1])
+            }
+            proc_path = to_string(ed.Image) ?? "unknown"
+            proc_name = proc_path
+            if contains(proc_path, "\\") {
+                proc_parts = split(proc_path, "\\")
+                proc_name = to_string(proc_parts[-1])
+            } else if contains(proc_path, "/") {
+                proc_parts = split(proc_path, "/")
+                proc_name = to_string(proc_parts[-1])
+            }
+            . = {
+                "category_uid": category_uid,
+                "class_uid": class_uid,
+                "class_name": "Registry Value Activity",
+                "category_name": "System Activity",
+                "type_uid": type_uid,
+                "activity_id": activity_id,
+                "severity_id": severity_id,
+                "status_id": 1,
+                "time": time_ms,
+                "message": msg,
+                "actor": {
+                    "user": { "name": user },
+                    "process": {
+                        "name": proc_name,
+                        "file": { "path": proc_path, "name": proc_name, "type_id": 1 },
+                        "uid": puid,
+                        "pid": to_int(ed.ProcessId) ?? 0,
+                    },
+                },
+                "reg_value": { "path": reg_key_path, "name": reg_name },
+                "device": { "hostname": computer, "type_id": 1 },
+                "metadata": {
+                    "version": "1.9.0",
+                    "product": { "name": "Sysmon", "vendor_name": "Microsoft" },
+                    "log_provider": "Microsoft-Windows-Sysmon",
+                    "profiles": ["host"],
+                },
+                "unmapped": {
+                    "windows_event_id": "13",
+                    "computer": computer,
+                    "event_type": to_string(ed.EventType) ?? "",
+                    "details": to_string(ed.Details) ?? "",
+                },
+            }
+        }
+    } else {
+        abort "no_match"
+    }

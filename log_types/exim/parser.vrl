@@ -1,0 +1,120 @@
+# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
+# source: go/internal/api/vector/vrl/exim_to_ocsf.vrl
+# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
+# REVIEW before promote: run gate tests with synth samples.
+
+# Exim4 mainlog → OCSF Email Activity (class_uid 4009) for SMTP VRFY / mail recon.
+#
+# Schema: go/internal/ocsf/ocsf-schema-v1.9.0.json — 4009 email_activity (SMTP).
+# NOT 5001 Device Inventory Info. NOT 2004 Detection Finding (that is for security
+# products / scanner_finding). VRFY enumeration → activity_id 3 (Scan).
+#
+# Gateway envelope: event=<json> with message=full mainlog line, hostname=mail host.
+# Promotes VRFY / RCPT / auth-shaped mail lines; unrelated text → no_match.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .message != null || .program != null {
+        raw = .
+    }
+}
+if !is_object(raw) {
+    abort "no_match"
+}
+    msg = to_string(raw.message) ?? ""
+    host = to_string(raw.hostname) ?? to_string(raw.host) ?? to_string(raw.ait_mail_host) ?? ""
+    if host == "" {
+        host = "exim-host"
+    }
+    program = downcase(to_string(raw.program) ?? "exim4")
+    src_ip = to_string(raw.src_ip) ?? ""
+    if src_ip == "" {
+        ip_caps = parse_regex(msg, r'\[(?P<ip>[0-9a-fA-F:.]+)\]') ?? {}
+        src_ip = to_string(ip_caps.ip)
+    }
+
+    msg_l = downcase(msg)
+    is_mail = false
+    if contains(msg_l, "vrfy ") || contains(msg_l, "vrfy failed") || contains(msg_l, "rcpt ") || contains(msg_l, "smtp") || contains(program, "exim") {
+        is_mail = true
+    }
+    # Require recognizable exim mainlog shape (timestamp + action) when not tagged exim.
+    if !is_mail {
+        abort "no_match"
+    } else {
+        vrfy = contains(msg_l, "vrfy")
+        severity_id = 3
+        if vrfy {
+            severity_id = 4
+        }
+
+        # OCSF 1.9 email_activity: 1=Send 2=Receive 3=Scan 4=Trace 5=MTA Relay 99=Other
+        class_uid = 4009
+        category_uid = 4
+        activity_id = 99
+        activity_name = "Other"
+        if vrfy {
+            activity_id = 3
+            activity_name = "Scan"
+        } else if contains(msg_l, "rcpt") || contains(msg_l, "smtp") {
+            activity_id = 5
+            activity_name = "MTA Relay"
+        }
+        type_uid = class_uid * 100 + activity_id
+        # Prefer the exim mainlog line time ("YYYY-MM-DD HH:MM:SS"); fall back to
+        # ingestion time (parsed, not raw string — to_unix_timestamp on a string
+        # errors and yields epoch 0).
+        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+        ts_caps = parse_regex(msg, r'^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') ?? {}
+        mainlog_ts = to_string(get(ts_caps, ["ts"]) ?? null) ?? ""
+        if mainlog_ts != "" {
+            # Zone-less mainlog time: pin UTC (append +0000) so parsing is
+            # deterministic and not shifted by the host's local timezone.
+            parsed_ts = parse_timestamp(mainlog_ts + " +0000", format: "%Y-%m-%d %H:%M:%S %z") ?? null
+            if parsed_ts != null {
+                time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? time_ms
+            }
+        }
+
+        user = ""
+        if vrfy {
+            caps = parse_regex(msg, r'VRFY failed for (?P<user>[^\s]+)') ?? {}
+            user = to_string(caps.user)
+        }
+
+        . = {
+            "time": time_ms,
+            "category_uid": category_uid,
+            "class_uid": class_uid,
+            "class_name": "Email Activity",
+            "category_name": "Network Activity",
+            "type_uid": type_uid,
+            "activity_id": activity_id,
+            "activity_name": activity_name,
+            "severity_id": severity_id,
+            "status_id": 1,
+            "direction_id": 1,
+            "message": msg,
+            "actor": { "user": { "name": user } },
+            "src_endpoint": { "ip": src_ip },
+            "dst_endpoint": { "hostname": host },
+            "device": { "hostname": host, "type_id": 1 },
+            "email": {
+                "from": user,
+                "to": [user],
+                "subject": msg,
+            },
+            "metadata": {
+                "product": { "name": program, "vendor_name": "exim" },
+                "version": "1.9.0",
+                "profiles": ["host"],
+            },
+            "unmapped": {
+                "program": program,
+                "device_hostname": host,
+                "vrfy": vrfy,
+            },
+        }
+    }

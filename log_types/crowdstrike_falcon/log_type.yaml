@@ -1,0 +1,4 @@
+name: CrowdStrike Falcon
+description: CrowdStrike Falcon events.
+vendor: CrowdStrike
+product: CrowdStrike Falcon

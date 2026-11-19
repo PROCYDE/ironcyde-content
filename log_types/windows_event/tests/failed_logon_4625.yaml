@@ -1,0 +1,16 @@
+---
+raw_sample: '{"EventID":4625,"Channel":"Security","Computer":"CTDL-WKS-23","message":"An account failed to log on","event_data":{"TargetUserName":"MSMITH","TargetDomainName":"CITADEL","IpAddress":"203.0.113.201","IpPort":"15198","LogonType":"3","LogonProcessName":"NtLmSsp","AuthenticationPackageName":"NTLM","TargetLogonId":"0xf19da2","Status":"0xC000006D","SubStatus":"0xC000006A","FailureReason":"%%2313"},"TimeCreated":"2026-10-15T09:20:18Z","RecordNumber":8382104}'
+expected:
+  activity_id: 1
+  category_uid: 3
+  class_uid: 3002
+  dst_endpoint.hostname: ctdl-wks-23
+  message: An account failed to log on
+  metadata.product.name: Windows
+  metadata.product.vendor_name: Microsoft
+  severity_id: 2
+  src_endpoint.ip: 203.0.113.201
+  status_id: 2
+  type_uid: 300201
+  user.domain: citadel
+  user.name: msmith
