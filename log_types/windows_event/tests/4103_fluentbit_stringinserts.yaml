@@ -1,0 +1,12 @@
+---
+raw_sample: '{"date":1794911704.997902,"ProviderName":"Microsoft-Windows-PowerShell","ProviderGuid":"{A0C1853B-5C40-4B15-8766-3CF1C58F985A}","EventID":4103,"Version":1,"Level":4,"Task":106,"Opcode":0,"Keywords":"0x0","TimeCreated":"2026-11-17 05:35:03 -0500","EventRecordID":12345,"Channel":"Microsoft-Windows-PowerShell/Operational","Computer":"DC01.corp.example.test","UserID":"CORP\\domainuser","Message":"CommandInvocation(Get-ChildItem): \"Get-ChildItem\"","StringInserts":["Context: Severity = Informational","","CommandInvocation(Get-ChildItem): \"Get-ChildItem\""],"range_id":"TEST"}'
+expected:
+  activity_id: 1
+  actor.user.name: domainuser
+  class_uid: 1009
+  device.hostname: dc01.corp.example.test
+  metadata.log_name: Microsoft-Windows-PowerShell/Operational
+  metadata.log_provider: Microsoft-Windows-PowerShell
+  metadata.uid: '12345'
+  script.name: Get-ChildItem
+  script.script_content.value: 'CommandInvocation(Get-ChildItem): "Get-ChildItem"'

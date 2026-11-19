@@ -1,0 +1,10 @@
+---
+raw_sample: '{"date":1794911704.997902,"ProviderName":"Microsoft-Windows-Sysmon","ProviderGuid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","EventID":1,"Version":5,"Level":4,"Task":1,"Opcode":0,"Keywords":"0x8000000000000000","TimeCreated":"2026-11-17 05:35:03 -0500","EventRecordID":71084,"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"WIN-FIN01.corp.example.test","Message":"Process Create:\r\nRuleName: -\r\nUtcTime: 2026-11-17 10:35:03.069\r\nProcessGuid: {11111111-1111-1111-1111-111111111111}\r\nProcessId: 5072\r\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\r\nFileVersion: 10.0.19041.1\r\nDescription: Windows PowerShell\r\nProduct: Microsoft Windows Operating System\r\nCompany: Microsoft Corporation\r\nOriginalFileName: powershell.exe\r\nCommandLine: powershell.exe -NoProfile -Command \"Get-Process\"\r\nCurrentDirectory: C:\\Windows\\system32\\\r\nUser: CORP\\domainuser\r\nLogonGuid: {22222222-2222-2222-2222-222222222222}\r\nLogonId: 0x3c20b\r\nTerminalSessionId: 1\r\nIntegrityLevel: Medium\r\nHashes: SHA256=AAAA\r\nParentProcessGuid: {33333333-3333-3333-3333-333333333333}\r\nParentProcessId: 5356\r\nParentImage: C:\\Windows\\explorer.exe\r\nParentCommandLine: C:\\Windows\\explorer.exe\r\nParentUser: CORP\\domainuser","StringInserts":["-","2026-11-17 10:35:03.069","{11111111-1111-1111-1111-111111111111}",5072,"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","10.0.19041.1","Windows PowerShell","Microsoft Windows Operating System","Microsoft Corporation","powershell.exe","powershell.exe -NoProfile -Command \"Get-Process\"","C:\\Windows\\system32\\","CORP\\domainuser","{22222222-2222-2222-2222-222222222222}","0x3c20b","1","Medium","SHA256=AAAA","{33333333-3333-3333-3333-333333333333}",5356,"C:\\Windows\\explorer.exe","C:\\Windows\\explorer.exe","CORP\\domainuser"],"range_id":"TEST"}'
+expected:
+  activity_id: 1
+  actor.user.name: domainuser
+  class_uid: 1007
+  process.cmd_line: powershell.exe -NoProfile -Command "Get-Process"
+  process.file.path: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+  process.name: powershell.exe
+  process.parent_process.name: explorer.exe

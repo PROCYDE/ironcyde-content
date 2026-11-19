@@ -1,0 +1,10 @@
+---
+raw_sample: '{"date":1794911704.997902,"ProviderName":"Microsoft-Windows-Sysmon","ProviderGuid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","EventID":3,"Version":5,"Level":4,"Task":3,"Opcode":0,"Keywords":"0x8000000000000000","TimeCreated":"2026-11-17 05:35:03 -0500","EventRecordID":71085,"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"WIN-FIN01.corp.example.test","Message":"Network connection detected:\r\nRuleName: -\r\nUtcTime: 2026-11-17 10:35:03.069\r\nProcessGuid: {11111111-1111-1111-1111-111111111111}\r\nProcessId: 4321\r\nImage: C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\r\nUser: CORP\\domainuser\r\nProtocol: tcp\r\nInitiated: true\r\nSourceIsIpv6: false\r\nSourceIp: 10.2.30.10\r\nSourceHostname: WIN-FIN01.corp.example.test\r\nSourcePort: 51515\r\nSourcePortName: -\r\nDestinationIsIpv6: false\r\nDestinationIp: 10.2.60.10\r\nDestinationHostname: cloud.corp.example.test\r\nDestinationPort: 443\r\nDestinationPortName: https","StringInserts":["-","2026-11-17 10:35:03.069","{11111111-1111-1111-1111-111111111111}",4321,"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe","CORP\\domainuser","tcp","true","false","10.2.30.10","WIN-FIN01.corp.example.test","51515","-","false","10.2.60.10","cloud.corp.example.test","443","https"],"range_id":"TEST"}'
+expected:
+  actor.process.name: msedge.exe
+  actor.user.name: domainuser
+  class_uid: 4001
+  dst_endpoint.ip: 10.2.60.10
+  dst_endpoint.port: 443
+  src_endpoint.ip: 10.2.30.10
+  src_endpoint.port: 51515
