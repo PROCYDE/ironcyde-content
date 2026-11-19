@@ -1,0 +1,4 @@
+name: AWS VPC flow logs
+description: AWS VPC flow log records in text and JSON form.
+vendor: AWS
+product: VPC

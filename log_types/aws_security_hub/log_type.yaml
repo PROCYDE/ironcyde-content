@@ -1,0 +1,4 @@
+name: AWS Security Hub findings
+description: AWS Security Hub compliance, detection, and vulnerability findings.
+vendor: AWS
+product: Security Hub

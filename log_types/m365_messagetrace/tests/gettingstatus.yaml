@@ -1,0 +1,40 @@
+# source: mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_GettingStatus.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_GettingStatus.ocsf
+
+raw_sample: |-
+  {
+    "Organization": "testdomain2.onmicrosoft.com",
+    "MessageId": "<BY3PR06MB813201B0A905E9DF36BCEA768F302@BY3PR06MB8132.namprd06.prod.outlook.com>",
+    "Received": "2024-12-05T00:27:21.1795476",
+    "SenderAddress": "first_last@testdomain2.onmicrosoft.com",
+    "RecipientAddress": "first_last@testdomain2.onmicrosoft.com",
+    "Subject": "HierarchySync_Ping_397887_6da4db39-e8fb-4565-939d-4f2849bd8ccf",
+    "Status": "GettingStatus",
+    "ToIP": null,
+    "FromIP": "2603:10b6:a03:3cb::11",
+    "Size": 27684,
+    "MessageTraceId": "db0f258b-b076-468a-2014-08dd14c39542",
+    "Index": 1098
+  }
+
+expected:
+  class_uid: 4009
+  category_uid: 4
+  activity_id: 4
+  status_id: 99
+  severity_id: 0
+  src_endpoint.ip: 2603:10b6:a03:3cb::11
+  direction_id: 0
+  email.message_uid: <BY3PR06MB813201B0A905E9DF36BCEA768F302@BY3PR06MB8132.namprd06.prod.outlook.com>
+  email.size: 27684
+  email.smtp_from: first_last@testdomain2.onmicrosoft.com
+  email.smtp_to:
+  - first_last@testdomain2.onmicrosoft.com
+  email.subject: HierarchySync_Ping_397887_6da4db39-e8fb-4565-939d-4f2849bd8ccf
+  message_trace_uid: db0f258b-b076-468a-2014-08dd14c39542
+  metadata.product.name: O365
+  metadata.product.vendor_name: Microsoft
+  metadata.uid: db0f258b-b076-468a-2014-08dd14c39542
+  status_detail: GettingStatus
+  type_uid: 400904
+  class_name: Email Activity

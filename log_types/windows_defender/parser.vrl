@@ -1,0 +1,241 @@
+# Windows Defender event 1116 (malware detected) -> OCSF 1.9.0 Detection Finding (2004).
+#
+# Two input forms are accepted: the original XML event and the line-oriented "event" text
+# export. Both carry the same EventData names. The XML is read with regexes because real
+# Defender events can contain unescaped ampersands that break a strict XML parser.
+#
+# Computer, process, action and execution details stay in unmapped: 2004 has no process or
+# file attribute, and device belongs to the host profile.
+
+text = strip_whitespace(string(.message) ?? "")
+if text == "" {
+  abort "empty Windows Defender event"
+}
+
+event_id_raw = ""
+record_id = ""
+computer = ""
+system_time = ""
+if starts_with(text, "<") {
+  id_match = parse_regex(text, r'<EventID>(?P<id>[0-9]+)</EventID>') ?? null
+  if is_object(id_match) {
+    event_id_raw = string(id_match.id) ?? ""
+  }
+  rec_match = parse_regex(text, r'<EventRecordID>(?P<id>[0-9]+)</EventRecordID>') ?? null
+  if is_object(rec_match) {
+    record_id = string(rec_match.id) ?? ""
+  }
+  comp_match = parse_regex(text, r'<Computer>(?P<value>[^<]+)</Computer>') ?? null
+  if is_object(comp_match) {
+    computer = string(comp_match.value) ?? ""
+  }
+  time_match = parse_regex(text, r'SystemTime="(?P<value>[^"]+)"') ?? null
+  if is_object(time_match) {
+    system_time = string(time_match.value) ?? ""
+  }
+} else {
+  id_match = parse_regex(text, r'EventID\s+(?P<id>[0-9]+)') ?? null
+  if is_object(id_match) {
+    event_id_raw = string(id_match.id) ?? ""
+  }
+  rec_match = parse_regex(text, r'EventRecordID\s+(?P<id>[0-9]+)') ?? null
+  if is_object(rec_match) {
+    record_id = string(rec_match.id) ?? ""
+  }
+  comp_match = parse_regex(text, r'Computer\s+(?P<value>[^\r\n]+)') ?? null
+  if is_object(comp_match) {
+    computer = strip_whitespace(string(comp_match.value) ?? "")
+  }
+  time_match = parse_regex(text, r'SystemTime\]\s+(?P<value>\S+)') ?? null
+  if is_object(time_match) {
+    system_time = string(time_match.value) ?? ""
+  }
+}
+
+if event_id_raw != "" && event_id_raw != "1116" {
+  abort "not a Windows Defender 1116 event"
+}
+
+# --- EventData -----------------------------------------------------------
+
+fields = {}
+if starts_with(text, "<") {
+  entries = parse_regex_all(text, r'<Data Name="(?P<name>[^"]+)">(?P<value>[^<]*)</Data>') ?? []
+  for_each(entries) -> |_i, item| {
+    if is_object(item) {
+      name = string(item.name) ?? ""
+      if name != "" {
+        fields = set!(fields, [name], string(item.value) ?? "")
+      }
+    }
+  }
+} else {
+  # The text export separates keys and values with a single space; keys may contain
+  # spaces, so they are matched from the known EventData names instead of split.
+  known = [
+    "Product Name", "Product Version", "Detection ID", "Detection Time", "Threat ID",
+    "Threat Name", "Severity ID", "Severity Name", "Category ID", "Category Name",
+    "Status Code", "Status Description", "State", "Source ID", "Source Name",
+    "Process Name", "Detection User", "Path", "Origin ID", "Origin Name",
+    "Execution ID", "Execution Name", "Type ID", "Type Name", "Pre Execution Status",
+    "Action ID", "Action Name", "Error Code", "Error Description", "Post Clean Status",
+    "Additional Actions ID", "Additional Actions String", "Security intelligence Version",
+    "Engine Version",
+  ]
+  lines = split(text, "\n")
+  for_each(lines) -> |_i, line| {
+    trimmed = strip_whitespace(line)
+    for_each(known) -> |_j, key| {
+      prefix = key + " "
+      if starts_with(trimmed, prefix) {
+        value = slice!(trimmed, length(prefix))
+        fields = set!(fields, [key], value)
+      }
+    }
+  }
+}
+
+threat_name = string(get(fields, ["Threat Name"]) ?? "") ?? ""
+detection_id = string(get(fields, ["Detection ID"]) ?? "") ?? ""
+category_name = string(get(fields, ["Category Name"]) ?? "") ?? ""
+severity_raw = to_int(get(fields, ["Severity ID"]) ?? 0) ?? 0
+threat_uid = string(get(fields, ["Threat ID"]) ?? "") ?? ""
+file_path = string(get(fields, ["Path"]) ?? "") ?? ""
+file_path = replace(file_path, "file:_", "")
+file_path = replace(file_path, "containerfile:_", "")
+process_name = string(get(fields, ["Process Name"]) ?? "") ?? ""
+detection_user = string(get(fields, ["Detection User"]) ?? "") ?? ""
+product_name = string(get(fields, ["Product Name"]) ?? "") ?? ""
+product_version = string(get(fields, ["Product Version"]) ?? "") ?? ""
+action_name = string(get(fields, ["Action Name"]) ?? "") ?? ""
+execution_name = string(get(fields, ["Execution Name"]) ?? "") ?? ""
+status_description = string(get(fields, ["Status Description"]) ?? "") ?? ""
+error_description = string(get(fields, ["Error Description"]) ?? "") ?? ""
+detection_time_raw = string(get(fields, ["Detection Time"]) ?? "") ?? ""
+
+if threat_name == "" && detection_id == "" {
+  abort "Windows Defender event without threat data"
+}
+
+severity_id = 0
+if severity_raw == 1 {
+  severity_id = 2
+} else if severity_raw == 2 {
+  severity_id = 3
+} else if severity_raw == 4 {
+  severity_id = 4
+} else if severity_raw >= 5 {
+  severity_id = 5
+} else if severity_raw > 0 {
+  severity_id = 99
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+detection_time = parse_timestamp(detection_time_raw, format: "%+") ?? null
+system_timestamp = parse_timestamp(system_time, format: "%+") ?? null
+if is_timestamp(detection_time) {
+  time_ms = to_unix_timestamp(timestamp!(detection_time), unit: "milliseconds")
+} else if is_timestamp(system_timestamp) {
+  time_ms = to_unix_timestamp(timestamp!(system_timestamp), unit: "milliseconds")
+}
+
+finding_uid = detection_id
+if finding_uid == "" {
+  finding_uid = threat_name
+}
+finding_info = {
+  "uid": finding_uid,
+}
+if threat_name != "" {
+  finding_info.title = threat_name
+}
+description = "Malware " + threat_name + " detected"
+if file_path != "" {
+  description = description + " in " + file_path
+}
+finding_info.desc = description
+if category_name != "" {
+  finding_info.types = [category_name]
+}
+first_seen = detection_time
+if is_timestamp(first_seen) {
+  finding_info.first_seen_time = time_ms
+  finding_info.last_seen_time = time_ms
+}
+
+malware = {}
+if threat_name != "" {
+  malware.name = threat_name
+}
+if threat_uid != "" {
+  malware.uid = threat_uid
+}
+if category_name != "" {
+  malware.classifications = [category_name]
+  if category_name == "Trojan" {
+    malware.classification_ids = [18]
+  } else if category_name == "Virus" {
+    malware.classification_ids = [19]
+  } else {
+    malware.classification_ids = [99]
+  }
+}
+if file_path != "" {
+  malware.path = file_path
+}
+
+metadata = {
+  "version": "1.9.0",
+  "log_name": "Windows Defender/Operational",
+  "log_provider": "Microsoft",
+  "event_code": "1116",
+  "product": {
+    "name": "Windows Defender",
+    "vendor_name": "Microsoft",
+    "version": product_version,
+  },
+}
+if record_id != "" {
+  metadata.uid = record_id
+}
+
+out = {
+  "class_uid": 2004,
+  "class_name": "Detection Finding",
+  "category_uid": 2,
+  "category_name": "Findings",
+  "activity_id": 1,
+  "activity_name": "Create",
+  "type_uid": 200401,
+  "time": time_ms,
+  "severity_id": severity_id,
+  "is_alert": true,
+  "message": threat_name,
+  "finding_info": finding_info,
+  "malware": [malware],
+  "metadata": metadata,
+}
+unmapped = {
+  "computer": computer,
+  "process_name": process_name,
+  "action_name": action_name,
+  "execution_name": execution_name,
+  "severity_name": string(get(fields, ["Severity Name"]) ?? "") ?? "",
+  "category_name": category_name,
+  "detection_user": detection_user,
+  "file_path": file_path,
+}
+if status_description != "" {
+  unmapped.status_description = status_description
+}
+if error_description != "" {
+  unmapped.error_description = error_description
+}
+if product_name != "" {
+  unmapped.product_name = product_name
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

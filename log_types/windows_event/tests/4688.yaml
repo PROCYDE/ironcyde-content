@@ -1,0 +1,71 @@
+# source: mappings/markdown/Microsoft/Windows Events/4688/4688_0.event
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/Windows Events/4688/4688_0.json
+# reference issue: declares profiles host (fill them or drop the declaration)
+
+raw_sample: |-
+  03/12/2021 10:48:14 AM
+  LogName=Security
+  SourceName=Microsoft Windows security auditing.
+  EventCode=4688
+  EventType=0
+  Type=Information
+  ComputerName=win-dc-725.attackrange.local
+  TaskCategory=Process Creation
+  OpCode=Info
+  RecordNumber=257874
+  Keywords=Audit Success
+  Message=A new process has been created.
+  
+  Creator Subject:
+  	Security ID:		ATTACKRANGE\Administrator
+  	Account Name:		Administrator
+  	Account Domain:		ATTACKRANGE
+  	Logon ID:		0x55E621
+  
+  Target Subject:
+  	Security ID:		NULL SID
+  	Account Name:		-
+  	Account Domain:		-
+  	Logon ID:		0x0
+  
+  Process Information:
+  	New Process ID:		0x1258
+  	New Process Name:	C:\Windows\System32\reg.exe
+  	Token Elevation Type:	%%1936
+  	Mandatory Label:		Mandatory Label\High Mandatory Level
+  	Creator Process ID:	0xf6c
+  	Creator Process Name:	C:\Windows\System32\cmd.exe
+  	Process Command Line:	reg  save HKLM\system C:\Users\ADMINI~1\AppData\Local\Temp\system 
+  
+  Token Elevation Type indicates the type of token that was assigned to the new process in accordance with User Account Control policy.
+  
+  Type 1 is a full token with no privileges removed or groups disabled.  A full token is only used if User Account Control is disabled or if the user is the built-in Administrator account or a service account.
+  
+  Type 2 is an elevated token with no privileges removed or groups disabled.  An elevated token is used when User Account Control is enabled and the user chooses to start the program using Run as administrator.  An elevated token is also used when an application is configured to always require administrative privilege or to always require maximum privilege, and the user is a member of the Administrators group.
+  
+  Type 3 is a limited token with administrative privileges removed and administrative groups disabled.  The limited token is used when User Account Control is enabled, the application does not require administrative privilege, and the user does not choose to start the program using Run as administrator.
+
+expected:
+  class_uid: 1007
+  category_uid: 1
+  activity_id: 1
+  status_id: 1
+  severity_id: 1
+  actor.user.name: Administrator
+  actor.user.uid: ATTACKRANGE\Administrator
+  process.cmd_line: reg  save HKLM\system C:\Users\ADMINI~1\AppData\Local\Temp\system
+  process.pid: 4696
+  actor.process.file.name: cmd.exe
+  actor.process.file.parent_folder: C:\Windows\System32
+  actor.process.file.path: C:\Windows\System32\cmd.exe
+  actor.process.file.type: Regular File
+  actor.process.file.type_id: 1
+  actor.process.pid: 3948
+  actor.session.uid: '0x55E621'
+  actor.user.domain: ATTACKRANGE
+  device.hostname: win-dc-725.attackrange.local
+  device.os.name: Windows
+  device.os.type: Windows
+  device.os.type_id: 100
+  device.type_id: 0
+  message: A new process has been created.

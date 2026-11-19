@@ -1,0 +1,43 @@
+# source: mappings/markdown/Falco/samples/falco.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Falco/samples/falco.ocsf
+# reference issue: class 2001 (Security Finding) is deprecated; use ['vulnerability_finding', 'compliance_finding', 'detection_finding', 'incident_finding', 'data_security_finding']
+
+raw_sample: |-
+  {
+      "uuid": "ec834826-90c1-458a-8eec-a014e7266754",
+      "output": "Linux Kernel Module injection using insmod detected (user=%user.name user_loginuid=%user.loginuid parent_process=%proc.pname module=%proc.args %container.info image=%container.image.repository:%container.image.tag)",
+      "priority": "Warning",
+      "rule": "Linux Kernel Module Injection Detected",
+      "time": "2023-01-03T15:11:39.558068644Z",
+      "output_fields": {
+          "container.image.repository": "container.image.repository",
+          "container.image.tag": "container.image.tag",
+          "container.info": "container.info",
+          "proc.args": "proc.args",
+          "proc.pname": "proc.pname",
+          "user.loginuid": "user.loginuid",
+          "user.name": "user.name"
+      },
+      "source": "syscalls",
+      "tags": [
+          "process"
+      ],
+      "hostname": "host0.local"
+  }
+
+expected:
+  class_uid: 2004
+  class_name: Detection Finding
+  category_uid: 2
+  activity_id: 1
+  type_uid: 200401
+  severity_id: 3
+  is_alert: true
+  time: 1672758699558
+  finding_info.uid: ec834826-90c1-458a-8eec-a014e7266754
+  finding_info.title: Linux Kernel Module Injection Detected
+  finding_info.types:
+  - process
+  message: Linux Kernel Module Injection Detected
+  metadata.product.name: Falco
+  metadata.product.vendor_name: Falcosecurity

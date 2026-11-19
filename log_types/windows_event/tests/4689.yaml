@@ -1,0 +1,52 @@
+# source: mappings/markdown/Microsoft/Windows Events/4689/4689_0.event
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/Windows Events/4689/4689_0.json
+# reference issue: declares profiles host (fill them or drop the declaration)
+
+raw_sample: |-
+  09/05/2019 11:22:49 AM
+  LogName=Security
+  SourceName=Microsoft Windows security auditing.
+  EventCode=4689
+  EventType=0
+  Type=Information
+  ComputerName=dcc1.Logistics.local
+  TaskCategory=Process Termination
+  OpCode=Info
+  RecordNumber=6828379
+  Keywords=Audit Success
+  Message=A process has exited.
+  
+  Subject:
+          Security ID:                S-1-5-21-1135140816-2109348461-2107143693-500
+          Account Name:                Administrator
+          Account Domain:                LOGISTICS
+          Logon ID:                0x1806d9
+  Process Information:
+          Process ID:        0x5f4
+          Process Name:        C:\Generate_Security_Events1\auditon.exe
+          Exit Status:        0x0
+
+expected:
+  class_uid: 1007
+  category_uid: 1
+  activity_id: 2
+  status_id: 1
+  severity_id: 1
+  actor.user.name: Administrator
+  actor.user.uid: S-1-5-21-1135140816-2109348461-2107143693-500
+  process.pid: 1524
+  actor.process.file.name: auditon.exe
+  actor.process.file.parent_folder: C:\Generate_Security_Events1
+  actor.process.file.path: C:\Generate_Security_Events1\auditon.exe
+  actor.process.file.type: Regular File
+  actor.process.file.type_id: 1
+  actor.process.pid: 1524
+  actor.session.uid: '0x1806d9'
+  actor.user.domain: LOGISTICS
+  device.hostname: dcc1.Logistics.local
+  device.os.name: Windows
+  device.os.type: Windows
+  device.os.type_id: 100
+  device.type_id: 0
+  exit_code: 0
+  message: A process has exited.

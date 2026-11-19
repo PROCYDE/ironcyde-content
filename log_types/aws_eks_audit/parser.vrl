@@ -1,0 +1,204 @@
+# Kubernetes audit event from AWS EKS -> OCSF 1.9.0 API Activity (6003).
+#
+# One JSON audit event per record. The verb selects the activity; the object reference and
+# response status become the API request/response. EKS source IPs occasionally carry leading
+# zeroes ("12.000.22.33"), which are normalized to a valid IPv4 address; the raw value stays
+# in unmapped.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .auditID != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not a Kubernetes audit event"
+}
+audit_id = string(raw.auditID) ?? ""
+if audit_id == "" {
+  abort "Kubernetes audit event without auditID"
+}
+user = if is_object(raw.user) { raw.user } else { {} }
+object_ref = if is_object(raw.objectRef) { raw.objectRef } else { {} }
+response = if is_object(raw.responseStatus) { raw.responseStatus } else { {} }
+extra = if is_object(user.extra) { user.extra } else { {} }
+
+verb = downcase(string(raw.verb) ?? "")
+activity_id = 99
+if verb == "create" {
+  activity_id = 1
+} else if verb == "get" || verb == "list" || verb == "watch" {
+  activity_id = 2
+} else if verb == "update" || verb == "patch" {
+  activity_id = 3
+} else if verb == "delete" || verb == "deletecollection" {
+  activity_id = 4
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+event_time = parse_timestamp(string(raw.requestReceivedTimestamp) ?? "", format: "%+") ?? null
+if is_timestamp(event_time) {
+  time_ms = to_unix_timestamp(timestamp!(event_time), unit: "milliseconds")
+}
+
+# Normalize an IPv4 address with zero-padded octets; keep the raw value for unmapped.
+src_raw = ""
+if is_array(raw.sourceIPs) {
+  src_raw = string(get(array!(raw.sourceIPs), [0]) ?? "") ?? ""
+}
+src_ip = ""
+if is_ipv4(src_raw) || is_ipv6(src_raw) {
+  src_ip = src_raw
+} else if contains(src_raw, ".") {
+  candidate = replace(src_raw, r'(^|\.)0+([0-9])', "$1$2")
+  if is_ipv4(candidate) {
+    src_ip = candidate
+  }
+}
+if src_ip == "" {
+  abort "Kubernetes audit event without a usable source IP"
+}
+
+code = to_int(response.code) ?? 0
+status_id = 0
+if code >= 200 && code < 400 {
+  status_id = 1
+} else if code >= 400 {
+  status_id = 2
+}
+
+actor_user = {}
+if (string(user.username) ?? "") != "" {
+  actor_user.name = string(user.username) ?? ""
+}
+if (string(user.uid) ?? "") != "" {
+  actor_user.uid = string(user.uid) ?? ""
+}
+if is_array(user.groups) {
+  groups = []
+  for_each(array!(user.groups)) -> |_i, name| {
+    groups = push(groups, {"name": string(name) ?? ""})
+  }
+  if length(groups) > 0 {
+    actor_user.groups = groups
+  }
+}
+actor = {"user": actor_user}
+session = {}
+access_key = ""
+if is_array(extra.accessKeyId) {
+  access_key = string(get(array!(extra.accessKeyId), [0]) ?? "") ?? ""
+}
+if access_key != "" {
+  session.credential_uid = access_key
+}
+if is_array(extra.canonicalArn) {
+  canonical = string(get(array!(extra.canonicalArn), [0]) ?? "") ?? ""
+  if canonical != "" {
+    session.issuer = canonical
+  }
+}
+if is_array(extra.sessionName) {
+  session_name = string(get(array!(extra.sessionName), [0]) ?? "") ?? ""
+  if session_name != "" {
+    session.uid = session_name
+  }
+}
+if length(keys(session)) > 0 {
+  actor.session = session
+}
+
+api_request = {}
+if (string(raw.requestURI) ?? "") != "" {
+  api_request.uid = audit_id
+}
+api = {
+  "operation": verb,
+  "request": api_request,
+}
+if (string(object_ref.apiVersion) ?? "") != "" {
+  api.version = string(object_ref.apiVersion) ?? ""
+}
+if code > 0 {
+  api.response = {"code": code}
+}
+
+http = {}
+if (string(raw.requestURI) ?? "") != "" {
+  http.url = {"path": string(raw.requestURI) ?? ""}
+}
+if (string(raw.userAgent) ?? "") != "" {
+  http.user_agent = string(raw.userAgent) ?? ""
+}
+
+# EKS audit records carry the account in the authenticator ARN.
+cloud = {"provider": "AWS"}
+arn = ""
+if is_array(extra.arn) {
+  arn = string(get(array!(extra.arn), [0]) ?? "") ?? ""
+}
+arn_parts = split(arn, ":")
+if length(arn_parts) > 4 {
+  account = string(get(arn_parts, [4]) ?? "") ?? ""
+  if account != "" {
+    cloud.account = {"uid": account}
+  }
+}
+
+message = string(raw.stage) ?? ""
+if message == "" {
+  message = verb + " " + (string(object_ref.resource) ?? "")
+}
+
+out = {
+  "class_uid": 6003,
+  "class_name": "API Activity",
+  "category_uid": 6,
+  "category_name": "Application Activity",
+  "activity_id": activity_id,
+  "type_uid": 600300 + activity_id,
+  "time": time_ms,
+  "severity_id": 1,
+  "status_id": status_id,
+  "message": message,
+  "actor": actor,
+  "api": api,
+  "src_endpoint": {"ip": src_ip},
+  "cloud": cloud,
+  "metadata": {
+    "version": "1.9.0",
+    "profiles": ["cloud"],
+    "log_name": "EKS audit log",
+    "log_provider": "AWS",
+    "log_level": string(raw.level) ?? "",
+    "event_code": verb,
+    "product": {
+      "name": "Amazon EKS",
+      "vendor_name": "AWS",
+      "feature": {"name": "Elastic Kubernetes Service"},
+    },
+  },
+}
+if length(keys(http)) > 0 {
+  out.http_request = http
+}
+
+unmapped = {
+  "stage": string(raw.stage) ?? "",
+  "audit_uid": audit_id,
+  "object_resource": string(object_ref.resource) ?? "",
+  "object_name": string(object_ref.name) ?? "",
+}
+if src_raw != "" && src_raw != src_ip {
+  unmapped.source_ip_raw = src_raw
+}
+if (string(raw.requestURI) ?? "") != "" {
+  unmapped.request_uri = string(raw.requestURI) ?? ""
+}
+if is_object(raw.annotations) {
+  unmapped.annotations = raw.annotations
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

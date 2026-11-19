@@ -1,0 +1,40 @@
+# source: mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_Resolved.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_Resolved.ocsf
+
+raw_sample: |-
+  {
+    "Organization": "testdomain.onmicrosoft.com",
+    "MessageId": "<-LbY7S0UTGWCu_rrqO-tSQ@geopod-ismtpd-29>",
+    "Received": "2024-10-17T13:31:51.574677",
+    "SenderAddress": "shop@somefakeoutlet.com",
+    "RecipientAddress": "testuser@testdomain.com",
+    "Subject": "ALL ACCESS: Sporti Granny Sweater Collection Out Now \ud83d\udca7",
+    "Status": "Resolved",
+    "ToIP": null,
+    "FromIP": "8.8.8.8",
+    "Size": 544560,
+    "MessageTraceId": "61826cd8-944b-48c0-add2-08dceeb00f28",
+    "Index": 12401
+  }
+
+expected:
+  class_uid: 4009
+  category_uid: 4
+  activity_id: 4
+  status_id: 99
+  severity_id: 0
+  src_endpoint.ip: 8.8.8.8
+  direction_id: 0
+  email.message_uid: <-LbY7S0UTGWCu_rrqO-tSQ@geopod-ismtpd-29>
+  email.size: 544560
+  email.smtp_from: shop@somefakeoutlet.com
+  email.smtp_to:
+  - testuser@testdomain.com
+  email.subject: 'ALL ACCESS: Sporti Granny Sweater Collection Out Now 💧'
+  message_trace_uid: 61826cd8-944b-48c0-add2-08dceeb00f28
+  metadata.product.name: O365
+  metadata.product.vendor_name: Microsoft
+  metadata.uid: 61826cd8-944b-48c0-add2-08dceeb00f28
+  status_detail: Resolved
+  type_uid: 400904
+  class_name: Email Activity

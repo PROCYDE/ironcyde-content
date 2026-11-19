@@ -1,0 +1,64 @@
+# source: mappings/markdown/Microsoft/Windows Events/4673/4673_0.event
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/Windows Events/4673/4673_0.json
+# reference issue: type_uid None does not equal class_uid*100+activity_id (101001)
+# reference issue: declares profiles host (fill them or drop the declaration)
+
+raw_sample: |-
+  01/28/2022 04:12:19 PM
+  LogName=Security
+  EventCode=4673
+  EventType=0
+  ComputerName=SesWin2019DC1.SesTest.local
+  SourceName=Microsoft Windows security auditing.
+  Type=Information
+  RecordNumber=374060
+  Keywords=Audit Failure
+  TaskCategory=Sensitive Privilege Use
+  OpCode=Info
+  Message=A privileged service was called.
+  
+  Subject:
+  	Security ID:		SESTEST\splunker
+  	Account Name:		splunker
+  	Account Domain:		SESTEST
+  	Logon ID:		0xDE9AD8
+  
+  Service:
+  	Server:	Security
+  	Service Name:	-
+  
+  Process:
+  	Process ID:	0x6a8
+  	Process Name:	C:\Windows\explorer.exe
+  
+  Service Request Information:
+  	Privileges:		SeTcbPrivilege
+
+expected:
+  class_uid: 6003
+  category_uid: 6
+  activity_id: 99
+  status_id: 2
+  severity_id: 1
+  actor.user.name: splunker
+  actor.user.uid: SESTEST\splunker
+  actor.process.file.name: explorer.exe
+  actor.process.file.parent_folder: C:\Windows
+  actor.process.file.path: C:\Windows\explorer.exe
+  actor.process.file.type_id: 1
+  actor.process.pid: 1704
+  actor.session.uid: '0xDE9AD8'
+  actor.user.domain: SESTEST
+  message: A privileged service was called.
+  metadata.product.feature.name: Security
+  metadata.product.name: Microsoft Windows
+  metadata.product.vendor_name: Microsoft
+  metadata.uid: '374060'
+  class_name: API Activity
+  type_uid: 600399
+  src_endpoint.hostname: SesWin2019DC1.SesTest.local
+  api.operation: PrivilegedService
+  api.service.name: Security
+  api.request.uid: '374060'
+  api.request.data:
+    privileges: SeTcbPrivilege

@@ -1,0 +1,556 @@
+# Zeek JSON logs -> OCSF 1.9.0.
+#
+# One parser for the Zeek log families in the content set. Dispatch is on _path:
+#   conn / ssl / x509 -> Network Activity (4001)
+#   dns               -> DNS Activity (4003)
+#   http              -> HTTP Activity (4002)
+#   ftp               -> FTP Activity (4008)
+#   ssh               -> SSH Activity (4007)
+#   rdp               -> RDP Activity (4005)
+#   smtp              -> Email Activity (4009)
+#
+# Some Zeek exports contain several JSON objects; the first object is normalized because a
+# parser emits exactly one event. Extra objects stay unparsed rather than being merged.
+
+text = strip_whitespace(string(.message) ?? "")
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+  chunks = split(text, "\n\n")
+  if length(chunks) > 1 {
+    first = strip_whitespace(string(get(chunks, [0]) ?? "") ?? "")
+    raw = parse_json(first) ?? null
+  }
+}
+if !is_object(raw) && ._path != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not a Zeek JSON log record"
+}
+path = string(raw._path) ?? ""
+if path == "" {
+  abort "Zeek record without _path"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+ts = parse_timestamp(string(raw.ts) ?? "", format: "%+") ?? null
+write_ts = parse_timestamp(string(raw._write_ts) ?? "", format: "%+") ?? null
+if is_timestamp(ts) {
+  time_ms = to_unix_timestamp(timestamp!(ts), unit: "milliseconds")
+} else if is_timestamp(write_ts) {
+  time_ms = to_unix_timestamp(timestamp!(write_ts), unit: "milliseconds")
+}
+
+orig_ip = string(raw."id.orig_h") ?? ""
+resp_ip = string(raw."id.resp_h") ?? ""
+if path != "x509" && (!(is_ipv4(orig_ip) || is_ipv6(orig_ip)) || !(is_ipv4(resp_ip) || is_ipv6(resp_ip))) {
+  abort "Zeek record without valid id.orig_h and id.resp_h"
+}
+src = {"ip": orig_ip, "port": to_int(raw."id.orig_p") ?? 0}
+dst = {"ip": resp_ip, "port": to_int(raw."id.resp_p") ?? 0}
+uid = string(raw.uid) ?? ""
+
+metadata = {
+  "version": "1.9.0",
+  "log_name": path,
+  "log_provider": "Zeek",
+  "event_code": path,
+  "product": {"name": "Zeek", "vendor_name": "Zeek"},
+}
+if uid != "" {
+  metadata.uid = uid
+}
+if (string(raw._system_name) ?? "") != "" {
+  metadata.log_source = string(raw._system_name) ?? ""
+}
+
+class_uid = 4001
+class_name = "Network Activity"
+activity_id = 99
+message = ""
+out = {}
+
+if path == "conn" {
+  activity_id = 2
+  class_name = "Network Activity"
+  orig_bytes = to_int(raw.orig_bytes) ?? 0
+  resp_bytes = to_int(raw.resp_bytes) ?? 0
+  connection = {
+    "protocol_name": string(raw.proto) ?? "",
+    "direction_id": 0,
+    "flag_history": string(raw.history) ?? "",
+  }
+  if (string(raw.orig_l2_addr) ?? "") != "" {
+    src.mac = string(raw.orig_l2_addr) ?? ""
+  }
+  if (string(raw.resp_l2_addr) ?? "") != "" {
+    dst.mac = string(raw.resp_l2_addr) ?? ""
+  }
+  if (string(raw.resp_cc) ?? "") != "" {
+    dst.location = {"country": string(raw.resp_cc) ?? ""}
+  }
+  app_name = string(raw.service) ?? ""
+  if app_name == "" && is_array(raw.app) && length(array!(raw.app)) > 0 {
+    app_name = string(get(array!(raw.app), [0]) ?? "") ?? ""
+  }
+  duration_ms = 0
+  if is_float(raw.duration) || is_integer(raw.duration) {
+    duration_ms = to_int!(to_float!(raw.duration) * 1000.0)
+  }
+  message = "Zeek conn " + (string(raw.proto) ?? "") + " " + orig_ip + ":" + to_string(to_int(raw."id.orig_p") ?? 0) + " -> " + resp_ip + ":" + to_string(to_int(raw."id.resp_p") ?? 0)
+  out = {
+    "class_uid": 4001,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": activity_id,
+    "activity_name": "Close",
+    "type_uid": 400102,
+    "time": time_ms,
+    "start_time": time_ms,
+    "severity_id": 1,
+    "message": message,
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "connection_info": connection,
+    "traffic": {
+      "bytes": orig_bytes + resp_bytes,
+      "bytes_in": resp_bytes,
+      "bytes_out": orig_bytes,
+      "bytes_missed": to_int(raw.missed_bytes) ?? 0,
+    },
+    "metadata": metadata,
+  }
+  if app_name != "" {
+    out.app_name = app_name
+  }
+  if (string(raw.conn_state) ?? "") != "" {
+    out.status_code = string(raw.conn_state) ?? ""
+  }
+  if duration_ms > 0 {
+    out.duration = duration_ms
+  }
+  if (string(raw.community_id) ?? "") != "" {
+    out.unmapped = {"community_id": string(raw.community_id) ?? ""}
+  }
+} else if path == "dns" {
+  class_uid = 4003
+  class_name = "DNS Activity"
+  activity_id = 1
+  query = {}
+  if (string(raw.query) ?? "") != "" {
+    query.hostname = string(raw.query) ?? ""
+  }
+  if (string(raw.qtype_name) ?? "") != "" {
+    query.type = string(raw.qtype_name) ?? ""
+  }
+  if (string(raw.qclass_name) ?? "") != "" {
+    query.class = string(raw.qclass_name) ?? ""
+  }
+  rcode_name = upcase(string(raw.rcode_name) ?? "")
+  rcode = "Other"
+  rcode_id = 99
+  if rcode_name == "NOERROR" {
+    rcode = "NoError"
+    rcode_id = 0
+  } else if rcode_name == "FORMERR" {
+    rcode = "FormError"
+    rcode_id = 1
+  } else if rcode_name == "SERVFAIL" {
+    rcode = "ServError"
+    rcode_id = 2
+  } else if rcode_name == "NXDOMAIN" {
+    rcode = "NXDomain"
+    rcode_id = 3
+  } else if rcode_name == "NOTIMP" {
+    rcode = "NotImp"
+    rcode_id = 4
+  } else if rcode_name == "REFUSED" {
+    rcode = "Refused"
+    rcode_id = 5
+  }
+  answers = []
+  if is_array(raw.answers) {
+    for_each(array!(raw.answers)) -> |_i, item| {
+      answers = push(answers, {"rdata": string(item) ?? ""})
+    }
+  }
+  message = "Zeek dns query " + (string(raw.query) ?? "")
+  out = {
+    "class_uid": 4003,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 1,
+    "activity_name": "Query",
+    "type_uid": 400301,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": message,
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "query": query,
+    "rcode": rcode,
+    "rcode_id": rcode_id,
+    "connection_info": {"protocol_name": string(raw.proto) ?? "", "direction_id": 0},
+    "metadata": metadata,
+  }
+  if length(answers) > 0 {
+    out.answers = answers
+  }
+} else if path == "http" {
+  class_uid = 4002
+  class_name = "HTTP Activity"
+  activity_id = 6
+  request = {}
+  if (string(raw.method) ?? "") != "" {
+    request.http_method = string(raw.method) ?? ""
+  }
+  if (string(raw.referrer) ?? "") != "" {
+    request.referrer = string(raw.referrer) ?? ""
+  }
+  if (string(raw.user_agent) ?? "") != "" {
+    request.user_agent = string(raw.user_agent) ?? ""
+  }
+  if (string(raw.version) ?? "") != "" {
+    request.version = string(raw.version) ?? ""
+  }
+  request.length = to_int(raw.request_body_len) ?? 0
+  url = {}
+  if (string(raw.host) ?? "") != "" {
+    url.hostname = string(raw.host) ?? ""
+  }
+  if (string(raw.uri) ?? "") != "" {
+    url.path = string(raw.uri) ?? ""
+  }
+  if length(keys(url)) > 0 {
+    request.url = url
+  }
+  if is_array(raw.client_headers) {
+    for_each(array!(raw.client_headers)) -> |_i, header| {
+      header_text = string(header) ?? ""
+      if starts_with(downcase(header_text), "x-forwarded-for:") {
+        request.x_forwarded_for = [strip_whitespace(slice!(header_text, 16))]
+      }
+    }
+  }
+  response = {
+    "code": to_int(raw.status_code) ?? 0,
+    "length": to_int(raw.response_body_len) ?? 0,
+  }
+  if (string(raw.status_msg) ?? "") != "" {
+    response.status = string(raw.status_msg) ?? ""
+  }
+  message = "Zeek http " + (string(raw.method) ?? "") + " " + (string(raw.host) ?? "") + (string(raw.uri) ?? "")
+  out = {
+    "class_uid": 4002,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 6,
+    "activity_name": "Post",
+    "type_uid": 400206,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": message,
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "http_request": request,
+    "http_response": response,
+    "metadata": metadata,
+  }
+} else if path == "ftp" {
+  class_uid = 4008
+  class_name = "FTP Activity"
+  activity_id = 0
+  command = string(raw.command) ?? ""
+  arg = string(raw.arg) ?? ""
+  reply_code = to_int(raw.reply_code) ?? 0
+  file = {}
+  if arg != "" {
+    file.name = arg
+  }
+  if is_integer(raw.file_size) {
+    file.size = to_int!(raw.file_size)
+  }
+  file.type_id = 0
+  out = {
+    "class_uid": 4008,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 0,
+    "activity_name": "Unknown",
+    "type_uid": 400800,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": "Zeek ftp " + command,
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "file": file,
+    "metadata": metadata,
+  }
+  if command != "" {
+    out.command = command + " " + arg
+  }
+  if reply_code > 0 {
+    out.codes = [reply_code]
+    out.status_code = to_string(reply_code)
+  }
+  if (string(raw.reply_msg) ?? "") != "" {
+    out.status_detail = string(raw.reply_msg) ?? ""
+  }
+} else if path == "ssh" {
+  class_uid = 4007
+  class_name = "SSH Activity"
+  activity_id = 99
+  client_hassh = {}
+  if (string(raw.hassh) ?? "") != "" {
+    client_hassh.fingerprint = {"algorithm_id": 1, "value": string(raw.hassh) ?? ""}
+  }
+  server_hassh = {}
+  if (string(raw.hasshServer) ?? "") != "" {
+    server_hassh.fingerprint = {"algorithm_id": 1, "value": string(raw.hasshServer) ?? ""}
+  }
+  direction = upcase(string(raw.direction) ?? "")
+  direction_id = 0
+  if direction == "INBOUND" {
+    direction_id = 1
+  } else if direction == "OUTBOUND" {
+    direction_id = 2
+  }
+  location = {}
+  if (string(raw."remote_location.city") ?? "") != "" {
+    location.city = string(raw."remote_location.city") ?? ""
+  }
+  if (string(raw."remote_location.country_code") ?? "") != "" {
+    location.country = string(raw."remote_location.country_code") ?? ""
+  }
+  if (string(raw."remote_location.region") ?? "") != "" {
+    location.region = string(raw."remote_location.region") ?? ""
+  }
+  if is_float(raw."remote_location.latitude") || is_integer(raw."remote_location.latitude") {
+    location.lat = to_float!(raw."remote_location.latitude")
+  }
+  if is_float(raw."remote_location.longitude") || is_integer(raw."remote_location.longitude") {
+    location.long = to_float!(raw."remote_location.longitude")
+  }
+  if length(keys(location)) > 0 {
+    src.location = location
+  }
+  out = {
+    "class_uid": 4007,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 99,
+    "activity_name": "Other",
+    "type_uid": 400799,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": "Zeek ssh " + (string(raw.client) ?? ""),
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "connection_info": {"direction_id": direction_id},
+    "metadata": metadata,
+  }
+  if (string(raw.version) ?? "") != "" {
+    out.protocol_ver = string(raw.version) ?? ""
+  }
+  if length(keys(client_hassh)) > 0 {
+    out.client_hassh = client_hassh
+  }
+  if length(keys(server_hassh)) > 0 {
+    out.server_hassh = server_hassh
+  }
+  if raw.auth_success == true {
+    out.status_id = 1
+  } else if raw.auth_success == false {
+    out.status_id = 2
+  }
+} else if path == "rdp" {
+  class_uid = 4005
+  class_name = "RDP Activity"
+  activity_id = 6
+  out = {
+    "class_uid": 4005,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 6,
+    "activity_name": "Traffic",
+    "type_uid": 400506,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": "Zeek rdp " + (string(raw.result) ?? ""),
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "metadata": metadata,
+  }
+  if (string(raw.cookie) ?? "") != "" {
+    out.user = {"name": string(raw.cookie) ?? ""}
+  }
+  if (string(raw.security_protocol) ?? "") != "" {
+    out.protocol_ver = string(raw.security_protocol) ?? ""
+  }
+  if raw.auth_success == true {
+    out.status_id = 1
+  } else if raw.auth_success == false {
+    out.status_id = 2
+  }
+} else if path == "smtp" {
+  class_uid = 4009
+  class_name = "Email Activity"
+  activity_id = 4
+  email = {}
+  if (string(raw.from) ?? "") != "" {
+    email.from = string(raw.from) ?? ""
+  }
+  if is_array(raw.to) {
+    recipients = []
+    for_each(array!(raw.to)) -> |_i, item| {
+      recipients = push(recipients, string(item) ?? "")
+    }
+    if length(recipients) > 0 {
+      email.to = recipients
+    }
+  }
+  if (string(raw.subject) ?? "") != "" {
+    email.subject = string(raw.subject) ?? ""
+  }
+  if (string(raw.msg_id) ?? "") != "" {
+    email.message_uid = string(raw.msg_id) ?? ""
+  }
+  out = {
+    "class_uid": 4009,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 4,
+    "activity_name": "Trace",
+    "type_uid": 400904,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": "Zeek smtp " + (string(raw.subject) ?? ""),
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "email": email,
+    "direction_id": 0,
+    "metadata": metadata,
+  }
+  if (string(raw.helo) ?? "") != "" {
+    out.smtp_hello = string(raw.helo) ?? ""
+  }
+} else if path == "ssl" {
+  class_uid = 4001
+  class_name = "Network Activity"
+  activity_id = 6
+  tls = {}
+  if (string(raw.cipher) ?? "") != "" {
+    tls.cipher = string(raw.cipher) ?? ""
+  }
+  if (string(raw.server_name) ?? "") != "" {
+    tls.sni = string(raw.server_name) ?? ""
+  }
+  if (string(raw.version) ?? "") != "" {
+    tls.version = string(raw.version) ?? ""
+  }
+  if (string(raw.ja3) ?? "") != "" {
+    tls.ja3_hash = {"algorithm_id": 1, "value": string(raw.ja3) ?? ""}
+  }
+  if (string(raw.ja3s) ?? "") != "" {
+    tls.ja3s_hash = {"algorithm_id": 1, "value": string(raw.ja3s) ?? ""}
+  }
+  out = {
+    "class_uid": 4001,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 6,
+    "activity_name": "Traffic",
+    "type_uid": 400106,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": "Zeek ssl " + (string(raw.server_name) ?? ""),
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "tls": tls,
+    "metadata": metadata,
+  }
+  if (string(raw.validation_status) ?? "") != "" {
+    out.status_detail = string(raw.validation_status) ?? ""
+  }
+  unmapped = {}
+  if (string(raw.issuer) ?? "") != "" {
+    unmapped.certificate_issuer = string(raw.issuer) ?? ""
+  }
+  if (string(raw.subject) ?? "") != "" {
+    unmapped.certificate_subject = string(raw.subject) ?? ""
+  }
+  if length(keys(unmapped)) > 0 {
+    out.unmapped = unmapped
+  }
+} else if path == "x509" {
+  class_uid = 4001
+  class_name = "Network Activity"
+  activity_id = 99
+  certificate = {}
+  if (string(raw."certificate.issuer") ?? "") != "" {
+    certificate.issuer = string(raw."certificate.issuer") ?? ""
+  }
+  if (string(raw."certificate.subject") ?? "") != "" {
+    certificate.subject = string(raw."certificate.subject") ?? ""
+  }
+  if is_integer(raw."certificate.version") {
+    certificate.version = to_string(to_int!(raw."certificate.version"))
+  }
+  if (string(raw."certificate.serial") ?? "") != "" {
+    certificate.serial_number = string(raw."certificate.serial") ?? ""
+  }
+  not_before = parse_timestamp(string(raw."certificate.not_valid_before") ?? "", format: "%+") ?? null
+  not_after = parse_timestamp(string(raw."certificate.not_valid_after") ?? "", format: "%+") ?? null
+  if is_timestamp(not_before) {
+    certificate.created_time = to_unix_timestamp(timestamp!(not_before), unit: "milliseconds")
+  }
+  if is_timestamp(not_after) {
+    certificate.expiration_time = to_unix_timestamp(timestamp!(not_after), unit: "milliseconds")
+  }
+  if is_array(raw."san.dns") {
+    sans = []
+    for_each(array!(raw."san.dns")) -> |_i, item| {
+      sans = push(sans, {"name": string(item) ?? "", "type": "DNS"})
+    }
+    if length(sans) > 0 {
+      certificate.sans = sans
+    }
+  }
+  rx_ip = string(raw.rx) ?? ""
+  tx_ip = string(raw.tx) ?? ""
+  if is_ipv4(tx_ip) || is_ipv6(tx_ip) {
+    src = {"ip": tx_ip}
+  }
+  if is_ipv4(rx_ip) || is_ipv6(rx_ip) {
+    dst = {"ip": rx_ip}
+  }
+  out = {
+    "class_uid": 4001,
+    "class_name": class_name,
+    "category_uid": 4,
+    "category_name": "Network Activity",
+    "activity_id": 99,
+    "activity_name": "Other",
+    "type_uid": 400199,
+    "time": time_ms,
+    "severity_id": 1,
+    "message": "Zeek x509 " + (string(raw."certificate.subject") ?? ""),
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "tls": {"certificate": certificate, "version": "Unknown"},
+    "metadata": metadata,
+  }
+} else {
+  abort "unsupported Zeek log path: " + path
+}
+
+. = out

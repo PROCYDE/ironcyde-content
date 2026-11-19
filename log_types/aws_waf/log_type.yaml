@@ -1,0 +1,4 @@
+name: AWS WAF logs
+description: AWS WAF web ACL request logs.
+vendor: AWS
+product: WAF

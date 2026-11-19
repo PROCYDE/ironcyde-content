@@ -1,0 +1,163 @@
+# AWS Route 53 Resolver query log -> OCSF 1.9.0 DNS Activity (4003, Traffic).
+#
+# Resolver query logs are JSON objects. The cloud profile is declared and filled from the
+# record (account, region, provider); the security-control fields (firewall rule action) are
+# not mapped because that profile is not declared.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .query_name != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not a Route 53 Resolver query log"
+}
+qname = string(raw.query_name) ?? ""
+if qname == "" {
+  abort "Route 53 record without query_name"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+qtime = parse_timestamp(string(raw.query_timestamp) ?? "", format: "%+") ?? null
+if is_timestamp(qtime) {
+  time_ms = to_unix_timestamp(timestamp!(qtime), unit: "milliseconds")
+}
+
+src_ip = string(raw.srcaddr) ?? ""
+if !is_ipv4(src_ip) && !is_ipv6(src_ip) {
+  abort "Route 53 record without a valid srcaddr"
+}
+src_port = to_int(raw.srcport) ?? 0
+
+rcode_raw = string(raw.rcode) ?? ""
+rcode = "Other"
+rcode_id = 99
+if rcode_raw == "NOERROR" {
+  rcode = "NoError"
+  rcode_id = 0
+} else if rcode_raw == "FORMERR" {
+  rcode = "FormError"
+  rcode_id = 1
+} else if rcode_raw == "SERVFAIL" {
+  rcode = "ServError"
+  rcode_id = 2
+} else if rcode_raw == "NXDOMAIN" {
+  rcode = "NXDomain"
+  rcode_id = 3
+} else if rcode_raw == "NOTIMP" {
+  rcode = "NotImp"
+  rcode_id = 4
+} else if rcode_raw == "REFUSED" {
+  rcode = "Refused"
+  rcode_id = 5
+}
+
+answers = []
+if is_array(raw.answers) {
+  for_each(array!(raw.answers)) -> |_index, item| {
+    if is_object(item) {
+      answer = {}
+      if (string(item.Rdata) ?? "") != "" {
+        answer.rdata = string(item.Rdata) ?? ""
+      }
+      if (string(item.Type) ?? "") != "" {
+        answer.type = string(item.Type) ?? ""
+      }
+      if (string(item.Class) ?? "") != "" {
+        answer.class = string(item.Class) ?? ""
+      }
+      if length(keys(answer)) > 0 {
+        answers = push(answers, answer)
+      }
+    }
+  }
+}
+
+cloud = {
+  "provider": "AWS",
+}
+if (string(raw.region) ?? "") != "" {
+  cloud.region = string(raw.region) ?? ""
+}
+if (string(raw.account_id) ?? "") != "" {
+  cloud.account = {"uid": string(raw.account_id) ?? ""}
+}
+
+src_ids = if is_object(raw.srcids) { raw.srcids } else { {} }
+dst = {}
+if (string(src_ids.resolver_endpoint) ?? "") != "" {
+  dst.instance_uid = string(src_ids.resolver_endpoint) ?? ""
+}
+if (string(src_ids.resolver_network_interface) ?? "") != "" {
+  dst.interface_uid = string(src_ids.resolver_network_interface) ?? ""
+}
+
+query = {
+  "hostname": qname,
+}
+if (string(raw.query_type) ?? "") != "" {
+  query.type = string(raw.query_type) ?? ""
+}
+if (string(raw.query_class) ?? "") != "" {
+  query.class = string(raw.query_class) ?? ""
+}
+
+out = {
+  "class_uid": 4003,
+  "class_name": "DNS Activity",
+  "category_uid": 4,
+  "category_name": "Network Activity",
+  "activity_id": 6,
+  "activity_name": "Traffic",
+  "type_uid": 400306,
+  "time": time_ms,
+  "query_time": time_ms,
+  "severity_id": 1,
+  "message": "DNS query " + qname + " " + (string(raw.query_type) ?? ""),
+  "src_endpoint": {"ip": src_ip, "port": src_port},
+  "query": query,
+  "rcode": rcode,
+  "rcode_id": rcode_id,
+  "connection_info": {"protocol_name": string(raw.transport) ?? "", "direction_id": 0},
+  "cloud": cloud,
+  "metadata": {
+    "version": "1.9.0",
+    "profiles": ["cloud"],
+    "log_name": "Route 53 Resolver query log",
+    "log_provider": "AWS",
+    "event_code": "route53.resolver.query",
+    "product": {
+      "name": "Route 53",
+      "vendor_name": "AWS",
+      "feature": {"name": "Resolver Query Logs"},
+    },
+  },
+}
+if length(keys(dst)) > 0 {
+  out.dst_endpoint = dst
+}
+if length(answers) > 0 {
+  out.answers = answers
+}
+
+unmapped = {}
+if (string(raw.firewall_rule_group_id) ?? "") != "" {
+  unmapped.firewall_rule_uid = string(raw.firewall_rule_group_id) ?? ""
+}
+if (string(raw.firewall_rule_action) ?? "") != "" {
+  unmapped.firewall_rule_action = string(raw.firewall_rule_action) ?? ""
+}
+if (string(raw.firewall_domain_list_id) ?? "") != "" {
+  unmapped.firewall_domain_list_id = string(raw.firewall_domain_list_id) ?? ""
+}
+if (string(raw.vpc_id) ?? "") != "" {
+  unmapped.vpc_uid = string(raw.vpc_id) ?? ""
+}
+if (string(raw.version) ?? "") != "" {
+  unmapped.resolver_log_version = string(raw.version) ?? ""
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

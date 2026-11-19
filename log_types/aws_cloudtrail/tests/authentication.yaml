@@ -1,0 +1,73 @@
+# source: mappings/markdown/AWS/v1.5.0/CloudTrail/Authentication/samples/authentication.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/AWS/v1.5.0/CloudTrail/Authentication/samples/authentication.ocsf
+# reference issue: invalid JSON: Illegal trailing comma before end of object: line 25 column 10 (char 726)
+
+raw_sample: |-
+  {
+  	"eventVersion": "1.08",
+  	"userIdentity": {
+  		"type": "IdentityCenterUser",
+  		"accountId": "123456789012",
+  		"onBehalfOf": {
+  			"userId": "e3644802-3061-7018-86c3-USERID",
+  			"identityStoreArn": "arn:aws:identitystore::123456789012:identitystore/d-9911111111"
+  		},
+  		"credentialId": "da3f6703-d424-sasf-848d-b0f3384681d64"
+  	},
+  	"eventTime": "2024-09-19T16:32:46Z",
+  	"eventSource": "signin.amazonaws.com",
+  	"eventName": "CredentialChallenge",
+  	"awsRegion": "eu-central-1",
+  	"sourceIPAddress": "0.0.0.0",
+  	"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:129.0) Gecko/20100101 Firefox/129.0",
+  	"requestParameters": null,
+  	"responseElements": null,
+  	"additionalEventData": {
+  		"AuthWorkflowID": "da3f6703-d4a3-4aa9-848d-b0f333b81d64",
+  		"CredentialType": "PASSWORD",
+  		"UserName": "test"
+  	},
+  	"requestID": "1f9bc62c-58d5-4abc-aeb3-fafa2e27d719",
+  	"eventID": "09dc33de-9ddb-4fae-b81b-92465dbf6b61",
+  	"readOnly": false,
+  	"eventType": "AwsServiceEvent",
+  	"managementEvent": true,
+  	"recipientAccountId": "123456789012",
+  	"serviceEventDetails": {
+  		"CredentialChallenge": "Success"
+  	},
+  	"eventCategory": "Management"
+  }
+
+
+expected:
+  class_uid: 3002
+  class_name: Authentication
+  category_uid: 3
+  activity_id: 1
+  type_uid: 300201
+  severity_id: 1
+  status_id: 1
+  time: 1726763566000
+  src_endpoint.ip: 0.0.0.0
+  actor.user.uid: e3644802-3061-7018-86c3-USERID
+  actor.user.uid_alt: arn:aws:identitystore::123456789012:identitystore/d-9911111111
+  actor.user.account.uid: '123456789012'
+  actor.user.credential_uid: da3f6703-d424-sasf-848d-b0f3384681d64
+  actor.user.type_id: 1
+  user.uid: e3644802-3061-7018-86c3-USERID
+  user.account.uid: '123456789012'
+  user.credential_uid: da3f6703-d424-sasf-848d-b0f3384681d64
+  user.type_id: 1
+  service.name: AWS Console
+  message: CredentialChallenge
+  http_request.user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:129.0) Gecko/20100101
+    Firefox/129.0
+  metadata.event_code: AwsServiceEvent
+  metadata.profiles:
+  - cloud
+  metadata.product.name: CloudTrail
+  metadata.product.vendor_name: AWS
+  metadata.uid: 09dc33de-9ddb-4fae-b81b-92465dbf6b61
+  actor.user.type: IdentityCenterUser
+  user.type: IdentityCenterUser

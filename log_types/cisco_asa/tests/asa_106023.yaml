@@ -1,0 +1,27 @@
+# source: mappings/markdown/Cisco/v1.3.0/ASA/106023/samples/cisco_asa_106023.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Cisco/v1.3.0/ASA/106023/samples/cisco_asa_106023.ocsf
+
+raw_sample: |-
+  Oct 10 2018 12:34:56 localhost CiscoASA[999]: %ASA-4-106023: Deny tcp src outside:100.66.19.254/80 dst inside:172.31.98.44/8277 by access-group "inbound" [0x0, 0x0]
+
+expected:
+  class_uid: 4001
+  category_uid: 4
+  activity_id: 5
+  status_id: 2
+  severity_id: 3
+  src_endpoint.ip: 100.66.19.254
+  dst_endpoint.ip: 172.31.98.44
+  src_endpoint.port: 80
+  dst_endpoint.port: 8277
+  connection_info.boundary: External
+  connection_info.boundary_id: 3
+  connection_info.direction: Inbound
+  connection_info.direction_id: 1
+  connection_info.protocol_name: tcp
+  dst_endpoint.interface_name: inside
+  metadata.event_code: '106023'
+  metadata.product.name: Cisco ASA
+  metadata.product.vendor_name: Cisco
+  src_endpoint.interface_name: outside
+  type_uid: 400105

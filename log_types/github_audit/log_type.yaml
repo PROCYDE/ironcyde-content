@@ -1,0 +1,4 @@
+name: GitHub audit log
+description: GitHub organization audit log events.
+vendor: GitHub
+product: Audit log

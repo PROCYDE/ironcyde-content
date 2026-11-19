@@ -1,0 +1,70 @@
+# source: mappings/markdown/Zeek/v1.3.0/dns_log/samples/dns_log.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Zeek/v1.3.0/dns_log/samples/dns_log.ocsf
+# reference issue: invalid JSON: Expecting ',' delimiter: line 47 column 24 (char 927)
+
+raw_sample: |-
+  {
+    "AA": false,
+    "RA": true,
+    "RD": true,
+    "TC": false,
+    "TTLs": [
+      300,
+      140
+    ],
+    "Z": 0,
+    "_path": "dns",
+    "_system_name": "sensor",
+    "_write_ts": "2024-10-18T14:30:29.149981Z",
+    "answers": [
+      "s3-1-w.amazonaws.com",
+      "s3-w.us-east-1.amazonaws.com"
+    ],
+    "icann_domain": "amazonaws.com",
+    "icann_host_subdomain": "staging-validation-poc.s3",
+    "icann_tld": "com",
+    "id.orig_h": "172.27.0.137",
+    "id.orig_p": 34526,
+    "id.resp_h": "172.27.0.2",
+    "id.resp_p": 53,
+    "is_trusted_domain": false,
+    "proto": "udp",
+    "qclass": 1,
+    "qclass_name": "C_INTERNET",
+    "qtype": 28,
+    "qtype_name": "AAAA",
+    "query": "staging-validation-poc.s3.amazonaws.com",
+    "rcode": 0,
+    "rcode_name": "NOERROR",
+    "rejected": false,
+    "rtt": 0.004117012023925781,
+    "trans_id": 60300,
+    "ts": "2024-10-18T14:30:29.145864Z",
+    "uid": "CSTYRyVNejbcG9lQf"
+  }
+
+expected:
+  class_uid: 4003
+  class_name: DNS Activity
+  category_uid: 4
+  activity_id: 1
+  type_uid: 400301
+  severity_id: 1
+  time: 1729261829145
+  src_endpoint.ip: 172.27.0.137
+  src_endpoint.port: 34526
+  dst_endpoint.ip: 172.27.0.2
+  dst_endpoint.port: 53
+  query.hostname: staging-validation-poc.s3.amazonaws.com
+  query.type: AAAA
+  query.class: C_INTERNET
+  rcode: NoError
+  rcode_id: 0
+  answers:
+  - rdata: s3-1-w.amazonaws.com
+  - rdata: s3-w.us-east-1.amazonaws.com
+  connection_info.protocol_name: udp
+  metadata.log_name: dns
+  metadata.product.name: Zeek
+  metadata.product.vendor_name: Zeek
+  metadata.uid: CSTYRyVNejbcG9lQf

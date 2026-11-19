@@ -1,0 +1,365 @@
+# AWS Security Hub finding (ASFF) -> OCSF 1.9.0 finding classes.
+#
+# Dispatch:
+#   Compliance present or Security Hub control finding -> 2003 Compliance Finding
+#   Inspector vulnerability finding                    -> 2002 Vulnerability Finding
+#   GuardDuty and everything else                      -> 2004 Detection Finding
+#
+# ASFF findings are snapshots, so update findings use activity 2 (Update); GuardDuty
+# detections keep activity 1 (Create). The cloud profile is declared and filled.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .Id != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not an ASFF finding"
+}
+finding_uid = string(raw.Id) ?? ""
+if finding_uid == "" {
+  abort "ASFF finding without Id"
+}
+product_arn = string(raw.ProductArn) ?? ""
+product_name = string(raw.ProductName) ?? ""
+company = string(raw.CompanyName) ?? ""
+generator = string(raw.GeneratorId) ?? ""
+title = string(raw.Title) ?? ""
+description = string(raw.Description) ?? ""
+schema_version = string(raw.SchemaVersion) ?? ""
+region = string(raw.Region) ?? ""
+account = string(raw.AwsAccountId) ?? ""
+source_url = string(raw.SourceUrl) ?? ""
+
+provider = if is_object(raw.FindingProviderFields) { raw.FindingProviderFields } else { {} }
+provider_sev = if is_object(provider.Severity) { provider.Severity } else { {} }
+severity_obj = if is_object(raw.Severity) { raw.Severity } else { {} }
+label = upcase(string(provider_sev.Label) ?? "")
+if label == "" {
+  label = upcase(string(severity_obj.Label) ?? "")
+}
+severity_id = 0
+if label == "INFORMATIONAL" || label == "INFO" {
+  severity_id = 1
+} else if label == "LOW" {
+  severity_id = 2
+} else if label == "MEDIUM" {
+  severity_id = 3
+} else if label == "HIGH" {
+  severity_id = 4
+} else if label == "CRITICAL" {
+  severity_id = 5
+} else if label != "" {
+  severity_id = 99
+}
+
+types = []
+if is_array(provider.Types) {
+  for_each(array!(provider.Types)) -> |_i, item| {
+    types = push(types, string(item) ?? "")
+  }
+} else if is_array(raw.Types) {
+  for_each(array!(raw.Types)) -> |_i, item| {
+    types = push(types, string(item) ?? "")
+  }
+}
+
+first_seen = parse_timestamp(string(raw.FirstObservedAt) ?? "", format: "%+") ?? null
+last_seen = parse_timestamp(string(raw.LastObservedAt) ?? "", format: "%+") ?? null
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+processed = parse_timestamp(string(raw.ProcessedAt) ?? "", format: "%+") ?? null
+updated = parse_timestamp(string(raw.UpdatedAt) ?? "", format: "%+") ?? null
+created = parse_timestamp(string(raw.CreatedAt) ?? "", format: "%+") ?? null
+if is_timestamp(processed) {
+  time_ms = to_unix_timestamp(timestamp!(processed), unit: "milliseconds")
+} else if is_timestamp(updated) {
+  time_ms = to_unix_timestamp(timestamp!(updated), unit: "milliseconds")
+} else if is_timestamp(created) {
+  time_ms = to_unix_timestamp(timestamp!(created), unit: "milliseconds")
+} else if is_timestamp(last_seen) {
+  time_ms = to_unix_timestamp(timestamp!(last_seen), unit: "milliseconds")
+}
+
+finding_info = {
+  "uid": finding_uid,
+}
+if title != "" {
+  finding_info.title = title
+}
+if description != "" {
+  finding_info.desc = description
+}
+if length(types) > 0 {
+  finding_info.types = types
+}
+if source_url != "" {
+  finding_info.src_url = source_url
+}
+if is_timestamp(first_seen) {
+  finding_info.first_seen_time = to_unix_timestamp(timestamp!(first_seen), unit: "milliseconds")
+}
+if is_timestamp(last_seen) {
+  finding_info.last_seen_time = to_unix_timestamp(timestamp!(last_seen), unit: "milliseconds")
+}
+
+# --- resources -----------------------------------------------------------
+
+resources = []
+if is_array(raw.Resources) {
+  for_each(array!(raw.Resources)) -> |_i, item| {
+    if is_object(item) {
+      res = {}
+      if (string(item.Id) ?? "") != "" {
+        res.uid = string(item.Id) ?? ""
+      }
+      if (string(item.Type) ?? "") != "" {
+        res.type = string(item.Type) ?? ""
+      }
+      if (string(item.Region) ?? "") != "" {
+        res.region = string(item.Region) ?? ""
+      }
+      if (string(item.Partition) ?? "") != "" {
+        res.cloud_partition = string(item.Partition) ?? ""
+      }
+      if is_object(item.Details) {
+        res.data = item.Details
+      }
+      if length(keys(res)) > 0 {
+        resources = push(resources, res)
+      }
+    }
+  }
+}
+
+# --- compliance ----------------------------------------------------------
+
+compliance_raw = if is_object(raw.Compliance) { raw.Compliance } else { {} }
+control = string(compliance_raw.SecurityControlId) ?? ""
+product_fields = if is_object(raw.ProductFields) { raw.ProductFields } else { {} }
+if control == "" {
+  control = string(product_fields.ControlId) ?? ""
+}
+compliance = {}
+if control != "" {
+  compliance.control = control
+}
+if is_array(compliance_raw.RelatedRequirements) {
+  requirements = []
+  for_each(array!(compliance_raw.RelatedRequirements)) -> |_i, item| {
+    requirements = push(requirements, string(item) ?? "")
+  }
+  if length(requirements) > 0 {
+    compliance.requirements = requirements
+  }
+}
+if is_array(compliance_raw.AssociatedStandards) {
+  standards = []
+  for_each(array!(compliance_raw.AssociatedStandards)) -> |_i, item| {
+    if is_object(item) && (string(item.StandardsId) ?? "") != "" {
+      standards = push(standards, string(item.StandardsId) ?? "")
+    }
+  }
+  if length(standards) > 0 {
+    compliance.standards = standards
+  }
+}
+status = string(compliance_raw.Status) ?? ""
+if status != "" {
+  compliance.status = status
+  if status == "PASSED" {
+    compliance.status_id = 1
+  } else if status == "WARNING" {
+    compliance.status_id = 2
+  } else if status == "FAILED" {
+    compliance.status_id = 3
+  } else {
+    compliance.status_id = 99
+  }
+}
+if is_array(compliance_raw.StatusReasons) && length(array!(compliance_raw.StatusReasons)) > 0 {
+  reason = get(array!(compliance_raw.StatusReasons), [0]) ?? null
+  if is_object(reason) && (string(reason.Description) ?? "") != "" {
+    compliance.status_detail = string(reason.Description) ?? ""
+  }
+}
+
+# --- remediation ---------------------------------------------------------
+
+remediation = {}
+if is_object(raw.Remediation) {
+  recommendation = if is_object(raw.Remediation.Recommendation) { raw.Remediation.Recommendation } else { {} }
+  if (string(recommendation.Text) ?? "") != "" {
+    remediation.desc = string(recommendation.Text) ?? ""
+  }
+  if (string(recommendation.Url) ?? "") != "" {
+    remediation.references = [string(recommendation.Url) ?? ""]
+  }
+}
+
+# --- class dispatch ------------------------------------------------------
+
+has_compliance = is_object(raw.Compliance) && length(keys(object!(raw.Compliance))) > 0
+class_uid = 2004
+activity_id = 1
+if has_compliance || product_name == "Security Hub" {
+  class_uid = 2003
+  activity_id = 2
+} else if product_name == "Inspector" || contains(product_arn, "/inspector") {
+  class_uid = 2002
+  activity_id = 2
+}
+
+vulnerabilities = []
+if class_uid == 2002 {
+  if is_array(raw.Vulnerabilities) {
+    for_each(array!(raw.Vulnerabilities)) -> |_i, item| {
+      if is_object(item) {
+        vuln = {}
+        if title != "" {
+          vuln.title = title
+        }
+        if description != "" {
+          vuln.desc = description
+        }
+        if label != "" {
+          vuln.severity = label
+        }
+        vuln_id = string(item.Id) ?? ""
+        if vuln_id != "" {
+          cve = {"uid": vuln_id}
+          if title != "" {
+            cve.title = title
+          }
+          vuln.cve = cve
+        }
+        if (string(item.FixAvailable) ?? "") != "" {
+          vuln.is_fix_available = upcase(string(item.FixAvailable) ?? "") == "YES"
+        }
+        if is_array(item.ReferenceUrls) {
+          refs = []
+          for_each(array!(item.ReferenceUrls)) -> |_j, ref| {
+            refs = push(refs, string(ref) ?? "")
+          }
+          if length(refs) > 0 {
+            vuln.references = refs
+          }
+        }
+        if is_timestamp(first_seen) {
+          vuln.first_seen_time = to_unix_timestamp(timestamp!(first_seen), unit: "milliseconds")
+        }
+        if is_timestamp(last_seen) {
+          vuln.last_seen_time = to_unix_timestamp(timestamp!(last_seen), unit: "milliseconds")
+        }
+        vendor = if is_object(item.Vendor) { item.Vendor } else { {} }
+        if (string(vendor.Name) ?? "") != "" {
+          vuln.vendor_name = string(vendor.Name) ?? ""
+        }
+        vulnerabilities = push(vulnerabilities, vuln)
+      }
+    }
+  }
+  if length(vulnerabilities) == 0 {
+    vuln = {}
+    if title != "" {
+      vuln.title = title
+    }
+    if description != "" {
+      vuln.desc = description
+    }
+    if label != "" {
+      vuln.severity = label
+    }
+    vulnerabilities = [vuln]
+  }
+}
+
+metadata = {
+  "version": "1.9.0",
+  "profiles": ["cloud"],
+  "log_name": "AWS Security Hub finding",
+  "log_provider": "AWS",
+  "log_version": schema_version,
+  "event_code": generator,
+  "product": {
+    "name": product_name,
+    "vendor_name": company,
+    "uid": product_arn,
+    "feature": {"uid": generator, "name": product_name},
+  },
+}
+if finding_uid != "" {
+  metadata.uid = finding_uid
+}
+
+cloud = {"provider": "AWS"}
+if region != "" {
+  cloud.region = region
+}
+if account != "" {
+  cloud.account = {"uid": account}
+}
+
+class_name = "Detection Finding"
+category_uid = 2
+if class_uid == 2002 {
+  class_name = "Vulnerability Finding"
+} else if class_uid == 2003 {
+  class_name = "Compliance Finding"
+}
+
+out = {
+  "class_uid": class_uid,
+  "class_name": class_name,
+  "category_uid": category_uid,
+  "category_name": "Findings",
+  "activity_id": activity_id,
+  "type_uid": class_uid * 100 + activity_id,
+  "time": time_ms,
+  "severity_id": severity_id,
+  "message": title,
+  "finding_info": finding_info,
+  "cloud": cloud,
+  "metadata": metadata,
+}
+if class_uid == 2002 {
+  out.vulnerabilities = vulnerabilities
+  if length(resources) > 0 {
+    out.resources = resources
+    out.resource = get(resources, [0]) ?? {}
+  }
+} else if class_uid == 2003 {
+  out.compliance = compliance
+  if length(resources) > 0 {
+    out.resource = get(resources, [0]) ?? {}
+    out.resources = resources
+  }
+  if length(keys(remediation)) > 0 {
+    out.remediation = remediation
+  }
+} else {
+  if length(resources) > 0 {
+    out.resources = resources
+  }
+  if length(keys(remediation)) > 0 {
+    out.remediation = remediation
+  }
+}
+
+unmapped = {
+  "record_state": string(raw.RecordState) ?? "",
+  "workflow_state": string(raw.WorkflowState) ?? "",
+}
+if is_object(raw.Process) {
+  unmapped.process = raw.Process
+}
+if is_array(raw.Vulnerabilities) && class_uid != 2002 {
+  unmapped.vulnerabilities = raw.Vulnerabilities
+}
+if is_array(raw.RelatedFindings) {
+  unmapped.related_findings = raw.RelatedFindings
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

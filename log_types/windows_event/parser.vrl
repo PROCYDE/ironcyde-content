@@ -1,0 +1,402 @@
+# Windows Security event log (EvtxToText key/value form) -> OCSF 1.9.0.
+#
+# Classes:
+#   4624/4625 logon events          -> 3002 Authentication
+#   4661/4663 object access, 4673   -> 6003 API Activity
+#   4688 process creation           -> 1007 Process Activity (Launch)
+#   4689 process termination        -> 1007 Process Activity (Terminate)
+#
+# The input starts with a timestamp line, followed by Key=Value lines, followed by a
+# Message= block whose sections contain tab-separated fields ("Security ID:\t\t..."). The
+# sections are flattened to lower-case dotted keys, e.g. "new_logon.account_name".
+
+text = strip_whitespace(string(.message) ?? "")
+lines = split(text, "\n")
+if length(lines) == 0 {
+  abort "empty Windows event"
+}
+
+top = {}
+flat = {}
+section = ""
+message_text = ""
+for_each(lines) -> |_i, line| {
+  trimmed = strip_whitespace(line)
+  if ends_with(trimmed, ":") && !contains(line, "\t") && length(trimmed) < 60 {
+    section = downcase(replace(strip_whitespace(slice!(trimmed, 0, length(trimmed) - 1)), " ", "_"))
+  } else {
+    pair = parse_regex(line, r'^(?P<key>[A-Za-z]+)=(?P<value>.*)$') ?? null
+    if is_object(pair) {
+      key = string(pair.key) ?? ""
+      value = string(pair.value) ?? ""
+      top = set!(top, [key], value)
+      if key == "Message" {
+        message_text = value
+      }
+    } else {
+      field = parse_regex(line, r'^\s*(?P<key>[^:]+):\s+(?P<value>.+?)\s*$') ?? null
+      if is_object(field) && section != "" {
+        alias = downcase(replace(string(field.key) ?? "", " ", "_"))
+        flat = set!(flat, [section + "." + alias], string(field.value) ?? "")
+      }
+    }
+  }
+}
+
+event_code = string(top.EventCode) ?? ""
+if event_code == "" {
+  abort "Windows event without EventCode"
+}
+computer = string(top.ComputerName) ?? ""
+log_name = string(top.LogName) ?? ""
+record_number = string(top.RecordNumber) ?? ""
+keywords = string(top.Keywords) ?? ""
+
+status_id = 1
+if contains(keywords, "Failure") {
+  status_id = 2
+}
+
+timestamp_match = parse_regex(string(get(lines, [0]) ?? "") ?? "", r'^(?P<ts>[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9:]+ [AP]M)') ?? null
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+if is_object(timestamp_match) {
+  parsed_ts = parse_timestamp(string(timestamp_match.ts) ?? "", format: "%m/%d/%Y %I:%M:%S %p") ?? null
+  if is_timestamp(parsed_ts) {
+    time_ms = to_unix_timestamp(timestamp!(parsed_ts), unit: "milliseconds")
+  }
+}
+
+device = {
+  "type_id": 0,
+  "hostname": computer,
+  "os": {"name": "Windows", "type": "Windows", "type_id": 100},
+}
+
+metadata = {
+  "version": "1.9.0",
+  "log_name": log_name,
+  "log_provider": "Microsoft",
+  "event_code": event_code,
+  "product": {
+    "name": "Microsoft Windows",
+    "vendor_name": "Microsoft",
+    "feature": {"name": log_name},
+  },
+}
+if record_number != "" {
+  metadata.uid = record_number
+}
+
+# --- actor ---------------------------------------------------------------
+
+actor_section = "subject"
+if event_code == "4688" {
+  actor_section = "creator_subject"
+}
+actor_security = string(get(flat, [actor_section + ".security_id"]) ?? "") ?? ""
+actor_name = string(get(flat, [actor_section + ".account_name"]) ?? "") ?? ""
+actor_domain = string(get(flat, [actor_section + ".account_domain"]) ?? "") ?? ""
+actor_logon = string(get(flat, [actor_section + ".logon_id"]) ?? "") ?? ""
+
+actor_user = {}
+if actor_name != "" && actor_name != "-" {
+  actor_user.name = actor_name
+}
+if actor_security != "" && actor_security != "-" {
+  actor_user.uid = actor_security
+}
+if actor_domain != "" && actor_domain != "-" {
+  actor_user.domain = actor_domain
+}
+actor = {"user": actor_user}
+if actor_logon != "" && actor_logon != "-" {
+  actor.session = {"uid": actor_logon}
+}
+
+actor_pid_key = "process_information.process_id"
+actor_path_key = "process_information.process_name"
+if event_code == "4625" {
+  actor_pid_key = "process_information.caller_process_id"
+  actor_path_key = "process_information.caller_process_name"
+} else if event_code == "4688" {
+  actor_pid_key = "process_information.creator_process_id"
+  actor_path_key = "process_information.creator_process_name"
+} else if event_code == "4673" {
+  actor_pid_key = "process.process_id"
+  actor_path_key = "process.process_name"
+}
+actor_pid_raw = string(get(flat, [actor_pid_key]) ?? "") ?? ""
+actor_path = string(get(flat, [actor_path_key]) ?? "") ?? ""
+actor_process = {}
+if actor_pid_raw != "" && actor_pid_raw != "-" {
+  actor_process.pid = parse_int(replace(actor_pid_raw, "0x", ""), base: 16) ?? 0
+}
+actor_file = null
+if actor_path != "" && actor_path != "-" && contains(actor_path, "\\") {
+  actor_parts = split(actor_path, "\\")
+  actor_count = length(actor_parts)
+  actor_file = {
+    "name": string(get(actor_parts, [actor_count - 1]) ?? "") ?? "",
+    "path": actor_path,
+    "type_id": 1,
+    "type": "Regular File",
+  }
+  if actor_count > 1 {
+    actor_file.parent_folder = join(slice!(actor_parts, 0, actor_count - 1), "\\")
+  }
+}
+if is_object(actor_file) {
+  actor_process.file = actor_file
+}
+if length(keys(actor_process)) > 0 {
+  actor.process = actor_process
+}
+
+# --- class dispatch ------------------------------------------------------
+
+message = message_text
+out = {}
+
+if event_code == "4624" || event_code == "4625" {
+  user_section = "new_logon"
+  if event_code == "4625" {
+    user_section = "account_for_which_logon_failed"
+  }
+  user_security = string(get(flat, [user_section + ".security_id"]) ?? "") ?? ""
+  user_name = string(get(flat, [user_section + ".account_name"]) ?? "") ?? ""
+  user_domain = string(get(flat, [user_section + ".account_domain"]) ?? "") ?? ""
+  user = {}
+  if user_name != "" && user_name != "-" {
+    user.name = user_name
+  }
+  if user_security != "" && user_security != "-" {
+    user.uid = user_security
+  }
+  if user_domain != "" && user_domain != "-" {
+    user.domain = user_domain
+  }
+
+  logon_type_raw = string(get(flat, ["subject.logon_type"]) ?? "") ?? ""
+  if logon_type_raw == "" {
+    logon_type_raw = string(get(flat, ["logon_information.logon_type"]) ?? "") ?? ""
+  }
+  logon_number = to_int(logon_type_raw) ?? 0
+  logon_type_id = 0
+  logon_type = "Unknown"
+  if logon_number == 1 {
+    logon_type_id = 1
+    logon_type = "System"
+  } else if logon_number == 2 {
+    logon_type_id = 2
+    logon_type = "Interactive"
+  } else if logon_number == 3 {
+    logon_type_id = 3
+    logon_type = "Network"
+  } else if logon_number == 4 {
+    logon_type_id = 4
+    logon_type = "Batch"
+  } else if logon_number == 5 {
+    logon_type_id = 5
+    logon_type = "Service"
+  } else if logon_number == 7 {
+    logon_type_id = 7
+    logon_type = "Unlock"
+  } else if logon_number == 8 {
+    logon_type_id = 8
+    logon_type = "Network Cleartext"
+  } else if logon_number == 9 {
+    logon_type_id = 9
+    logon_type = "New Credentials"
+  } else if logon_number == 10 {
+    logon_type_id = 10
+    logon_type = "Remote Interactive"
+  } else if logon_number == 11 {
+    logon_type_id = 11
+    logon_type = "Cached Interactive"
+  } else if logon_number > 0 {
+    logon_type_id = 99
+    logon_type = "Other"
+  }
+
+  auth_package_raw = string(get(flat, ["detailed_authentication_information.authentication_package"]) ?? "") ?? ""
+  auth_package = downcase(auth_package_raw)
+  auth_protocol_id = 99
+  if auth_package == "ntlm" {
+    auth_protocol_id = 1
+  } else if auth_package == "kerberos" {
+    auth_protocol_id = 2
+  } else if auth_package == "" {
+    auth_protocol_id = 0
+  }
+
+  logon_process = {}
+  logon_process_name = string(get(flat, ["detailed_authentication_information.logon_process"]) ?? "") ?? ""
+  if logon_process_name != "" && logon_process_name != "-" {
+    logon_process.name = logon_process_name
+    logon_process.pid = -1
+  }
+
+  out = {
+    "class_uid": 3002,
+    "class_name": "Authentication",
+    "category_uid": 3,
+    "category_name": "Identity & Access Management",
+    "activity_id": 1,
+    "activity_name": "Logon",
+    "type_uid": 300201,
+    "time": time_ms,
+    "severity_id": 1,
+    "status_id": status_id,
+    "message": message,
+    "actor": actor,
+    "user": user,
+    "dst_endpoint": {"hostname": computer},
+    "device": device,
+    "metadata": metadata,
+  }
+  out.metadata.profiles = ["host"]
+  if logon_type_id > 0 {
+    out.logon_type_id = logon_type_id
+    out.logon_type = logon_type
+  }
+  if auth_protocol_id > 0 {
+    out.auth_protocol_id = auth_protocol_id
+    out.auth_protocol = auth_package_raw
+  }
+  if length(keys(logon_process)) > 0 {
+    out.logon_process = logon_process
+  }
+  if event_code == "4625" {
+    reason = string(get(flat, ["failure_information.failure_reason"]) ?? "") ?? ""
+    if reason != "" {
+      out.status_detail = reason
+    }
+  }
+} else if event_code == "4661" || event_code == "4663" || event_code == "4673" {
+  operation = "ObjectAccess"
+  service_name = string(get(flat, ["object.object_server"]) ?? "") ?? ""
+  if event_code == "4661" {
+    operation = "ObjectHandle"
+  } else if event_code == "4673" {
+    operation = "PrivilegedService"
+    service_name = string(get(flat, ["service.server"]) ?? "") ?? ""
+  }
+  api_request = {}
+  if event_code == "4661" || event_code == "4663" {
+    object_type = string(get(flat, ["object.object_type"]) ?? "") ?? ""
+    object_name = string(get(flat, ["object.object_name"]) ?? "") ?? ""
+    accesses = string(get(flat, ["access_request_information.accesses"]) ?? "") ?? ""
+    if object_type != "" {
+      api_request.object_type = object_type
+    }
+    if object_name != "" {
+      api_request.object_name = object_name
+    }
+    if accesses != "" {
+      api_request.accesses = accesses
+    }
+  } else {
+    privileges = string(get(flat, ["service_request_information.privileges"]) ?? "") ?? ""
+    if privileges != "" {
+      api_request.privileges = privileges
+    }
+  }
+  api = {"operation": operation}
+  if service_name != "" {
+    api.service = {"name": service_name}
+  }
+  if length(keys(api_request)) > 0 {
+    request_uid = record_number
+    if request_uid == "" {
+      request_uid = event_code
+    }
+    api.request = {"uid": request_uid, "data": api_request}
+  }
+
+  out = {
+    "class_uid": 6003,
+    "class_name": "API Activity",
+    "category_uid": 6,
+    "category_name": "Application Activity",
+    "activity_id": 99,
+    "activity_name": "Other",
+    "type_uid": 600399,
+    "time": time_ms,
+    "severity_id": 1,
+    "status_id": status_id,
+    "message": message,
+    "actor": actor,
+    "api": api,
+    "src_endpoint": {"hostname": computer},
+    "metadata": metadata,
+  }
+} else if event_code == "4688" || event_code == "4689" {
+  activity_id = 1
+  activity_name = "Launch"
+  process_pid_key = "process_information.new_process_id"
+  process_path_key = "process_information.new_process_name"
+  if event_code == "4689" {
+    activity_id = 2
+    activity_name = "Terminate"
+    process_pid_key = "process_information.process_id"
+    process_path_key = "process_information.process_name"
+  }
+  process_pid_raw = string(get(flat, [process_pid_key]) ?? "") ?? ""
+  process_path = string(get(flat, [process_path_key]) ?? "") ?? ""
+  process = {}
+  if process_pid_raw != "" {
+    process.pid = parse_int(replace(process_pid_raw, "0x", ""), base: 16) ?? 0
+  }
+  process_file = null
+  if process_path != "" && process_path != "-" && contains(process_path, "\\") {
+    process_parts = split(process_path, "\\")
+    process_count = length(process_parts)
+    process_file = {
+      "name": string(get(process_parts, [process_count - 1]) ?? "") ?? "",
+      "path": process_path,
+      "type_id": 1,
+      "type": "Regular File",
+    }
+    if process_count > 1 {
+      process_file.parent_folder = join(slice!(process_parts, 0, process_count - 1), "\\")
+    }
+  }
+  if is_object(process_file) {
+    process.file = process_file
+  }
+  if event_code == "4688" {
+    cmd_line = string(get(flat, ["process_information.process_command_line"]) ?? "") ?? ""
+    if cmd_line != "" {
+      process.cmd_line = cmd_line
+    }
+  }
+
+  out = {
+    "class_uid": 1007,
+    "class_name": "Process Activity",
+    "category_uid": 1,
+    "category_name": "System Activity",
+    "activity_id": activity_id,
+    "activity_name": activity_name,
+    "type_uid": 100700 + activity_id,
+    "time": time_ms,
+    "severity_id": 1,
+    "status_id": status_id,
+    "message": message,
+    "actor": actor,
+    "process": process,
+    "device": device,
+    "metadata": metadata,
+  }
+  if event_code == "4689" {
+    exit_raw = string(get(flat, ["process_information.exit_status"]) ?? "") ?? ""
+    if exit_raw != "" {
+      out.exit_code = parse_int(replace(exit_raw, "0x", ""), base: 16) ?? 0
+    }
+  }
+} else {
+  abort "unsupported Windows Security event code: " + event_code
+}
+
+. = out

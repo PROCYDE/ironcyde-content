@@ -1,0 +1,39 @@
+# source: mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_Pending.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_Pending.ocsf
+
+raw_sample: |-
+  {
+    "Organization": "testdomain2.onmicrosoft.com",
+    "MessageId": "<ZG9VBXKJSOU4.FA3ANQQ6AFVL1@sj0pr06mb7776>",
+    "Received": "2024-12-04T23:55:08.356734",
+    "SenderAddress": "ttsender@microsoft.com",
+    "RecipientAddress": "first_last@testdomain2.com",
+    "Subject": "test subject",
+    "Status": "Pending",
+    "ToIP": null,
+    "FromIP": null,
+    "Size": 0,
+    "MessageTraceId": "46734309-b552-45a6-c4ec-08dd14bf1534",
+    "Index": 14395
+  }
+
+expected:
+  class_uid: 4009
+  category_uid: 4
+  activity_id: 4
+  status_id: 99
+  severity_id: 0
+  direction_id: 0
+  email.message_uid: <ZG9VBXKJSOU4.FA3ANQQ6AFVL1@sj0pr06mb7776>
+  email.size: 0
+  email.smtp_from: ttsender@microsoft.com
+  email.smtp_to:
+  - first_last@testdomain2.com
+  email.subject: test subject
+  message_trace_uid: 46734309-b552-45a6-c4ec-08dd14bf1534
+  metadata.product.name: O365
+  metadata.product.vendor_name: Microsoft
+  metadata.uid: 46734309-b552-45a6-c4ec-08dd14bf1534
+  status_detail: Pending
+  type_uid: 400904
+  class_name: Email Activity

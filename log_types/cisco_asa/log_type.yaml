@@ -1,0 +1,4 @@
+name: Cisco ASA
+description: Cisco ASA connection, teardown, and NAT translation syslog messages.
+vendor: Cisco
+product: ASA

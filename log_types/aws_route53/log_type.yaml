@@ -1,0 +1,4 @@
+name: AWS Route 53 Resolver
+description: AWS Route 53 Resolver query logs.
+vendor: AWS
+product: Route 53

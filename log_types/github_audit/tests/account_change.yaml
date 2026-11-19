@@ -1,0 +1,66 @@
+# source: mappings/markdown/GitHub/v1.3.0/Github Audit Logs/Account Change/samples/account_change.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/GitHub/v1.3.0/Github Audit Logs/Account Change/samples/account_change.ocsf
+# reference issue: class 3001 (Account Change) is deprecated; use ['user_management']
+# reference issue: declares profiles datetime, host (fill them or drop the declaration)
+
+raw_sample: |
+  {
+    "action": "user.create",
+    "business": "businessname",
+    "actor_is_bot": "False",
+    "method": "POST",
+    "actor_session": 3495,
+    "server_id": "11111-1111-11111-1111",
+    "url": "https://github-test.com/enterprises/examplecompany/admins",
+    "actor_ip": "11.11.111.1",
+    "actor": "actor5",
+    "referrer": "https://github.groups",
+    "@timestamp": 1727681685875,
+    "user_id": 147,
+    "name": "Business Name",
+    "actor_location": {
+      "country_code": "",
+      "city": "",
+      "country_name": "",
+      "region_name": "",
+      "region": "",
+      "postal_code": ""
+    },
+    "user_agent": "Mozilla/5.0 (Macintosh Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "actor_id": 73,
+    "business_id": 1,
+    "user": "user5",
+    "request_id": "10000000-0000-0000-0000-000000000000"
+  }
+
+expected:
+  class_uid: 3007
+  class_name: User Management
+  category_uid: 3
+  activity_id: 1
+  type_uid: 300701
+  severity_id: 1
+  time: 1727681685875
+  src_endpoint.ip: 11.11.111.1
+  actor.user.name: actor5
+  actor.user.uid: '73'
+  actor.user.type_id: 1
+  actor.user.type: User
+  actor.user.account:
+    type_id: 99
+    type: Other
+    name: businessname
+    uid: '1'
+  actor.session.uid: '3495'
+  user.name: user5
+  user.uid: '147'
+  user.type_id: 1
+  user.type: User
+  http_request.http_method: POST
+  http_request.referrer: https://github.groups
+  http_request.url.url_string: https://github-test.com/enterprises/examplecompany/admins
+  http_request.user_agent: Mozilla/5.0 (Macintosh Intel Mac OS X 10_15_7) AppleWebKit/537.36
+    (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36
+  metadata.event_code: user.create
+  metadata.product.name: GitHub Audit Log
+  metadata.product.vendor_name: GitHub

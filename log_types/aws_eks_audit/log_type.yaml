@@ -1,0 +1,4 @@
+name: AWS EKS audit logs
+description: AWS EKS control plane audit log entries.
+vendor: AWS
+product: EKS

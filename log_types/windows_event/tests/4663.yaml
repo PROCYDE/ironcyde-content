@@ -1,0 +1,66 @@
+# source: mappings/markdown/Microsoft/Windows Events/4663/4663_0.event
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/Windows Events/4663/4663_0.json
+# reference issue: declares profiles host (fill them or drop the declaration)
+
+raw_sample: |
+  01/14/2015 08:30:54 PM
+  LogName=Security
+  SourceName=Microsoft Windows security auditing.
+  EventCode=4663
+  EventType=0
+  Type=Information
+  ComputerName=szusoidc1.soi.dir.acme080.com
+  TaskCategory=Registry
+  OpCode=Info
+  RecordNumber=989202992
+  CaseID=AD_4663
+  Keywords=Audit Success
+  Message=An attempt was made to access an object.
+  Subject:
+      Security ID:        NT AUTHORITY\SYSTEM
+      Account Name:       SZUSOIDC1$
+      Account Domain:     SOI
+      Logon ID:       0x3e7
+  Object:
+      Object Server:  Security
+      Object Type:    Key
+      Object Name:    \REGISTRY\MACHINE\SYSTEM\ControlSet001\Services\EventLog\Security
+      Handle ID:  0x564
+  Process Information:
+      Process ID: 0x214
+      Process Name:   C:\Windows\System32\services.exe
+  Access Request Information:
+      Accesses:   Set key value
+  
+      Access Mask:    0x2
+
+expected:
+  class_uid: 6003
+  category_uid: 6
+  activity_id: 99
+  status_id: 1
+  severity_id: 1
+  actor.user.name: SZUSOIDC1$
+  actor.user.uid: NT AUTHORITY\SYSTEM
+  actor.process.file.name: services.exe
+  actor.process.file.parent_folder: C:\Windows\System32
+  actor.process.file.path: C:\Windows\System32\services.exe
+  actor.process.file.type: Regular File
+  actor.process.file.type_id: 1
+  actor.process.pid: 532
+  actor.session.uid: '0x3e7'
+  actor.user.domain: SOI
+  message: An attempt was made to access an object.
+  metadata.product.feature.name: Security
+  metadata.product.name: Microsoft Windows
+  class_name: API Activity
+  type_uid: 600399
+  src_endpoint.hostname: szusoidc1.soi.dir.acme080.com
+  api.operation: ObjectAccess
+  api.service.name: Security
+  api.request.uid: '989202992'
+  api.request.data:
+    object_type: Key
+    object_name: \REGISTRY\MACHINE\SYSTEM\ControlSet001\Services\EventLog\Security
+    accesses: Set key value
+  metadata.uid: '989202992'

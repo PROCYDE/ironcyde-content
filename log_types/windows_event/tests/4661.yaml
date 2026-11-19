@@ -1,0 +1,113 @@
+# source: mappings/markdown/Microsoft/Windows Events/4661/4661.event
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/Windows Events/4661/4661.json
+# reference issue: type_uid None does not equal class_uid*100+activity_id (101099)
+# reference issue: declares profiles host (fill them or drop the declaration)
+
+raw_sample: |-
+  01/09/2019 12:46:00 AM
+  LogName=Security
+  SourceName=Microsoft Windows security auditing.
+  EventCode=4661
+  EventType=0
+  Type=Information
+  ComputerName=STLDIRDC1.dir.solutia.com
+  TaskCategory=SAM
+  OpCode=Info
+  RecordNumber=3166250565
+  Keywords=Audit Success
+  Message=A handle to an object was requested.
+  Subject :
+  	Security ID:		NT AUTHORITY\SYSTEM
+  	Account Name:		STLDIRDC1$
+  	Account Domain:		DIR
+  	Logon ID:		0x3e7
+  Object:
+  	Object Server:	Security Account Manager
+  	Object Type:	SAM_DOMAIN
+  	Object Name:	DC=dir,DC=solutia,DC=com
+  	Handle ID:	0x7f79620
+  Process Information:
+  	Process ID:	0x1ec
+  	Process Name:	C:\Windows\System32\lsass.exe
+  Access Request Information:
+  	Transaction ID:	{00000000-0000-0000-0000-000000000000}
+  	Accesses:	DELETE
+  				READ_CONTROL
+  				WRITE_DAC
+  				WRITE_OWNER
+  				ReadPasswordParameters
+  				WritePasswordParameters
+  				ReadOtherParameters
+  				WriteOtherParameters
+  				CreateUser
+  				CreateGlobalGroup
+  				CreateLocalGroup
+  				GetLocalGroupMembership
+  				ListAccounts
+  
+  	Access Mask:	0x2d
+  	Privileges Used for Access Check:	ǿ\x0F-
+  	Properties:	---
+  	domain
+  DELETE
+  READ_CONTROL
+  WRITE_DAC
+  WRITE_OWNER
+  ReadPasswordParameters
+  WritePasswordParameters
+  ReadOtherParameters
+  WriteOtherParameters
+  CreateUser
+  CreateGlobalGroup
+  CreateLocalGroup
+  GetLocalGroupMembership
+  ListAccounts
+  		Domain Password & Lockout Policies
+  			lockOutObservationWindow
+  			lockoutDuration
+  			lockoutThreshold
+  			maxPwdAge
+  			minPwdAge
+  			minPwdLength
+  			pwdHistoryLength
+  			pwdProperties
+  		Other Domain Parameters (for use by SAM)
+  			serverState
+  			serverRole
+  			modifiedCount
+  			uASCompat
+  			forceLogoff
+  			domainReplica
+  			oEMInformation
+  		Domain Administer Server
+  	Restricted SID Count:	0
+
+expected:
+  class_uid: 6003
+  category_uid: 6
+  activity_id: 99
+  status_id: 1
+  severity_id: 1
+  actor.user.name: STLDIRDC1$
+  actor.user.uid: NT AUTHORITY\SYSTEM
+  actor.process.file.name: lsass.exe
+  actor.process.file.parent_folder: C:\Windows\System32
+  actor.process.file.path: C:\Windows\System32\lsass.exe
+  actor.process.file.type_id: 1
+  actor.process.pid: 492
+  actor.session.uid: '0x3e7'
+  message: A handle to an object was requested.
+  metadata.product.feature.name: Security
+  metadata.product.name: Microsoft Windows
+  metadata.product.vendor_name: Microsoft
+  metadata.uid: '3166250565'
+  class_name: API Activity
+  type_uid: 600399
+  src_endpoint.hostname: STLDIRDC1.dir.solutia.com
+  api.operation: ObjectHandle
+  api.service.name: Security Account Manager
+  api.request.uid: '3166250565'
+  api.request.data:
+    object_type: SAM_DOMAIN
+    object_name: DC=dir,DC=solutia,DC=com
+    accesses: DELETE

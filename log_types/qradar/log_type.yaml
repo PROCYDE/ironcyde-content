@@ -1,0 +1,4 @@
+name: IBM QRadar SIEM
+description: IBM QRadar offenses and their related records.
+vendor: IBM
+product: QRadar SIEM

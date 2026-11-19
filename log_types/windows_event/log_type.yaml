@@ -1,0 +1,4 @@
+name: Windows Security event log
+description: Windows Security event log entries in classic key/value form.
+vendor: Microsoft
+product: Windows

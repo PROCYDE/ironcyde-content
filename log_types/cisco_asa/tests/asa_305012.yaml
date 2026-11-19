@@ -1,0 +1,26 @@
+# source: mappings/markdown/Cisco/v1.3.0/ASA/305012/samples/cisco_asa_305012.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Cisco/v1.3.0/ASA/305012/samples/cisco_asa_305012.ocsf
+
+raw_sample: |-
+  Oct 10 2018 12:34:56 localhost CiscoASA[999]: %ASA-6-305012: Teardown dynamic TCP translation from inside:172.31.98.44/1454 to outside:100.66.98.44/8267 duration 0:00:30
+
+expected:
+  class_uid: 4001
+  category_uid: 4
+  activity_id: 2
+  status_id: 1
+  severity_id: 1
+  src_endpoint.ip: 172.31.98.44
+  dst_endpoint.ip: 100.66.98.44
+  src_endpoint.port: 1454
+  dst_endpoint.port: 8267
+  connection_info.boundary: External
+  connection_info.boundary_id: 3
+  connection_info.direction: Outbound
+  connection_info.direction_id: 2
+  connection_info.protocol_name: TCP
+  dst_endpoint.interface_name: outside
+  metadata.event_code: '305012'
+  metadata.product.name: Cisco ASA
+  metadata.product.vendor_name: Cisco
+  src_endpoint.interface_name: inside

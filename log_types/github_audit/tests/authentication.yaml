@@ -1,0 +1,58 @@
+# source: mappings/markdown/GitHub/v1.3.0/Github Audit Logs/Authentication/samples/authentication.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/GitHub/v1.3.0/Github Audit Logs/Authentication/samples/authentication.ocsf
+# reference issue: declares profiles datetime, host (fill them or drop the declaration)
+
+raw_sample: |
+  {
+    "external_id": "",
+    "action": "business.sso_response",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "_document_id": "m-111111111111==",
+    "actor": "test_user",
+    "business": "acme-inc",
+    "external_identity_username": "",
+    "@timestamp": 1729176166108,
+    "user_id": 51111,
+    "actor_id": 51111,
+    "external_identity_nameid": "test_user@acme.com",
+    "business_id": 11,
+    "user": "test_user",
+    "issuer": "https://accounts.google.com/o/saml2",
+    "operation_type": "authentication"
+  }
+
+expected:
+  class_uid: 3002
+  class_name: Authentication
+  category_uid: 3
+  activity_id: 1
+  type_uid: 300201
+  severity_id: 1
+  status_id: 1
+  time: 1729176166108
+  actor.user:
+    name: test_user
+    uid: '51111'
+    type_id: 1
+    type: User
+    email_addr: test_user@acme.com
+    account:
+      type_id: 99
+      type: Other
+      name: acme-inc
+      uid: '11'
+  user.name: test_user
+  user.uid: '51111'
+  user.type_id: 1
+  user.type: User
+  user.email_addr: test_user@acme.com
+  auth_protocol_id: 5
+  auth_protocol: SAML
+  logon_type_id: 99
+  logon_type: Other
+  http_request.user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+    (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+  metadata.event_code: business.sso_response
+  metadata.product.name: GitHub Audit Log
+  metadata.product.vendor_name: GitHub
+  metadata.uid: m-111111111111==

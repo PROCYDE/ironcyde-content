@@ -1,0 +1,149 @@
+# CERT/NetSA SiLK flow record -> OCSF Network Activity (4001, Traffic).
+#
+# SiLK CSV has a header row in the sample; production exports may omit it. Columns are the
+# default SiLK field order, so the header is skipped and the last non-empty row is parsed.
+
+text = string(.message) ?? ""
+text = strip_whitespace(text)
+if text == "" {
+  abort "empty SiLK record"
+}
+lines = split(text, "\n")
+count = length(lines)
+line = string(get(lines, [count - 1]) ?? "") ?? ""
+if line == "" {
+  abort "empty SiLK record"
+}
+# The sample ships a header; a record is the last non-empty line either way.
+fields = parse_csv(line) ?? []
+if length(fields) < 12 {
+  abort "short SiLK CSV record"
+}
+
+sip = string(get(fields, [0]) ?? "") ?? ""
+dip = string(get(fields, [1]) ?? "") ?? ""
+if !(is_ipv4(sip) || is_ipv6(sip)) || !(is_ipv4(dip) || is_ipv6(dip)) {
+  abort "SiLK record without valid source and destination IPs"
+}
+sport = to_int(get(fields, [2]) ?? 0) ?? 0
+dport = to_int(get(fields, [3]) ?? 0) ?? 0
+protocol = to_int(get(fields, [4]) ?? 0) ?? 0
+packets = to_int(get(fields, [5]) ?? 0) ?? 0
+bytes = to_int(get(fields, [6]) ?? 0) ?? 0
+flags = string(get(fields, [7]) ?? "") ?? ""
+start_raw = string(get(fields, [8]) ?? "") ?? ""
+duration_raw = to_float(get(fields, [9]) ?? 0.0) ?? 0.0
+end_raw = string(get(fields, [10]) ?? "") ?? ""
+sensor = string(get(fields, [11]) ?? "") ?? ""
+flow_class = string(get(fields, [19]) ?? "") ?? ""
+flow_type = string(get(fields, [20]) ?? "") ?? ""
+application = string(get(fields, [18]) ?? "") ?? ""
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+start = parse_timestamp(start_raw, format: "%Y/%m/%dT%H:%M:%S%.f") ?? null
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+if is_timestamp(start) {
+  time_ms = to_unix_timestamp(timestamp!(start), unit: "milliseconds")
+}
+end = parse_timestamp(end_raw, format: "%Y/%m/%dT%H:%M:%S%.f") ?? null
+
+tcp_flags = 0
+if contains(flags, "F") {
+  tcp_flags = tcp_flags + 1
+}
+if contains(flags, "S") {
+  tcp_flags = tcp_flags + 2
+}
+if contains(flags, "R") {
+  tcp_flags = tcp_flags + 4
+}
+if contains(flags, "P") {
+  tcp_flags = tcp_flags + 8
+}
+if contains(flags, "A") {
+  tcp_flags = tcp_flags + 16
+}
+if contains(flags, "U") {
+  tcp_flags = tcp_flags + 32
+}
+
+protocol_name = to_string(protocol)
+if protocol == 6 {
+  protocol_name = "tcp"
+} else if protocol == 17 {
+  protocol_name = "udp"
+} else if protocol == 1 {
+  protocol_name = "icmp"
+}
+
+direction_id = 0
+direction = "Unknown"
+flow_class_l = downcase(flow_type)
+if flow_class_l == "" {
+  flow_class_l = downcase(flow_class)
+}
+if contains(flow_class_l, "out") {
+  direction_id = 2
+  direction = "Outbound"
+} else if contains(flow_class_l, "in") {
+  direction_id = 1
+  direction = "Inbound"
+} else if contains(flow_class_l, "int") {
+  direction_id = 3
+  direction = "Lateral"
+}
+
+connection = {
+  "protocol_num": protocol,
+  "protocol_name": protocol_name,
+  "direction_id": direction_id,
+  "direction": direction,
+  "tcp_flags": tcp_flags,
+}
+
+out = {
+  "class_uid": 4001,
+  "class_name": "Network Activity",
+  "category_uid": 4,
+  "category_name": "Network Activity",
+  "activity_id": 6,
+  "activity_name": "Traffic",
+  "type_uid": 400106,
+  "time": time_ms,
+  "start_time": time_ms,
+  "severity_id": 1,
+  "message": "SiLK flow " + flow_class + " " + sip + ":" + to_string(sport) + " -> " + dip + ":" + to_string(dport),
+  "src_endpoint": {"ip": sip, "port": sport},
+  "dst_endpoint": {"ip": dip, "port": dport},
+  "connection_info": connection,
+  "traffic": {"bytes": bytes, "packets": packets},
+  "duration": to_int(duration_raw * 1000.0),
+  "metadata": {
+    "version": "1.9.0",
+    "log_name": "SiLK flow",
+    "log_provider": "SiLK",
+    "product": {
+      "name": "SiLK",
+      "vendor_name": "CERT/NetSA at Carnegie Mellon University - Software Engineering Institute",
+      "feature": {"name": "Network Flow Data"},
+    },
+  },
+  "unmapped": {
+    "sensor": sensor,
+    "flags": flags,
+    "flow_class": flow_class,
+    "flow_type": flow_type,
+    "application": application,
+    "initial_flags": string(get(fields, [15]) ?? "") ?? "",
+    "session_flags": string(get(fields, [16]) ?? "") ?? "",
+    "attributes": string(get(fields, [17]) ?? "") ?? "",
+    "next_hop_ip": string(get(fields, [14]) ?? "") ?? "",
+  },
+}
+if is_timestamp(end) {
+  out.end_time = to_unix_timestamp(timestamp!(end), unit: "milliseconds")
+}
+if application != "" {
+  out.app_name = application
+}
+. = out

@@ -1,0 +1,235 @@
+# AWS WAF web ACL log -> OCSF 1.9.0 HTTP Activity (4002).
+#
+# The log describes one inspected request. The cloud and security_control profiles are
+# declared: the account and region come from the web ACL ARN, and the terminating rule plus
+# the WAF action provide the rule and disposition. AWS logs ALLOW/BLOCK/COUNT/EXCLUDED_AS_COUNT.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .httpRequest != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not an AWS WAF log"
+}
+request = if is_object(raw.httpRequest) { raw.httpRequest } else { {} }
+client_ip = string(request.clientIp) ?? ""
+if !is_ipv4(client_ip) && !is_ipv6(client_ip) {
+  abort "AWS WAF log without a valid client IP"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+if is_integer(raw.timestamp) || is_float(raw.timestamp) {
+  time_ms = to_int!(raw.timestamp)
+}
+
+action_raw = upcase(string(raw.action) ?? "")
+action_id = 0
+action = "Unknown"
+disposition_id = 0
+disposition = "Unknown"
+if action_raw == "ALLOW" {
+  action_id = 1
+  action = "Allowed"
+  disposition_id = 1
+  disposition = "Allowed"
+} else if action_raw == "BLOCK" {
+  action_id = 2
+  action = "Denied"
+  disposition_id = 2
+  disposition = "Blocked"
+} else if action_raw == "COUNT" || action_raw == "EXCLUDED_AS_COUNT" {
+  action_id = 3
+  action = "Observed"
+  disposition_id = 17
+  disposition = "Logged"
+} else if action_raw != "" {
+  action_id = 99
+  action = action_raw
+  disposition_id = 99
+  disposition = "Other"
+}
+
+# Headers arrive as a list of name/value objects.
+headers = {}
+if is_array(request.headers) {
+  for_each(array!(request.headers)) -> |_index, item| {
+    if is_object(item) {
+      name = downcase(string(item.name) ?? "")
+      if name != "" {
+        headers = set!(headers, [name], string(item.value) ?? "")
+      }
+    }
+  }
+}
+
+url = {}
+if (string(request.host) ?? "") != "" {
+  url.hostname = string(request.host) ?? ""
+}
+if (string(request.uri) ?? "") != "" {
+  url.path = string(request.uri) ?? ""
+}
+if (string(request.scheme) ?? "") != "" {
+  url.scheme = string(request.scheme) ?? ""
+}
+if (string(request.args) ?? "") != "" {
+  url.query_string = string(request.args) ?? ""
+}
+
+http_request = {}
+if (string(request.httpMethod) ?? "") != "" {
+  http_request.http_method = string(request.httpMethod) ?? ""
+}
+if (string(request.requestId) ?? "") != "" {
+  http_request.uid = string(request.requestId) ?? ""
+}
+if (string(request.httpVersion) ?? "") != "" {
+  http_request.version = string(request.httpVersion) ?? ""
+}
+if (string(get(headers, ["user-agent"]) ?? "") ?? "") != "" {
+  http_request.user_agent = string(get(headers, ["user-agent"]) ?? "") ?? ""
+}
+if length(keys(url)) > 0 {
+  http_request.url = url
+}
+xforwarded = []
+if (string(get(headers, ["x-forwarded-for"]) ?? "") ?? "") != "" {
+  xforwarded = [string(get(headers, ["x-forwarded-for"]) ?? "") ?? ""]
+}
+if length(xforwarded) > 0 {
+  http_request.x_forwarded_for = xforwarded
+}
+
+# The terminating rule and its first match detail describe the control decision.
+rule = {}
+rule_id = string(raw.terminatingRuleId) ?? ""
+if rule_id != "" {
+  rule.uid = rule_id
+  rule.name = rule_id
+}
+if (string(raw.terminatingRuleType) ?? "") != "" {
+  rule.type = string(raw.terminatingRuleType) ?? ""
+}
+if is_array(raw.terminatingRuleMatchDetails) && length(array!(raw.terminatingRuleMatchDetails)) > 0 {
+  details = array!(raw.terminatingRuleMatchDetails)
+  first = get(details, [0]) ?? null
+  if is_object(first) {
+    if (string(first.conditionType) ?? "") != "" {
+      rule.condition = string(first.conditionType) ?? ""
+    }
+    if (string(first.sensitivityLevel) ?? "") != "" {
+      rule.sensitivity = string(first.sensitivityLevel) ?? ""
+    }
+    if (string(first.location) ?? "") != "" {
+      rule.match_location = string(first.location) ?? ""
+    }
+    if is_array(first.matchedData) {
+      parts = []
+      for_each(array!(first.matchedData)) -> |_i, part| {
+        parts = push(parts, string(part) ?? "")
+      }
+      if length(parts) > 0 {
+        rule.match_details = parts
+      }
+    }
+  }
+}
+
+# AWS web ACL ARN: arn:aws:wafv2:<region>:<account>:...
+cloud = {"provider": "AWS"}
+arn_parts = split(string(raw.webaclId) ?? "", ":")
+if length(arn_parts) > 4 {
+  region = string(get(arn_parts, [3]) ?? "") ?? ""
+  account = string(get(arn_parts, [4]) ?? "") ?? ""
+  if region != "" {
+    cloud.region = region
+  }
+  if account != "" {
+    cloud.account = {"uid": account}
+  }
+}
+
+ja4 = []
+ja4_raw = string(raw.ja4Fingerprint) ?? ""
+if ja4_raw != "" {
+  parts = split(ja4_raw, "_")
+  fingerprint = {"value": ja4_raw, "type_id": 3, "type": "JA4HTTP"}
+  if length(parts) > 0 {
+    fingerprint.section_a = string(get(parts, [0]) ?? "") ?? ""
+  }
+  if length(parts) > 1 {
+    fingerprint.section_b = string(get(parts, [1]) ?? "") ?? ""
+  }
+  if length(parts) > 2 {
+    fingerprint.section_c = string(get(parts, [2]) ?? "") ?? ""
+  }
+  ja4 = [fingerprint]
+}
+
+src = {"ip": client_ip}
+if (string(request.country) ?? "") != "" {
+  src.location = {"country": string(request.country) ?? ""}
+}
+
+out = {
+  "class_uid": 4002,
+  "class_name": "HTTP Activity",
+  "category_uid": 4,
+  "category_name": "Network Activity",
+  "activity_id": 3,
+  "activity_name": "Get",
+  "type_uid": 400203,
+  "time": time_ms,
+  "severity_id": 1,
+  "action": action,
+  "action_id": action_id,
+  "disposition": disposition,
+  "disposition_id": disposition_id,
+  "is_alert": true,
+  "message": "AWS WAF " + action_raw + " " + (string(request.httpMethod) ?? "") + " " + (string(request.uri) ?? ""),
+  "src_endpoint": src,
+  "cloud": cloud,
+  "metadata": {
+    "version": "1.9.0",
+    "profiles": ["cloud", "security_control"],
+    "log_name": "AWS WAF web ACL log",
+    "log_provider": "AWS",
+    "event_code": "waf.webacl.request",
+    "product": {"name": "WAF", "vendor_name": "AWS"},
+  },
+}
+if length(keys(http_request)) > 0 {
+  out.http_request = http_request
+}
+if length(keys(rule)) > 0 {
+  out.firewall_rule = rule
+}
+if length(ja4) > 0 {
+  out.ja4_fingerprint_list = ja4
+}
+
+unmapped = {}
+if (string(raw.httpSourceName) ?? "") != "" {
+  unmapped.http_source_name = string(raw.httpSourceName) ?? ""
+}
+if (string(raw.httpSourceId) ?? "") != "" {
+  unmapped.http_source_uid = string(raw.httpSourceId) ?? ""
+}
+if (string(raw.webaclId) ?? "") != "" {
+  unmapped.webacl_uid = string(raw.webaclId) ?? ""
+}
+if (string(raw.ja3Fingerprint) ?? "") != "" {
+  unmapped.ja3_fingerprint = string(raw.ja3Fingerprint) ?? ""
+}
+if is_object(raw.captchaResponse) {
+  unmapped.captcha = raw.captchaResponse
+}
+if is_array(raw.rateBasedRuleList) && length(array!(raw.rateBasedRuleList)) > 0 {
+  unmapped.rate_based_rule_list = raw.rateBasedRuleList
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

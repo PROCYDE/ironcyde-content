@@ -1,0 +1,292 @@
+# AWS CloudTrail -> OCSF 1.9.0.
+#
+# Console sign-in events (signin.amazonaws.com) become Authentication (3002); all other
+# management, data and service events become API Activity (6003). The cloud profile is
+# declared and filled from the record. A source that is a service name rather than an IP is
+# kept as src_endpoint.hostname so the required endpoint stays present.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .eventName != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not a CloudTrail event"
+}
+event_name = string(raw.eventName) ?? ""
+if event_name == "" {
+  abort "CloudTrail event without eventName"
+}
+event_source = string(raw.eventSource) ?? ""
+event_type = string(raw.eventType) ?? ""
+
+identity = if is_object(raw.userIdentity) { raw.userIdentity } else { {} }
+session_ctx = if is_object(identity.sessionContext) { identity.sessionContext } else { {} }
+session_issuer = if is_object(session_ctx.sessionIssuer) { session_ctx.sessionIssuer } else { {} }
+session_attrs = if is_object(session_ctx.attributes) { session_ctx.attributes } else { {} }
+on_behalf = if is_object(identity.onBehalfOf) { identity.onBehalfOf } else { {} }
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+event_time = parse_timestamp(string(raw.eventTime) ?? "", format: "%+") ?? null
+if is_timestamp(event_time) {
+  time_ms = to_unix_timestamp(timestamp!(event_time), unit: "milliseconds")
+}
+
+# --- actor ---------------------------------------------------------------
+
+type_raw = string(identity.type) ?? ""
+type_id = 0
+if type_raw == "IAMUser" || type_raw == "IdentityCenterUser" || type_raw == "SAMLUser" || type_raw == "WebIdentityUser" {
+  type_id = 1
+} else if type_raw == "Root" {
+  type_id = 2
+} else if type_raw == "AWSService" {
+  type_id = 4
+} else if type_raw != "" {
+  type_id = 99
+}
+
+actor_user = {"type_id": type_id}
+if type_raw != "" {
+  actor_user.type = type_raw
+}
+arn = string(identity.arn) ?? ""
+principal = string(identity.principalId) ?? ""
+if arn != "" {
+  actor_user.uid = arn
+  if principal != "" {
+    actor_user.uid_alt = principal
+  }
+} else if (string(on_behalf.userId) ?? "") != "" {
+  actor_user.uid = string(on_behalf.userId) ?? ""
+  if (string(on_behalf.identityStoreArn) ?? "") != "" {
+    actor_user.uid_alt = string(on_behalf.identityStoreArn) ?? ""
+  }
+}
+name = string(identity.userName) ?? ""
+if name == "" {
+  name = string(session_issuer.userName) ?? ""
+}
+if name == "" {
+  name = string(on_behalf.userId) ?? ""
+}
+if name != "" {
+  actor_user.name = name
+}
+account_id = string(identity.accountId) ?? ""
+if account_id != "" {
+  actor_user.account = {"uid": account_id}
+}
+credential = string(identity.accessKeyId) ?? ""
+if credential == "" {
+  credential = string(identity.credentialId) ?? ""
+}
+if credential != "" {
+  actor_user.credential_uid = credential
+}
+
+actor = {"user": actor_user}
+if (string(identity.invokedBy) ?? "") != "" {
+  actor.invoked_by = string(identity.invokedBy) ?? ""
+}
+session = {}
+if (string(session_issuer.arn) ?? "") != "" {
+  session.issuer = string(session_issuer.arn) ?? ""
+}
+if (string(session_issuer.principalId) ?? "") != "" {
+  session.uid = string(session_issuer.principalId) ?? ""
+}
+mfa = downcase(string(session_attrs.mfaAuthenticated) ?? "")
+if mfa != "" {
+  session.is_mfa = mfa == "true"
+}
+created = parse_timestamp(string(session_attrs.creationDate) ?? "", format: "%+") ?? null
+if is_timestamp(created) {
+  session.created_time = to_unix_timestamp(timestamp!(created), unit: "milliseconds")
+}
+if length(keys(session)) > 0 {
+  actor.session = session
+}
+
+# --- endpoint ------------------------------------------------------------
+
+source_raw = string(raw.sourceIPAddress) ?? ""
+src = {}
+if is_ipv4(source_raw) || is_ipv6(source_raw) {
+  src.ip = source_raw
+} else if source_raw != "" {
+  src.hostname = source_raw
+}
+
+# --- status and severity -------------------------------------------------
+
+status_id = 1
+severity_id = 1
+if (string(raw.errorCode) ?? "") != "" {
+  status_id = 2
+  severity_id = 2
+}
+details = if is_object(raw.serviceEventDetails) { raw.serviceEventDetails } else { {} }
+detail_text = encode_json(details)
+detail_l = downcase(detail_text)
+if contains(detail_l, "failure") || contains(detail_l, "failed") || contains(detail_l, "denied") {
+  status_id = 2
+  severity_id = 2
+}
+
+# --- API activity --------------------------------------------------------
+
+read_only = raw.readOnly
+activity_id = 99
+name_l = downcase(event_name)
+if read_only == true {
+  activity_id = 2
+} else if starts_with(name_l, "describe") || starts_with(name_l, "get") || starts_with(name_l, "list") ||
+  starts_with(name_l, "search") || starts_with(name_l, "lookup") || starts_with(name_l, "query") ||
+  starts_with(name_l, "head") {
+  activity_id = 2
+} else if starts_with(name_l, "create") || starts_with(name_l, "add") || starts_with(name_l, "put") ||
+  starts_with(name_l, "register") || starts_with(name_l, "run") || starts_with(name_l, "start") ||
+  starts_with(name_l, "request") || starts_with(name_l, "assume") || starts_with(name_l, "import") {
+  activity_id = 1
+} else if starts_with(name_l, "update") || starts_with(name_l, "modify") || starts_with(name_l, "set") ||
+  starts_with(name_l, "attach") || starts_with(name_l, "enable") || starts_with(name_l, "tag") ||
+  starts_with(name_l, "associate") || starts_with(name_l, "authorize") {
+  activity_id = 3
+} else if starts_with(name_l, "delete") || starts_with(name_l, "remove") || starts_with(name_l, "terminate") ||
+  starts_with(name_l, "detach") || starts_with(name_l, "disable") || starts_with(name_l, "untag") ||
+  starts_with(name_l, "deregister") || starts_with(name_l, "cancel") || starts_with(name_l, "revoke") {
+  activity_id = 4
+}
+
+api_request = {}
+if (string(raw.requestID) ?? "") != "" {
+  api_request.uid = string(raw.requestID) ?? ""
+}
+if is_object(raw.requestParameters) && length(keys(object!(raw.requestParameters))) > 0 {
+  api_request.data = raw.requestParameters
+}
+api_response = {}
+if is_object(raw.responseElements) && length(keys(object!(raw.responseElements))) > 0 {
+  api_response.data = raw.responseElements
+}
+if (string(raw.errorCode) ?? "") != "" {
+  api_response.error = string(raw.errorCode) ?? ""
+}
+if (string(raw.errorMessage) ?? "") != "" {
+  api_response.error_message = string(raw.errorMessage) ?? ""
+}
+api = {
+  "operation": event_name,
+  "service": {"name": event_source},
+  "request": api_request,
+}
+if length(keys(api_response)) > 0 {
+  api.response = api_response
+}
+api_version = string(raw.apiVersion) ?? ""
+if api_version == "" {
+  api_version = string(raw.eventVersion) ?? ""
+}
+if api_version != "" {
+  api.version = api_version
+}
+
+cloud = {"provider": "AWS"}
+if (string(raw.awsRegion) ?? "") != "" {
+  cloud.region = string(raw.awsRegion) ?? ""
+}
+recipient = string(raw.recipientAccountId) ?? ""
+if recipient == "" {
+  recipient = account_id
+}
+if recipient != "" {
+  cloud.account = {"uid": recipient}
+}
+
+http = {}
+if (string(raw.userAgent) ?? "") != "" {
+  http.user_agent = string(raw.userAgent) ?? ""
+}
+
+product = {
+  "name": "CloudTrail",
+  "vendor_name": "AWS",
+}
+if (string(raw.eventCategory) ?? "") != "" {
+  product.feature = {"name": string(raw.eventCategory) ?? ""}
+}
+metadata = {
+  "version": "1.9.0",
+  "profiles": ["cloud"],
+  "log_name": "CloudTrail",
+  "log_provider": "AWS",
+  "event_code": event_type,
+  "product": product,
+}
+if (string(raw.eventID) ?? "") != "" {
+  metadata.uid = string(raw.eventID) ?? ""
+}
+
+unmapped = {
+  "event_source": event_source,
+  "event_name": event_name,
+  "event_version": string(raw.eventVersion) ?? "",
+  "read_only": read_only,
+}
+if source_raw != "" && (string(src.ip) ?? "") == "" {
+  unmapped.source_ip_raw = source_raw
+}
+if is_object(raw.additionalEventData) {
+  unmapped.additional_event_data = raw.additionalEventData
+}
+if is_object(raw.serviceEventDetails) {
+  unmapped.service_event_details = raw.serviceEventDetails
+}
+is_auth = event_source == "signin.amazonaws.com" || event_name == "ConsoleLogin"
+class_uid = 6003
+class_name = "API Activity"
+category_uid = 6
+category_name = "Application Activity"
+type_uid = 600300 + activity_id
+if is_auth {
+  class_uid = 3002
+  class_name = "Authentication"
+  category_uid = 3
+  category_name = "Identity & Access Management"
+  activity_id = 1
+  type_uid = 300201
+}
+
+out = {
+  "class_uid": class_uid,
+  "class_name": class_name,
+  "category_uid": category_uid,
+  "category_name": category_name,
+  "activity_id": activity_id,
+  "type_uid": type_uid,
+  "time": time_ms,
+  "severity_id": severity_id,
+  "status_id": status_id,
+  "message": event_name,
+  "actor": actor,
+  "metadata": metadata,
+}
+out.cloud = cloud
+if length(keys(src)) > 0 {
+  out.src_endpoint = src
+}
+if is_auth {
+  out.user = actor_user
+  out.service = {"name": "AWS Console"}
+} else {
+  out.api = api
+}
+if length(keys(http)) > 0 {
+  out.http_request = http
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

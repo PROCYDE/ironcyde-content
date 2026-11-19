@@ -1,0 +1,116 @@
+# Microsoft 365 message trace -> OCSF 1.9.0 Email Activity (4009, Trace).
+#
+# One JSON record per message trace entry. The trace status is carried in status_id and
+# status_detail; FromIP is only put on src_endpoint when it is a valid address. The message
+# trace ID identifies the event, because the records have no GUID of their own.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .MessageTraceId != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not an M365 message trace record"
+}
+trace_uid = string(raw.MessageTraceId) ?? ""
+message_uid = string(raw.MessageId) ?? ""
+if trace_uid == "" && message_uid == "" {
+  abort "M365 message trace without MessageTraceId or MessageId"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+received = parse_timestamp(string(raw.Received) ?? "", format: "%Y-%m-%dT%H:%M:%S%.f") ?? null
+if is_timestamp(received) {
+  time_ms = to_unix_timestamp(timestamp!(received), unit: "milliseconds")
+}
+
+status_raw = string(raw.Status) ?? ""
+status_id = 99
+status = status_raw
+if status_raw == "Delivered" {
+  status_id = 1
+  status = "Success"
+} else if status_raw == "Failed" {
+  status_id = 2
+  status = "Failure"
+} else if status_raw == "" {
+  status_id = 0
+  status = "Unknown"
+}
+
+sender = string(raw.SenderAddress) ?? ""
+recipient = string(raw.RecipientAddress) ?? ""
+subject = string(raw.Subject) ?? ""
+size = to_int(raw.Size) ?? 0
+
+email = {}
+if message_uid != "" {
+  email.message_uid = message_uid
+}
+if sender != "" {
+  email.from = sender
+  email.smtp_from = sender
+}
+if recipient != "" {
+  email.to = [recipient]
+  email.smtp_to = [recipient]
+}
+if subject != "" {
+  email.subject = subject
+}
+if size >= 0 {
+  email.size = size
+}
+
+from_ip = string(raw.FromIP) ?? ""
+src = {}
+if is_ipv4(from_ip) || is_ipv6(from_ip) {
+  src.ip = from_ip
+}
+
+out = {
+  "class_uid": 4009,
+  "class_name": "Email Activity",
+  "category_uid": 4,
+  "category_name": "Network Activity",
+  "activity_id": 4,
+  "activity_name": "Trace",
+  "type_uid": 400904,
+  "time": time_ms,
+  "severity_id": 0,
+  "status_id": status_id,
+  "direction_id": 0,
+  "message": subject,
+  "email": email,
+  "message_trace_uid": trace_uid,
+  "metadata": {
+    "version": "1.9.0",
+    "log_name": "M365 message trace",
+    "log_provider": "Microsoft",
+    "event_code": "message_trace",
+    "uid": trace_uid,
+    "product": {"name": "O365", "vendor_name": "Microsoft"},
+  },
+}
+if status_raw != "" {
+  out.status_detail = status_raw
+}
+if status_id > 0 {
+  out.status = status
+}
+if length(keys(src)) > 0 {
+  out.src_endpoint = src
+}
+
+unmapped = {
+  "organization": string(raw.Organization) ?? "",
+  "index": to_int(raw.Index) ?? 0,
+}
+if (string(raw.ToIP) ?? "") != "" {
+  unmapped.to_ip = string(raw.ToIP) ?? ""
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

@@ -1,0 +1,39 @@
+# source: mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_None.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_None.ocsf
+
+raw_sample: |-
+  {
+    "Organization": "testdomain.onmicrosoft.com",
+    "MessageId": "<SA9PR09MB5838517C85310ECE43856647DB4D2@SA9PR09MB5838.tstprd09.prod.outlook.com>",
+    "Received": "2024-10-23T18:59:43.8726542",
+    "SenderAddress": "user@testdomain.com",
+    "RecipientAddress": "user@testdomain.com",
+    "Subject": "FW: Request for proposal*",
+    "Status": "None",
+    "ToIP": null,
+    "FromIP": "208.67.222.222",
+    "Size": 56562,
+    "MessageTraceId": "f8290baa-c368-4c82-a18e-08dcf394db3d",
+    "Index": 24260
+  }
+
+expected:
+  class_uid: 4009
+  category_uid: 4
+  activity_id: 4
+  status_id: 99
+  severity_id: 0
+  src_endpoint.ip: 208.67.222.222
+  direction_id: 0
+  email.message_uid: <SA9PR09MB5838517C85310ECE43856647DB4D2@SA9PR09MB5838.tstprd09.prod.outlook.com>
+  email.size: 56562
+  email.smtp_from: user@testdomain.com
+  email.smtp_to:
+  - user@testdomain.com
+  email.subject: 'FW: Request for proposal*'
+  message_trace_uid: f8290baa-c368-4c82-a18e-08dcf394db3d
+  metadata.product.name: O365
+  metadata.product.vendor_name: Microsoft
+  metadata.uid: f8290baa-c368-4c82-a18e-08dcf394db3d
+  type_uid: 400904
+  class_name: Email Activity

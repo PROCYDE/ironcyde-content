@@ -1,0 +1,50 @@
+# source: mappings/markdown/Zeek/v1.3.0/ftp_log/samples/ftp_log.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Zeek/v1.3.0/ftp_log/samples/ftp_log.ocsf
+# reference issue: time looks like seconds, OCSF wants epoch milliseconds
+
+raw_sample: |
+  {
+    "_path": "ftp",
+    "_system_name": "sensor",
+    "_write_ts": "2024-10-16T02:50:22.110501Z",
+    "arg": "192,168,4,59,218,125",
+    "command": "PORT",
+    "data_channel.orig_h": "192.168.6.58",
+    "data_channel.passive": false,
+    "data_channel.resp_h": "192.168.4.59",
+    "data_channel.resp_p": 55933,
+    "file_size": 10582201,
+    "id.orig_h": "192.168.4.59",
+    "id.orig_p": 35342,
+    "id.resp_h": "192.168.6.58",
+    "id.resp_p": 21,
+    "password": "<hidden>",
+    "reply_code": 200,
+    "reply_msg": "PORT command successful",
+    "ts": "2024-10-16T02:50:22.108428Z",
+    "uid": "C7Uupd44YYLGqNO5Qf",
+    "user": "osbox"
+  }
+
+expected:
+  class_uid: 4008
+  category_uid: 4
+  activity_id: 0
+  severity_id: 1
+  src_endpoint.ip: 192.168.4.59
+  dst_endpoint.ip: 192.168.6.58
+  src_endpoint.port: 35342
+  dst_endpoint.port: 21
+  codes:
+  - 200
+  command: PORT 192,168,4,59,218,125
+  file.name: 192,168,4,59,218,125
+  file.size: 10582201
+  file.type_id: 0
+  metadata.log_name: ftp
+  metadata.product.name: Zeek
+  metadata.product.vendor_name: Zeek
+  metadata.uid: C7Uupd44YYLGqNO5Qf
+  status_code: '200'
+  status_detail: PORT command successful
+  type_uid: 400800

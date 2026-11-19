@@ -1,0 +1,4 @@
+name: Windows Defender
+description: Windows Defender operational events.
+vendor: Microsoft
+product: Windows Defender

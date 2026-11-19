@@ -1,0 +1,64 @@
+# source: mappings/markdown/GitHub/v1.3.0/Github Audit Logs/API Activity/samples/api_activity.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/GitHub/v1.3.0/Github Audit Logs/API Activity/samples/api_activity.ocsf
+# reference issue: declares profiles datetime (fill them or drop the declaration)
+
+raw_sample: |
+  {
+    "repo": "acme/dynamite",
+    "external_id": "",
+    "repository": "acme/dynamite",
+    "token_id": 0,
+    "action": "git.push",
+    "transport_protocol_name": "ssh",
+    "repository_id": 383067938,
+    "user_agent": "git/2.41.5",
+    "_document_id": "m-111111111111==",
+    "repository_public": false,
+    "actor": "test_user",
+    "business": "acme-inc",
+    "org": "acme",
+    "external_identity_username": "",
+    "actor_ip": "1.1.1.1",
+    "hashed_token": "tO8qpNGhmNe8OMdEXAMPLE",
+    "@timestamp": 1729176166108,
+    "user_id": 0,
+    "org_id": 11111,
+    "programmatic_access_type": "Public Key (User/Deploy)",
+    "actor_location": {
+      "country_code": "US"
+    },
+    "actor_id": 51111,
+    "transport_protocol": 2,
+    "external_identity_nameid": "test_user@acme.com",
+    "business_id": 11,
+    "user": ""
+  }
+
+expected:
+  class_uid: 6003
+  class_name: API Activity
+  category_uid: 6
+  activity_id: 99
+  type_uid: 600399
+  severity_id: 1
+  time: 1729176166108
+  src_endpoint.ip: 1.1.1.1
+  src_endpoint.location.country: US
+  actor.user:
+    name: test_user
+    uid: '51111'
+    type_id: 1
+    type: User
+    email_addr: test_user@acme.com
+    account:
+      type_id: 99
+      type: Other
+      name: acme
+      uid: '11111'
+  api.operation: git.push
+  api.service.name: github
+  http_request.user_agent: git/2.41.5
+  metadata.event_code: git.push
+  metadata.product.name: GitHub Audit Log
+  metadata.product.vendor_name: GitHub
+  metadata.uid: m-111111111111==

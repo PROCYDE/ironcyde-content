@@ -1,0 +1,32 @@
+# source: mappings/markdown/CERT-NetSA at CMU-SEI/SiLK Network Flow Data/samples/SiLK_FCCX.raw.csv
+# reference: /home/master/Documents/github/examples/mappings/markdown/CERT-NetSA at CMU-SEI/SiLK Network Flow Data/samples/SampleOCSF_FCCX.json
+# reference issue: missing time
+
+raw_sample: |-
+  sIP,dIP,sPort,dPort,protocol,packets,bytes,flags,sTime,duration,eTime,sensor,in,out,nhIP,initialFlags,sessionFlags,attributes,application,class,type,sTime+msec,eTime+msec,dur+msec,iType,iCode
+  192.168.40.20,10.0.40.21,63975,443,6,8,344,FSA,2015/06/17T00:00:00.083,0.006,2015/06/17T00:00:00.089,S1,0,0,0.0.0.0,,,,0,all,outweb,2015/06/17T00:00:00.083,2015/06/17T00:00:00.089,0.006,,
+
+expected:
+  class_uid: 4001
+  category_uid: 4
+  activity_id: 6
+  severity_id: 1
+  time: 1434492000083
+  start_time: 1434492000083
+  end_time: 1434492000089
+  duration: 6
+  src_endpoint.ip: 192.168.40.20
+  dst_endpoint.ip: 10.0.40.21
+  src_endpoint.port: 63975
+  dst_endpoint.port: 443
+  connection_info.direction_id: 2
+  connection_info.direction: Outbound
+  connection_info.protocol_num: 6
+  connection_info.protocol_name: tcp
+  connection_info.tcp_flags: 19
+  traffic.bytes: 344
+  traffic.packets: 8
+  metadata.product.name: SiLK
+  metadata.product.vendor_name: CERT/NetSA at Carnegie Mellon University - Software
+    Engineering Institute
+  metadata.product.feature.name: Network Flow Data

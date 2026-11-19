@@ -1,0 +1,88 @@
+# source: mappings/markdown/AWS/v1.5.0/CloudTrail/Account Change/samples/account_change.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/AWS/v1.5.0/CloudTrail/Account Change/samples/account_change.ocsf
+# reference issue: declares profiles cloud, datetime (fill them or drop the declaration)
+
+raw_sample: |-
+  {
+      "eventVersion": "1.11",
+      "userIdentity": {
+          "type": "AssumedRole",
+          "principalId": "AROA2W7SOKHEXAMPLE:scheduler",
+          "arn": "arn:aws:sts::112233445566:assumed-role/AWSServiceRole/scheduler",
+          "accountId": "112233445566",
+          "accessKeyId": "ASIA2W7SOKHEXAMPLE",
+          "sessionContext": {
+              "sessionIssuer": {
+                  "type": "Role",
+                  "principalId": "AROA2W7SOKHEXAMPLE",
+                  "arn": "arn:aws:iam::112233445566:role/aws-service-role/Admin",
+                  "accountId": "112233445566",
+                  "userName": "Admin"
+              },
+              "attributes": {
+                  "creationDate": "2025-07-18T14:56:35Z",
+                  "mfaAuthenticated": "false"
+              }
+          },
+          "invokedBy": "ecs.amazonaws.com"
+      },
+      "eventTime": "2025-07-18T15:02:39Z",
+      "eventSource": "elasticloadbalancing.amazonaws.com",
+      "eventName": "DescribeTargetHealth",
+      "awsRegion": "us-east-2",
+      "sourceIPAddress": "ecs.amazonaws.com",
+      "userAgent": "ecs.amazonaws.com",
+      "requestParameters": {
+          "targetGroupArn": "arn:aws:elasticloadbalancing:us-east-2:112233445566:targetgroup/alpha-EXAMPLE"
+      },
+      "responseElements": "",
+      "requestID": "d4af67c0-6f6c-4669-bcbb-96b7b039bed1",
+      "eventID": "1f28a3f1-106d-4f56-b4ab-a4a18697d7d8",
+      "readOnly": true,
+      "eventType": "AwsApiCall",
+      "apiVersion": "2015-12-01",
+      "managementEvent": true,
+      "recipientAccountId": "112233445566",
+      "eventCategory": "Management",
+      "resources": "",
+      "sharedEventID": "",
+      "vpcEndpointId": ""
+  }
+
+expected:
+  class_uid: 6003
+  class_name: API Activity
+  category_uid: 6
+  activity_id: 2
+  type_uid: 600302
+  severity_id: 1
+  status_id: 1
+  time: 1752850959000
+  src_endpoint.hostname: ecs.amazonaws.com
+  actor.user.uid: arn:aws:sts::112233445566:assumed-role/AWSServiceRole/scheduler
+  actor.user.uid_alt: AROA2W7SOKHEXAMPLE:scheduler
+  actor.user.account.uid: '112233445566'
+  actor.user.credential_uid: ASIA2W7SOKHEXAMPLE
+  actor.user.type_id: 99
+  actor.invoked_by: ecs.amazonaws.com
+  actor.session.is_mfa: false
+  actor.session.issuer: arn:aws:iam::112233445566:role/aws-service-role/Admin
+  actor.session.uid: AROA2W7SOKHEXAMPLE
+  api.operation: DescribeTargetHealth
+  api.service.name: elasticloadbalancing.amazonaws.com
+  api.request.uid: d4af67c0-6f6c-4669-bcbb-96b7b039bed1
+  api.request.data:
+    targetGroupArn: arn:aws:elasticloadbalancing:us-east-2:112233445566:targetgroup/alpha-EXAMPLE
+  api.version: '2015-12-01'
+  cloud.account.uid: '112233445566'
+  cloud.provider: AWS
+  cloud.region: us-east-2
+  http_request.user_agent: ecs.amazonaws.com
+  metadata.event_code: AwsApiCall
+  metadata.profiles:
+  - cloud
+  metadata.product.feature.name: Management
+  metadata.product.name: CloudTrail
+  metadata.product.vendor_name: AWS
+  metadata.uid: 1f28a3f1-106d-4f56-b4ab-a4a18697d7d8
+  actor.user.type: AssumedRole

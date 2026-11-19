@@ -1,0 +1,65 @@
+# source: mappings/markdown/AWS/v1.5.0/CloudTrail/API Activity/samples/generic_api_activity.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/AWS/v1.1.0/CloudTrail/API Activity/samples/generic_api_activity.ocsf
+# reference fallback: the selected version's reference is unusable; an identical raw sample from another version was used
+# reference issue: declares profiles cloud, datetime (fill them or drop the declaration)
+
+raw_sample: |-
+  {
+  	"userAgent": "Boto3/1.15.2 Python/3.8.2 Linux/5.6.3-arch1-1 Botocore/1.18.2",
+  	"eventID": "71c88be9-ea5c-43c7-8c82-example",
+  	"userIdentity": {
+  		"type": "IAMUser",
+  		"principalId": "AIDADO2GQEXAMPLE",
+  		"arn": "arn:aws:iam::1111111111111:user/Level6",
+  		"accountId": "1111111111111",
+  		"accessKeyId": "AKIA3Z2XBVEXAMPLE",
+  		"userName": "Level6"
+  	},
+  	"eventType": "AwsApiCall",
+  	"sourceIPAddress": "205.8.181.128",
+  	"eventName": "DescribeDirectConnectGateways",
+  	"eventSource": "directconnect.amazonaws.com",
+  	"recipientAccountId": "1111111111111",
+  	"requestParameters": null,
+  	"awsRegion": "us-east-1",
+  	"requestID": "1c8a6220-4263-4763-b526-example",
+  	"responseElements": {
+  		"directConnectGateways": []
+  	},
+  	"eventVersion": "1.05",
+  	"eventTime": "2023-09-21T22:22:52Z"
+   }
+
+expected:
+  class_uid: 6003
+  class_name: API Activity
+  category_uid: 6
+  activity_id: 2
+  type_uid: 600302
+  severity_id: 1
+  status_id: 1
+  time: 1695334972000
+  src_endpoint.ip: 205.8.181.128
+  actor.user.name: Level6
+  actor.user.uid: arn:aws:iam::1111111111111:user/Level6
+  actor.user.uid_alt: AIDADO2GQEXAMPLE
+  actor.user.account.uid: '1111111111111'
+  actor.user.credential_uid: AKIA3Z2XBVEXAMPLE
+  actor.user.type_id: 1
+  api.operation: DescribeDirectConnectGateways
+  api.request.uid: 1c8a6220-4263-4763-b526-example
+  api.response.data:
+    directConnectGateways: []
+  api.service.name: directconnect.amazonaws.com
+  api.version: '1.05'
+  cloud.provider: AWS
+  cloud.region: us-east-1
+  cloud.account.uid: '1111111111111'
+  http_request.user_agent: Boto3/1.15.2 Python/3.8.2 Linux/5.6.3-arch1-1 Botocore/1.18.2
+  metadata.event_code: AwsApiCall
+  metadata.profiles:
+  - cloud
+  metadata.product.name: CloudTrail
+  metadata.product.vendor_name: AWS
+  metadata.uid: 71c88be9-ea5c-43c7-8c82-example
+  actor.user.type: IAMUser

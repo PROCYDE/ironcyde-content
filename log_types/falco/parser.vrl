@@ -1,0 +1,101 @@
+# Falco runtime event -> OCSF 1.9.0 Detection Finding (2004).
+#
+# Falco emits one JSON object per alert. Severity comes from the Falco priority; the rule
+# name and the rendered output become the finding title and description.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .rule != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not a Falco JSON event"
+}
+rule = string(raw.rule) ?? ""
+if rule == "" {
+  abort "Falco event without a rule"
+}
+output = string(raw.output) ?? ""
+priority = upcase(string(raw.priority) ?? "")
+tags = array(raw.tags) ?? []
+
+severity_id = 0
+if priority == "EMERGENCY" || priority == "ALERT" || priority == "CRITICAL" {
+  severity_id = 5
+} else if priority == "ERROR" {
+  severity_id = 4
+} else if priority == "WARNING" {
+  severity_id = 3
+} else if priority == "NOTICE" {
+  severity_id = 2
+} else if priority == "INFORMATIONAL" || priority == "INFO" || priority == "DEBUG" {
+  severity_id = 1
+} else if priority != "" {
+  severity_id = 99
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+event_time = parse_timestamp(string(raw.time) ?? "", format: "%+") ?? null
+if is_timestamp(event_time) {
+  time_ms = to_unix_timestamp(timestamp!(event_time), unit: "milliseconds")
+}
+
+uid = string(raw.uuid) ?? ""
+if uid == "" {
+  uid = rule
+}
+
+finding = {
+  "uid": uid,
+  "title": rule,
+}
+if output != "" {
+  finding.desc = output
+}
+if length(tags) > 0 {
+  finding.types = tags
+}
+
+out = {
+  "class_uid": 2004,
+  "class_name": "Detection Finding",
+  "category_uid": 2,
+  "category_name": "Findings",
+  "activity_id": 1,
+  "activity_name": "Create",
+  "type_uid": 200401,
+  "time": time_ms,
+  "severity_id": severity_id,
+  "is_alert": true,
+  "message": rule,
+  "finding_info": finding,
+  "metadata": {
+    "version": "1.9.0",
+    "log_name": "Falco",
+    "log_provider": "Falco",
+    "event_code": rule,
+    "product": {"name": "Falco", "vendor_name": "Falcosecurity"},
+  },
+}
+
+unmapped = {}
+if output != "" {
+  unmapped.output = output
+}
+if priority != "" {
+  unmapped.priority = priority
+}
+if (string(raw.source) ?? "") != "" {
+  unmapped.source = string(raw.source) ?? ""
+}
+if (string(raw.hostname) ?? "") != "" {
+  unmapped.hostname = string(raw.hostname) ?? ""
+}
+if is_object(raw.output_fields) {
+  unmapped.output_fields = raw.output_fields
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

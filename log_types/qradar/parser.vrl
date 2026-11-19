@@ -1,0 +1,235 @@
+# IBM QRadar offense -> OCSF 1.9.0 Detection Finding (2004).
+#
+# Offenses are correlated detections: the rule that produced the offense becomes the
+# analytic, the offense source/title becomes the finding title, and the offense times map to
+# first/last seen. QRadar address fields are database IDs, not IP addresses, so they stay in
+# unmapped.
+
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) && .id != null {
+  raw = .
+}
+if !is_object(raw) {
+  abort "not a QRadar offense"
+}
+offense_id = to_int(raw.id) ?? 0
+if offense_id <= 0 {
+  abort "QRadar offense without an id"
+}
+description = string(raw.description) ?? ""
+title = string(raw.offense_source) ?? ""
+if title == "" {
+  title = description
+}
+severity = to_int(raw.severity) ?? 0
+credibility = to_int(raw.credibility) ?? 0
+magnitude = to_int(raw.magnitude) ?? 0
+
+severity_id = 0
+if severity >= 9 {
+  severity_id = 5
+} else if severity >= 7 {
+  severity_id = 4
+} else if severity >= 4 {
+  severity_id = 3
+} else if severity >= 2 {
+  severity_id = 2
+} else if severity >= 1 {
+  severity_id = 1
+} else if severity > 0 {
+  severity_id = 99
+}
+
+risk_level_id = 3
+risk_level = "High"
+risk_score = severity * 10
+if severity >= 9 {
+  risk_level_id = 4
+  risk_level = "Critical"
+} else if severity >= 7 {
+  risk_level_id = 3
+  risk_level = "High"
+} else if severity >= 4 {
+  risk_level_id = 2
+  risk_level = "Medium"
+} else if severity >= 1 {
+  risk_level_id = 1
+  risk_level = "Low"
+}
+
+confidence_id = 0
+confidence = "Unknown"
+if credibility >= 7 {
+  confidence_id = 3
+  confidence = "High"
+} else if credibility >= 4 {
+  confidence_id = 2
+  confidence = "Medium"
+} else if credibility >= 1 {
+  confidence_id = 1
+  confidence = "Low"
+}
+
+impact_id = 1
+impact = "Low"
+if magnitude >= 9 {
+  impact_id = 4
+  impact = "Critical"
+} else if magnitude >= 7 {
+  impact_id = 3
+  impact = "High"
+} else if magnitude >= 4 {
+  impact_id = 2
+  impact = "Medium"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+start_ms = to_int(raw.start_time) ?? 0
+last_ms = to_int(raw.last_updated_time) ?? 0
+if start_ms > 0 {
+  time_ms = start_ms
+} else if last_ms > 0 {
+  time_ms = last_ms
+}
+
+finding_uid = to_string(offense_id)
+finding_info = {
+  "uid": finding_uid,
+}
+if title != "" {
+  finding_info.title = title
+}
+if description != "" {
+  finding_info.desc = description
+}
+if start_ms > 0 {
+  finding_info.first_seen_time = start_ms
+}
+if last_ms > 0 {
+  finding_info.last_seen_time = last_ms
+}
+categories = []
+if is_array(raw.categories) {
+  for_each(array!(raw.categories)) -> |_i, item| {
+    categories = push(categories, string(item) ?? "")
+  }
+}
+if length(categories) > 0 {
+  finding_info.types = categories
+}
+data_sources = []
+if is_array(raw.log_sources) {
+  for_each(array!(raw.log_sources)) -> |_i, item| {
+    if is_object(item) && (string(item.name) ?? "") != "" {
+      data_sources = push(data_sources, string(item.name) ?? "")
+    }
+  }
+}
+if length(data_sources) > 0 {
+  finding_info.data_sources = data_sources
+}
+
+analytic = {}
+rules = if is_array(raw.rules) { array!(raw.rules) } else { [] }
+if length(rules) > 0 {
+  rule = get(rules, [0]) ?? null
+  if is_object(rule) {
+    rule_type = string(rule.type) ?? ""
+    if rule_type != "" {
+      analytic.name = rule_type
+      if rule_type == "CRE_RULE" {
+        analytic.desc = "Custom Rule Engine"
+      }
+    }
+    rule_id = to_int(rule.id) ?? 0
+    if rule_id > 0 {
+      analytic.uid = to_string(rule_id)
+    }
+    analytic.type_id = 1
+    analytic.type = "Rule"
+  }
+}
+if length(keys(analytic)) > 0 {
+  finding_info.analytic = analytic
+}
+
+out = {
+  "class_uid": 2004,
+  "class_name": "Detection Finding",
+  "category_uid": 2,
+  "category_name": "Findings",
+  "activity_id": 1,
+  "activity_name": "Create",
+  "type_uid": 200401,
+  "time": time_ms,
+  "severity_id": severity_id,
+  "is_alert": true,
+  "message": title,
+  "finding_info": finding_info,
+  "risk_level": risk_level,
+  "risk_level_id": risk_level_id,
+  "risk_score": risk_score,
+  "confidence": confidence,
+  "confidence_id": confidence_id,
+  "confidence_score": credibility,
+  "impact": impact,
+  "impact_id": impact_id,
+  "impact_score": magnitude,
+  "metadata": {
+    "version": "1.9.0",
+    "log_name": "Offense",
+    "log_provider": "IBM QRadar",
+    "event_code": "qradar.offense",
+    "product": {"name": "QRadar SIEM", "vendor_name": "IBM"},
+  },
+}
+status_raw = upcase(string(raw.status) ?? "")
+if status_raw != "" {
+  if status_raw == "OPEN" {
+    out.status_id = 1
+    out.status = "New"
+  } else if status_raw == "CLOSED" {
+    out.status_id = 4
+    out.status = "Resolved"
+  } else if status_raw == "IN PROGRESS" {
+    out.status_id = 2
+    out.status = "In Progress"
+  } else {
+    out.status_id = 99
+    out.status = status_raw
+  }
+}
+
+unmapped = {
+  "offense_type": to_int(raw.offense_type) ?? 0,
+  "magnitude": magnitude,
+  "credibility": credibility,
+  "severity_raw": severity,
+  "event_count": to_int(raw.event_count) ?? 0,
+  "flow_count": to_int(raw.flow_count) ?? 0,
+  "source_count": to_int(raw.source_count) ?? 0,
+  "destination_count": to_int(raw.local_destination_count) ?? 0,
+  "domain_id": to_int(raw.domain_id) ?? 0,
+  "follow_up": raw.follow_up,
+}
+if is_array(raw.source_address_ids) {
+  unmapped.source_address_ids = raw.source_address_ids
+}
+if is_array(raw.local_destination_address_ids) {
+  unmapped.local_destination_address_ids = raw.local_destination_address_ids
+}
+if is_array(raw.destination_networks) {
+  unmapped.destination_networks = raw.destination_networks
+}
+if (string(raw.source_network) ?? "") != "" {
+  unmapped.source_network = string(raw.source_network) ?? ""
+}
+if (string(raw.assigned_to) ?? "") != "" {
+  unmapped.assigned_to = string(raw.assigned_to) ?? ""
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

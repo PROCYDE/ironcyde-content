@@ -1,0 +1,204 @@
+# Cisco ASA syslog -> OCSF 1.9.0 Network Activity (4001).
+#
+# Supported message IDs: 106023 (deny), 302013/302015 (connection built), 302014/302016
+# (connection teardown) and 305011/305012 (dynamic translation built/teardown). The ASA
+# severity number is translated to the OCSF severity scale.
+
+text = strip_whitespace(string(.message) ?? "")
+header = parse_regex(text, r'%ASA-(?P<severity>[0-9])-(?P<code>[0-9]+): (?P<rest>.*)$') ?? null
+if !is_object(header) {
+  abort "not a Cisco ASA syslog message"
+}
+asa_severity = to_int(header.severity) ?? 7
+code = string(header.code) ?? ""
+rest = string(header.rest) ?? ""
+
+severity_id = 1
+if asa_severity == 0 {
+  severity_id = 6
+} else if asa_severity == 1 || asa_severity == 2 {
+  severity_id = 5
+} else if asa_severity == 3 {
+  severity_id = 4
+} else if asa_severity == 4 {
+  severity_id = 3
+} else if asa_severity == 5 {
+  severity_id = 2
+} else if asa_severity >= 6 {
+  severity_id = 1
+}
+
+timestamp_match = parse_regex(text, r'^(?P<ts>[A-Z][a-z]{2} +[0-9]+ [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2})') ?? null
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+if is_object(timestamp_match) {
+  parsed_ts = parse_timestamp(string(timestamp_match.ts) ?? "", format: "%b %d %Y %H:%M:%S") ?? null
+  if is_timestamp(parsed_ts) {
+    time_ms = to_unix_timestamp(timestamp!(parsed_ts), unit: "milliseconds")
+  }
+}
+
+activity_id = 99
+activity_name = "Other"
+status_id = 0
+protocol_name = ""
+direction_id = 0
+direction = "Unknown"
+src = {}
+dst = {}
+connection = {}
+traffic = {}
+status_detail = ""
+uid = ""
+duration_ms = 0
+
+
+
+if code == "106023" {
+  match = parse_regex(rest, r'Deny (?P<proto>[A-Za-z]+) src (?P<sif>[^:]+):(?P<sip>[0-9.]+)/(?P<sport>[0-9]+) dst (?P<dif>[^:]+):(?P<dip>[0-9.]+)/(?P<dport>[0-9]+)') ?? null
+  if !is_object(match) {
+    abort "unparsed ASA 106023 message"
+  }
+  activity_id = 5
+  activity_name = "Refuse"
+  status_id = 2
+  protocol_name = string(match.proto) ?? ""
+  direction_id = 1
+  direction = "Inbound"
+  src = {"ip": string(match.sip) ?? "", "port": to_int(match.sport) ?? 0, "interface_name": string(match.sif) ?? ""}
+  dst = {"ip": string(match.dip) ?? "", "port": to_int(match.dport) ?? 0, "interface_name": string(match.dif) ?? ""}
+} else if code == "302013" || code == "302015" {
+  match = parse_regex(rest, r'Built (?P<dir>outbound|inbound) (?P<proto>[A-Za-z]+) connection (?P<uid>[0-9]+) for (?P<sif>[^:]+):(?P<sip>[0-9.]+)/(?P<sport>[0-9]+) \([^)]*\) to (?P<dif>[^:]+):(?P<dip>[0-9.]+)/(?P<dport>[0-9]+)') ?? null
+  if !is_object(match) {
+    abort "unparsed ASA connection-built message"
+  }
+  activity_id = 1
+  activity_name = "Open"
+  status_id = 1
+  protocol_name = string(match.proto) ?? ""
+  uid = string(match.uid) ?? ""
+  direction = "Outbound"
+  direction_id = 2
+  if (string(match.dir) ?? "") == "inbound" {
+    direction_id = 1
+    direction = "Inbound"
+  }
+  src = {"ip": string(match.sip) ?? "", "port": to_int(match.sport) ?? 0, "interface_name": string(match.sif) ?? ""}
+  dst = {"ip": string(match.dip) ?? "", "port": to_int(match.dport) ?? 0, "interface_name": string(match.dif) ?? ""}
+} else if code == "302014" || code == "302016" {
+  match = parse_regex(rest, r'Teardown (?P<proto>[A-Za-z]+) connection (?P<uid>[0-9]+) for (?P<sif>[^:]+):(?P<sip>[0-9.]+)/(?P<sport>[0-9]+) to (?P<dif>[^:]+):(?P<dip>[0-9.]+)/(?P<dport>[0-9]+) duration (?P<dur>[0-9:]+) bytes (?P<bytes>[0-9]+)(?: (?P<reason>.*))?') ?? null
+  if !is_object(match) {
+    abort "unparsed ASA connection-teardown message"
+  }
+  activity_id = 2
+  activity_name = "Close"
+  status_id = 1
+  if code == "302014" {
+    activity_id = 3
+    activity_name = "Reset"
+    status_id = 2
+  }
+  protocol_name = string(match.proto) ?? ""
+  uid = string(match.uid) ?? ""
+  src = {"ip": string(match.sip) ?? "", "port": to_int(match.sport) ?? 0, "interface_name": string(match.sif) ?? ""}
+  dst = {"ip": string(match.dip) ?? "", "port": to_int(match.dport) ?? 0, "interface_name": string(match.dif) ?? ""}
+  traffic = {"bytes": to_int(match.bytes) ?? 0}
+  dur_parts = split(string(match.dur) ?? "", ":")
+  dur_seconds = 0
+  if length(dur_parts) == 3 {
+    dur_seconds = (to_int(get(dur_parts, [0]) ?? 0) ?? 0) * 3600 + (to_int(get(dur_parts, [1]) ?? 0) ?? 0) * 60 + (to_int(get(dur_parts, [2]) ?? 0) ?? 0)
+  } else if length(dur_parts) == 2 {
+    dur_seconds = (to_int(get(dur_parts, [0]) ?? 0) ?? 0) * 60 + (to_int(get(dur_parts, [1]) ?? 0) ?? 0)
+  }
+  duration_ms = dur_seconds * 1000
+  status_detail = string(match.reason) ?? ""
+  if direction_id == 0 {
+    direction_id = 1
+    direction = "Inbound"
+  }
+} else if code == "305011" || code == "305012" {
+  match = null
+  if code == "305011" {
+    match = parse_regex(rest, r'Built dynamic (?P<proto>[A-Za-z]+) translation from (?P<sif>[^:]+):(?P<sip>[0-9.]+)/(?P<sport>[0-9]+) to (?P<dif>[^:]+):(?P<dip>[0-9.]+)/(?P<dport>[0-9]+)') ?? null
+  } else {
+    match = parse_regex(rest, r'Teardown dynamic (?P<proto>[A-Za-z]+) translation from (?P<sif>[^:]+):(?P<sip>[0-9.]+)/(?P<sport>[0-9]+) to (?P<dif>[^:]+):(?P<dip>[0-9.]+)/(?P<dport>[0-9]+) duration (?P<dur>[0-9:]+)') ?? null
+  }
+  if !is_object(match) {
+    abort "unparsed ASA translation message"
+  }
+  status_id = 1
+  if code == "305011" {
+    activity_id = 1
+    activity_name = "Open"
+  } else {
+    activity_id = 2
+    activity_name = "Close"
+    dur_parts = split(string(match.dur) ?? "", ":")
+  dur_seconds = 0
+  if length(dur_parts) == 3 {
+    dur_seconds = (to_int(get(dur_parts, [0]) ?? 0) ?? 0) * 3600 + (to_int(get(dur_parts, [1]) ?? 0) ?? 0) * 60 + (to_int(get(dur_parts, [2]) ?? 0) ?? 0)
+  } else if length(dur_parts) == 2 {
+    dur_seconds = (to_int(get(dur_parts, [0]) ?? 0) ?? 0) * 60 + (to_int(get(dur_parts, [1]) ?? 0) ?? 0)
+  }
+  duration_ms = dur_seconds * 1000
+  }
+  protocol_name = string(match.proto) ?? ""
+  direction_id = 2
+  direction = "Outbound"
+  src = {"ip": string(match.sip) ?? "", "port": to_int(match.sport) ?? 0, "interface_name": string(match.sif) ?? ""}
+  dst = {"ip": string(match.dip) ?? "", "port": to_int(match.dport) ?? 0, "interface_name": string(match.dif) ?? ""}
+} else {
+  abort "unsupported Cisco ASA message id: " + code
+}
+
+if !(is_ipv4(string(src.ip) ?? "") || is_ipv6(string(src.ip) ?? "")) ||
+  !(is_ipv4(string(dst.ip) ?? "") || is_ipv6(string(dst.ip) ?? "")) {
+  abort "Cisco ASA message without valid endpoint addresses"
+}
+
+connection = {
+  "protocol_name": protocol_name,
+  "direction_id": direction_id,
+  "direction": direction,
+  "boundary_id": 3,
+  "boundary": "External",
+}
+if uid != "" {
+  connection.uid = uid
+}
+
+out = {
+  "class_uid": 4001,
+  "class_name": "Network Activity",
+  "category_uid": 4,
+  "category_name": "Network Activity",
+  "activity_id": activity_id,
+  "activity_name": activity_name,
+  "type_uid": 400100 + activity_id,
+  "time": time_ms,
+  "severity_id": severity_id,
+  "message": code + " " + rest,
+  "src_endpoint": src,
+  "dst_endpoint": dst,
+  "connection_info": connection,
+  "metadata": {
+    "version": "1.9.0",
+    "log_name": "ASA syslog",
+    "log_provider": "Cisco",
+    "event_code": code,
+    "product": {"name": "Cisco ASA", "vendor_name": "Cisco"},
+  },
+}
+if status_id > 0 {
+  out.status_id = status_id
+}
+if length(keys(traffic)) > 0 {
+  out.traffic = traffic
+}
+if status_detail != "" {
+  out.status_detail = status_detail
+}
+if duration_ms > 0 {
+  out.duration = duration_ms
+}
+. = out

@@ -1,0 +1,260 @@
+# AWS VPC flow log -> OCSF 1.9.0 Network Activity (4001, Traffic).
+#
+# Accepts the JSON form (one object or an array of objects) and the CSV form. CSV exports
+# ship a header, so columns are read by name instead of by position: the default AWS order
+# and custom field selections both work. The cloud and security_control profiles are
+# declared; ACCEPT/REJECT become the action and disposition.
+
+text = strip_whitespace(string(.message) ?? "")
+parsed = parse_json(text) ?? null
+raw = null
+if is_array(parsed) {
+  values = array!(parsed)
+  if length(values) > 0 {
+    first = get(values, [0]) ?? null
+    if is_object(first) {
+      raw = first
+    }
+  }
+} else if is_object(parsed) {
+  raw = parsed
+} else if .srcaddr != null {
+  raw = .
+}
+
+fields = {}
+if is_object(raw) {
+  fields = raw
+} else if contains(text, ",") {
+  lines = split(text, "\n")
+  first_line = string(get(lines, [0]) ?? "") ?? ""
+  last_index = length(lines) - 1
+  last_line = string(get(lines, [last_index]) ?? "") ?? ""
+  if !contains(first_line, "srcaddr") && contains(last_line, "srcaddr") {
+    # Header-less CSV in the default AWS column order.
+    first_line = last_line
+  }
+  header = parse_csv(first_line) ?? []
+  values = parse_csv(last_line) ?? []
+  if length(header) < 5 || length(values) < 5 {
+    abort "not an AWS VPC flow log record"
+  }
+  for_each(header) -> |index, name| {
+    if index < length(values) {
+      fields = set!(fields, [downcase(string(name))], string(get(values, [index]) ?? "") ?? "")
+    }
+  }
+} else {
+  abort "not an AWS VPC flow log record"
+}
+
+src_ip = string(fields.srcaddr) ?? ""
+next_hop_ip = string(fields.dstaddr) ?? ""
+dst_ip = next_hop_ip
+pkt_dst_ip = string(fields.pkt_dstaddr) ?? ""
+if !(is_ipv4(src_ip) || is_ipv6(src_ip)) || !(is_ipv4(dst_ip) || is_ipv6(dst_ip)) {
+  abort "VPC flow log without valid source and destination addresses"
+}
+if is_ipv4(pkt_dst_ip) || is_ipv6(pkt_dst_ip) {
+  dst_ip = pkt_dst_ip
+}
+
+src_port = to_int(fields.srcport) ?? 0
+dst_port = to_int(fields.dstport) ?? 0
+protocol = to_int(fields.protocol) ?? 0
+packets = to_int(fields.packets) ?? 0
+bytes = to_int(fields.bytes) ?? 0
+tcp_flags = to_int(fields.tcp_flags) ?? 0
+start_seconds = to_int(fields.start) ?? 0
+end_seconds = to_int(fields.end) ?? 0
+if start_seconds <= 0 {
+  abort "VPC flow log without a start time"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+time_ms = start_seconds * 1000
+end_ms = end_seconds * 1000
+duration_ms = 0
+if end_seconds >= start_seconds {
+  duration_ms = (end_seconds - start_seconds) * 1000
+}
+
+protocol_ver = string(fields.type) ?? ""
+protocol_ver_id = 99
+if protocol_ver == "IPv4" {
+  protocol_ver_id = 4
+} else if protocol_ver == "IPv6" {
+  protocol_ver_id = 6
+}
+
+action_raw = upcase(string(fields.action) ?? "")
+action_id = 0
+action = "Unknown"
+disposition_id = 0
+disposition = "Unknown"
+status_id = 0
+if action_raw == "ACCEPT" {
+  action_id = 1
+  action = "Allowed"
+  disposition_id = 1
+  disposition = "Allowed"
+  status_id = 1
+} else if action_raw == "REJECT" {
+  action_id = 2
+  action = "Denied"
+  disposition_id = 2
+  disposition = "Blocked"
+  status_id = 2
+}
+
+flow_direction = downcase(string(fields.flow_direction) ?? "")
+direction_id = 0
+direction = "Unknown"
+if flow_direction == "egress" {
+  direction_id = 2
+  direction = "Outbound"
+} else if flow_direction == "ingress" {
+  direction_id = 1
+  direction = "Inbound"
+} else if (string(fields.type) ?? "") != "" {
+  # Older records have no flow_direction; a destination inside the VPC is ingress.
+  if contains(dst_ip, "10.") || contains(dst_ip, "172.") || contains(dst_ip, "192.168.") {
+    direction_id = 1
+    direction = "Inbound"
+  } else {
+    direction_id = 2
+    direction = "Outbound"
+  }
+}
+
+instance_uid = string(fields.instance_id) ?? ""
+if instance_uid == "-" {
+  instance_uid = ""
+}
+interface_uid = string(fields.interface_id) ?? ""
+if interface_uid == "-" {
+  interface_uid = ""
+}
+subnet_uid = string(fields.subnet_id) ?? ""
+if subnet_uid == "-" {
+  subnet_uid = ""
+}
+vpc_uid = string(fields.vpc_id) ?? ""
+if vpc_uid == "-" {
+  vpc_uid = ""
+}
+
+src = {"ip": src_ip, "port": src_port}
+dst = {"ip": dst_ip, "port": dst_port}
+# The instance, interface and subnet belong to the endpoint that is local to the VPC.
+if direction_id == 1 {
+  if instance_uid != "" {
+    dst.instance_uid = instance_uid
+  }
+  if interface_uid != "" {
+    dst.interface_uid = interface_uid
+  }
+  if subnet_uid != "" {
+    dst.subnet_uid = subnet_uid
+  }
+  if vpc_uid != "" {
+    dst.vpc_uid = vpc_uid
+  }
+} else {
+  if instance_uid != "" {
+    src.instance_uid = instance_uid
+  }
+  if interface_uid != "" {
+    src.interface_uid = interface_uid
+  }
+  if subnet_uid != "" {
+    src.subnet_uid = subnet_uid
+  }
+  if vpc_uid != "" {
+    src.vpc_uid = vpc_uid
+  }
+}
+# A translated next hop (NAT gateway) is kept with the destination.
+if pkt_dst_ip != "" && (is_ipv4(pkt_dst_ip) || is_ipv6(pkt_dst_ip)) && next_hop_ip != pkt_dst_ip {
+  if is_ipv4(next_hop_ip) || is_ipv6(next_hop_ip) {
+    dst.intermediate_ips = [next_hop_ip]
+  }
+}
+
+cloud = {"provider": "AWS"}
+if (string(fields.region) ?? "") != "" {
+  cloud.region = string(fields.region) ?? ""
+}
+if (string(fields.az_id) ?? "") != "" && (string(fields.az_id) ?? "") != "-" {
+  cloud.zone = string(fields.az_id) ?? ""
+}
+if (string(fields.account_id) ?? "") != "" {
+  cloud.account = {"uid": string(fields.account_id) ?? ""}
+}
+
+out = {
+  "class_uid": 4001,
+  "class_name": "Network Activity",
+  "category_uid": 4,
+  "category_name": "Network Activity",
+  "activity_id": 6,
+  "activity_name": "Traffic",
+  "type_uid": 400106,
+  "time": time_ms,
+  "start_time": time_ms,
+  "duration": duration_ms,
+  "severity_id": 1,
+  "status_id": status_id,
+  "action": action,
+  "action_id": action_id,
+  "disposition": disposition,
+  "disposition_id": disposition_id,
+  "message": "VPC flow " + action_raw + " " + src_ip + ":" + to_string(src_port) + " -> " + dst_ip + ":" + to_string(dst_port),
+  "src_endpoint": src,
+  "dst_endpoint": dst,
+  "connection_info": {
+    "protocol_num": protocol,
+    "protocol_ver": string(fields.type) ?? "",
+    "protocol_ver_id": protocol_ver_id,
+    "direction_id": direction_id,
+    "direction": direction,
+    "tcp_flags": tcp_flags,
+  },
+  "traffic": {"bytes": bytes, "packets": packets},
+  "cloud": cloud,
+  "metadata": {
+    "version": "1.9.0",
+    "profiles": ["cloud", "security_control"],
+    "log_name": "VPC flow log",
+    "log_provider": "AWS",
+    "event_code": "vpc.flow",
+    "product": {
+      "name": "Amazon VPC",
+      "vendor_name": "AWS",
+      "feature": {"name": "Flowlogs"},
+    },
+  },
+}
+if end_ms >= time_ms {
+  out.end_time = end_ms
+}
+
+unmapped = {
+  "log_status": string(fields.log_status) ?? "",
+  "traffic_path": string(fields.traffic_path) ?? "",
+  "flow_direction": string(fields.flow_direction) ?? "",
+}
+if (string(fields.reject_reason) ?? "") != "" && (string(fields.reject_reason) ?? "") != "-" {
+  unmapped.reject_reason = string(fields.reject_reason) ?? ""
+}
+if (string(fields.pkt_srcaddr) ?? "") != "" && (string(fields.pkt_srcaddr) ?? "") != "-" {
+  unmapped.packet_source_ip = string(fields.pkt_srcaddr) ?? ""
+}
+if (string(fields.pkt_dstaddr) ?? "") != "" && (string(fields.pkt_dstaddr) ?? "") != "-" {
+  unmapped.packet_destination_ip = string(fields.pkt_dstaddr) ?? ""
+}
+if length(keys(unmapped)) > 0 {
+  out.unmapped = unmapped
+}
+. = out

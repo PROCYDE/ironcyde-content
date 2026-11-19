@@ -1,0 +1,40 @@
+# source: mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_Failed.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/Microsoft/O365/Exchange/messagetrace/v1.4.0/samples/messagetrace_Failed.ocsf
+
+raw_sample: |-
+  {
+    "Organization": "testdomain.onmicrosoft.com",
+    "MessageId": "<-1485666524.89606.1729702511228.JavaMail.vending@testing.com>",
+    "Received": "2024-10-23T16:55:14.3612002",
+    "SenderAddress": "vending@testing.com",
+    "RecipientAddress": "testuser@testdomain.com",
+    "Subject": "Asset Overdue Alert",
+    "Status": "Failed",
+    "ToIP": null,
+    "FromIP": "8.8.8.8",
+    "Size": 26921,
+    "MessageTraceId": "6a285e92-b85c-4e0f-a262-08dcf3837710",
+    "Index": 1876
+  }
+
+expected:
+  class_uid: 4009
+  category_uid: 4
+  activity_id: 4
+  status_id: 2
+  severity_id: 0
+  src_endpoint.ip: 8.8.8.8
+  direction_id: 0
+  email.message_uid: <-1485666524.89606.1729702511228.JavaMail.vending@testing.com>
+  email.size: 26921
+  email.smtp_from: vending@testing.com
+  email.smtp_to:
+  - testuser@testdomain.com
+  email.subject: Asset Overdue Alert
+  message_trace_uid: 6a285e92-b85c-4e0f-a262-08dcf3837710
+  metadata.product.name: O365
+  metadata.product.vendor_name: Microsoft
+  metadata.uid: 6a285e92-b85c-4e0f-a262-08dcf3837710
+  status_detail: Failed
+  type_uid: 400904
+  class_name: Email Activity

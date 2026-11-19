@@ -1,0 +1,38 @@
+# source: mappings/markdown/Microsoft/Windows Defender/1116.xml
+# reference: none
+# reference issue: no reference event
+
+raw_sample: "<Event xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\">\r\n <System>\r\n  <Provider Name=\"Microsoft-Windows-Windows Defender\" Guid=\"{11cd958a-c507-4ef3-b3f2-5fd9dfbd2c78}\" /> \r\n  <EventID>1116</EventID> \r\n  <Version>0</Version> \r\n  <Level>3</Level> \r\n  <Task>0</Task> \r\n  <Opcode>0</Opcode> \r\n  <Keywords>0x8000000000000000</Keywords> \r\n  <TimeCreated SystemTime=\"2024-02-10T05:45:10.1399723Z\" /> \r\n  <EventRecordID>40629</EventRecordID> \r\n  <Correlation /> \r\n  <Execution ProcessID=\"4732\" ThreadID=\"6620\" /> \r\n  <Channel>Microsoft-Windows-Windows Defender/Operational</Channel> \r\n  <Computer>DESKTOP-AAABBBB</Computer> \r\n  <Security UserID=\"S-1-5-18\" /> \r\n </System>\r\n <EventData>\r\n  <Data Name=\"Product Name\">Microsoft Defender Antivirus</Data> \r\n  <Data Name=\"Product Version\">4.18.23110.3</Data> \r\n  <Data Name=\"Detection ID\">{D9268072-4BD9-4784-A983-AB07A3D3DC18}</Data> \r\n  <Data Name=\"Detection Time\">2024-02-10T05:45:09.829Z</Data> \r\n  <Data Name=\"Unused\" /> \r\n  <Data Name=\"Unused2\" /> \r\n  <Data Name=\"Threat ID\">2147757185</Data> \r\n  <Data Name=\"Threat Name\">Trojan:Win32/Ymacco.AA4E</Data> \r\n  <Data Name=\"Severity ID\">5</Data> \r\n  <Data Name=\"Severity Name\">Severe</Data> \r\n  <Data Name=\"Category ID\">8</Data> \r\n  <Data Name=\"Category Name\">Trojan</Data> \r\n  <Data Name=\"FWLink\">https://go.microsoft.com/fwlink/?linkid=37020&name=Trojan:Win32/Ymacco.AA4E&threatid=2147757185&enterprise=0</Data> \r\n  <Data Name=\"Status Code\">1</Data> \r\n  <Data Name=\"Status Description\" /> \r\n  <Data Name=\"State\">1</Data> \r\n  <Data Name=\"Source ID\">3</Data> \r\n  <Data Name=\"Source Name\">Real-Time Protection</Data> \r\n  <Data Name=\"Process Name\">C:\\Windows\\explorer.exe</Data> \r\n  <Data Name=\"Detection User\">DESKTOP-AAABBBB\\User</Data> \r\n  <Data Name=\"Unused3\" /> \r\n  <Data Name=\"Path\">file:_D:\\New folder\\mal.exe</Data> \r\n  <Data Name=\"Origin ID\">1</Data> \r\n  <Data Name=\"Origin Name\">Local machine</Data> \r\n  <Data Name=\"Execution ID\">1</Data> \r\n  <Data Name=\"Execution Name\">Suspended</Data> \r\n  <Data Name=\"Type ID\">8</Data> \r\n  <Data Name=\"Type Name\">FastPath</Data> \r\n  <Data Name=\"Pre Execution Status\">0</Data> \r\n  <Data Name=\"Action ID\">9</Data> \r\n  <Data Name=\"Action Name\">Not Applicable</Data> \r\n  <Data Name=\"Unused4\" /> \r\n  <Data Name=\"Error Code\">0x00000000</Data> \r\n  <Data Name=\"Error Description\">The operation completed successfully.</Data> \r\n  <Data Name=\"Unused5\" /> \r\n  <Data Name=\"Post Clean Status\">0</Data> \r\n  <Data Name=\"Additional Actions ID\">0</Data> \r\n  <Data Name=\"Additional Actions String\">No additional actions required</Data> \r\n  <Data Name=\"Remediation User\" /> \r\n  <Data Name=\"Unused6\" /> \r\n  <Data Name=\"Security intelligence Version\">AV: 1.403.3482.0, AS: 1.403.3482.0, NIS: 1.403.3482.0</Data> \r\n  <Data Name=\"Engine Version\">AM: 1.1.23110.2, NIS: 1.1.23110.2</Data> \r\n </EventData>\r\n</Event>"
+
+expected:
+  class_uid: 2004
+  class_name: Detection Finding
+  category_uid: 2
+  activity_id: 1
+  type_uid: 200401
+  severity_id: 5
+  is_alert: true
+  time: 1707543909829
+  message: Trojan:Win32/Ymacco.AA4E
+  finding_info.uid: '{D9268072-4BD9-4784-A983-AB07A3D3DC18}'
+  finding_info.title: Trojan:Win32/Ymacco.AA4E
+  finding_info.desc: Malware Trojan:Win32/Ymacco.AA4E detected in D:\New folder\mal.exe
+  finding_info.types:
+  - Trojan
+  finding_info.first_seen_time: 1707543909829
+  finding_info.last_seen_time: 1707543909829
+  malware:
+  - name: Trojan:Win32/Ymacco.AA4E
+    uid: '2147757185'
+    classifications:
+    - Trojan
+    path: D:\New folder\mal.exe
+    classification_ids:
+    - 18
+  metadata.log_name: Windows Defender/Operational
+  metadata.log_provider: Microsoft
+  metadata.event_code: '1116'
+  metadata.uid: '40629'
+  metadata.product.name: Windows Defender
+  metadata.product.vendor_name: Microsoft
+  metadata.product.version: 4.18.23110.3

@@ -1,0 +1,57 @@
+# source: mappings/markdown/GitHub/v1.3.0/Github Audit Logs/Entity Management/samples/entity_management.raw
+# reference: /home/master/Documents/github/examples/mappings/markdown/GitHub/v1.3.0/Github Audit Logs/Entity Management/samples/entity_management.ocsf
+# reference issue: declares profiles datetime, host (fill them or drop the declaration)
+
+raw_sample: |
+  {
+    "external_id": "",
+    "action": "org.create",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "_document_id": "m-111111111111==",
+    "actor": "test_user",
+    "business": "acme-inc",
+    "org": "acme",
+    "external_identity_username": "",
+    "actor_ip": "1.1.1.1",
+    "@timestamp": 1729176166108,
+    "org_id": 11111,
+    "actor_location": {
+      "country_code": "US"
+    },
+    "actor_id": 51111,
+    "external_identity_nameid": "test_user@acme.com",
+    "business_id": 11,
+    "team": "Wiley Coyote"
+  }
+
+expected:
+  class_uid: 3004
+  class_name: Entity Management
+  category_uid: 3
+  activity_id: 1
+  type_uid: 300401
+  severity_id: 1
+  time: 1729176166108
+  src_endpoint.ip: 1.1.1.1
+  src_endpoint.location.country: US
+  actor.user:
+    name: test_user
+    uid: '51111'
+    type_id: 1
+    type: User
+    email_addr: test_user@acme.com
+    account:
+      type_id: 99
+      type: Other
+      name: acme
+      uid: '11111'
+  entity.name: acme
+  entity.uid: '11111'
+  entity.type: Organization
+  entity.type_id: 4
+  http_request.user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+    (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+  metadata.event_code: org.create
+  metadata.product.name: GitHub Audit Log
+  metadata.product.vendor_name: GitHub
+  metadata.uid: m-111111111111==
