@@ -77,4 +77,7 @@ expected:
   metadata.log_name: rdp
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-16T04:54:20.366021Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
   metadata.uid: CIuEvA4WtEAVJsMMbj

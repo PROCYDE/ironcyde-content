@@ -115,4 +115,7 @@ expected:
   metadata.log_name: smtp
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-16T01:45:13.466361Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
   metadata.uid: CeeTpA1FJhH0qqvUsb

@@ -69,10 +69,17 @@ raw_sample: |-
   The impersonation level field indicates the extent to which a process in the logon session can impersonate.
 
 expected:
+  metadata.original_time: 03/12/2021 10:48:14 AM
+  actor.process.name: services.exe
+  actor.user.type_id: 1
+  actor.user.type: User
+  user.type_id: 1
+  user.type: User
   class_uid: 3002
   category_uid: 3
   activity_id: 1
   status_id: 1
+  status: Success
   severity_id: 1
   dst_endpoint.hostname: win-dc-725.attackrange.local
   actor.user.name: WIN-DC-725$

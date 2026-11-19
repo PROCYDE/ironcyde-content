@@ -48,11 +48,14 @@ expected:
   type_uid: 300201
   severity_id: 1
   status_id: 1
+  status: Success
   time: 1726763566000
   src_endpoint.ip: 0.0.0.0
   actor.user.uid: e3644802-3061-7018-86c3-USERID
   actor.user.uid_alt: arn:aws:identitystore::123456789012:identitystore/d-9911111111
   actor.user.account.uid: '123456789012'
+  actor.user.account.type_id: 10
+  actor.user.account.type: AWS Account
   actor.user.credential_uid: da3f6703-d424-sasf-848d-b0f3384681d64
   actor.user.type_id: 1
   user.uid: e3644802-3061-7018-86c3-USERID
@@ -69,5 +72,8 @@ expected:
   metadata.product.name: CloudTrail
   metadata.product.vendor_name: AWS
   metadata.uid: 09dc33de-9ddb-4fae-b81b-92465dbf6b61
+  metadata.original_time: '2024-09-19T16:32:46Z'
+  metadata.tenant_uid: '123456789012'
+  timezone_offset: 0
   actor.user.type: IdentityCenterUser
   user.type: IdentityCenterUser

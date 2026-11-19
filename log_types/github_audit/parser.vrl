@@ -221,7 +221,20 @@ if (string(raw.referrer) ?? "") != "" {
   http.referrer = string(raw.referrer) ?? ""
 }
 if (string(raw.url) ?? "") != "" {
-  http.url = {"url_string": string(raw.url) ?? ""}
+  parsed_url = parse_url(string(raw.url) ?? "") ?? null
+  url_obj = {"url_string": string(raw.url) ?? ""}
+  if is_object(parsed_url) {
+    if (string(parsed_url.host) ?? "") != "" {
+      url_obj.hostname = string(parsed_url.host) ?? ""
+    }
+    if (string(parsed_url.path) ?? "") != "" {
+      url_obj.path = string(parsed_url.path) ?? ""
+    }
+    if (string(parsed_url.scheme) ?? "") != "" {
+      url_obj.scheme = string(parsed_url.scheme) ?? ""
+    }
+  }
+  http.url = url_obj
 }
 if (string(raw.user_agent) ?? "") != "" {
   http.user_agent = string(raw.user_agent) ?? ""
@@ -255,8 +268,16 @@ out = {
     "log_name": "GitHub audit log",
     "log_provider": "GitHub",
     "event_code": action,
+    "original_time": to_string(time_ms),
     "product": {"name": "GitHub Audit Log", "vendor_name": "GitHub"},
   },
+}
+if account_uid != "" {
+  out.metadata.tenant_uid = account_uid
+}
+if is_integer(raw_time) || is_float(raw_time) {
+  # @timestamp is epoch milliseconds in UTC.
+  out.timezone_offset = 0
 }
 if class_uid == 3002 {
   out.category_name = "Identity & Access Management"
@@ -329,6 +350,16 @@ if class_uid == 3002 {
     abort "GitHub API event without a valid actor IP"
   }
   out.api = {"operation": action, "service": {"name": "github"}}
+}
+# The repository is the affected resource for API and user-management events.
+repo_name = string(raw.repository) ?? ""
+repo_id = to_int(raw.repository_id) ?? 0
+if repo_name != "" && (class_uid == 6003 || class_uid == 3007) {
+  resource = {"name": repo_name}
+  if repo_id > 0 {
+    resource.uid = to_string(repo_id)
+  }
+  out.resources = [resource]
 }
 
 unmapped = {

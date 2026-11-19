@@ -166,6 +166,23 @@ connection = {
 if uid != "" {
   connection.uid = uid
 }
+protocol_num = 0
+protocol_l = downcase(protocol_name)
+if protocol_l == "tcp" {
+  protocol_num = 6
+} else if protocol_l == "udp" {
+  protocol_num = 17
+} else if protocol_l == "icmp" {
+  protocol_num = 1
+}
+if protocol_num > 0 {
+  connection.protocol_num = protocol_num
+}
+if is_ipv4(string(src.ip) ?? "") && is_ipv4(string(dst.ip) ?? "") {
+  connection.protocol_ver_id = 4
+} else if is_ipv6(string(src.ip) ?? "") && is_ipv6(string(dst.ip) ?? "") {
+  connection.protocol_ver_id = 6
+}
 
 out = {
   "class_uid": 4001,
@@ -188,6 +205,16 @@ out = {
     "event_code": code,
     "product": {"name": "Cisco ASA", "vendor_name": "Cisco"},
   },
+}
+if is_object(timestamp_match) {
+  out.metadata.original_time = string(timestamp_match.ts) ?? ""
+  # ASA syslog timestamps carry no zone; the parser reads them as UTC.
+  out.timezone_offset = 0
+}
+if status_id == 1 {
+  out.status = "Success"
+} else if status_id == 2 {
+  out.status = "Failure"
 }
 if status_id > 0 {
   out.status_id = status_id

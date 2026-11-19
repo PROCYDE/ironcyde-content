@@ -97,4 +97,7 @@ expected:
   metadata.event_code: security.threat.detected
   metadata.product.name: Okta System Log
   metadata.product.vendor_name: Okta
+  metadata.original_time: '2024-08-13T15:58:20.353Z'
+  timezone_offset: 0
+  status_code: Login Failures
   metadata.uid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a

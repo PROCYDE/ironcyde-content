@@ -119,4 +119,12 @@ expected:
   metadata.event_code: system.api_token.create
   metadata.product.name: Okta System Log
   metadata.product.vendor_name: Okta
+  resources:
+  - uid: 00phjos6i2N0LcrqO1d71
+    name: API token
+    type: Token
+  metadata.original_time: '2024-08-13T15:58:20.353Z'
+  timezone_offset: 0
+  status: Success
+  status_detail: Create API token
   metadata.uid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a

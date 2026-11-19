@@ -78,6 +78,16 @@ out = {
     "product": {"name": "Falco", "vendor_name": "Falcosecurity"},
   },
 }
+if (string(raw.time) ?? "") != "" {
+  out.metadata.original_time = string(raw.time) ?? ""
+}
+if is_timestamp(event_time) {
+  # Falco emits UTC timestamps.
+  out.timezone_offset = 0
+}
+if (string(raw.hostname) ?? "") != "" {
+  out.metadata.reporter = {"hostname": string(raw.hostname) ?? ""}
+}
 
 unmapped = {}
 if output != "" {

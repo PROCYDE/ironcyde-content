@@ -76,7 +76,7 @@ if name != "" {
 }
 account_id = string(identity.accountId) ?? ""
 if account_id != "" {
-  actor_user.account = {"uid": account_id}
+  actor_user.account = {"uid": account_id, "type_id": 10, "type": "AWS Account"}
 }
 credential = string(identity.accessKeyId) ?? ""
 if credential == "" {
@@ -88,7 +88,7 @@ if credential != "" {
 
 actor = {"user": actor_user}
 if (string(identity.invokedBy) ?? "") != "" {
-  actor.invoked_by = string(identity.invokedBy) ?? ""
+  actor.application = {"name": string(identity.invokedBy) ?? ""}
 }
 session = {}
 if (string(session_issuer.arn) ?? "") != "" {
@@ -100,6 +100,7 @@ if (string(session_issuer.principalId) ?? "") != "" {
 mfa = downcase(string(session_attrs.mfaAuthenticated) ?? "")
 if mfa != "" {
   session.is_mfa = mfa == "true"
+  actor.user.has_mfa = mfa == "true"
 }
 created = parse_timestamp(string(session_attrs.creationDate) ?? "", format: "%+") ?? null
 if is_timestamp(created) {
@@ -134,6 +135,9 @@ if contains(detail_l, "failure") || contains(detail_l, "failed") || contains(det
   status_id = 2
   severity_id = 2
 }
+status_caption = if status_id == 2 { "Failure" } else { "Success" }
+error_code = string(raw.errorCode) ?? ""
+error_message = string(raw.errorMessage) ?? ""
 
 # --- API activity --------------------------------------------------------
 
@@ -202,7 +206,7 @@ if recipient == "" {
   recipient = account_id
 }
 if recipient != "" {
-  cloud.account = {"uid": recipient}
+  cloud.account = {"uid": recipient, "type_id": 10, "type": "AWS Account"}
 }
 
 http = {}
@@ -227,6 +231,10 @@ metadata = {
 }
 if (string(raw.eventID) ?? "") != "" {
   metadata.uid = string(raw.eventID) ?? ""
+}
+metadata.original_time = string(raw.eventTime) ?? ""
+if recipient != "" {
+  metadata.tenant_uid = recipient
 }
 
 unmapped = {
@@ -269,11 +277,22 @@ out = {
   "time": time_ms,
   "severity_id": severity_id,
   "status_id": status_id,
+  "status": status_caption,
   "message": event_name,
   "actor": actor,
   "metadata": metadata,
 }
 out.cloud = cloud
+if is_timestamp(event_time) {
+  # eventTime is UTC; the parser normalizes it without a local offset.
+  out.timezone_offset = 0
+}
+if error_code != "" {
+  out.status_code = error_code
+}
+if error_message != "" {
+  out.status_detail = error_message
+}
 if length(keys(src)) > 0 {
   out.src_endpoint = src
 }

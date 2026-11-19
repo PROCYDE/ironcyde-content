@@ -51,6 +51,9 @@ expected:
   metadata.log_name: ssl
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-18T13:57:30.489454Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
   metadata.uid: CgwD6k3ViUYQLs49A4
   status_detail: certificate has expired
   tls.cipher: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256

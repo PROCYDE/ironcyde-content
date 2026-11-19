@@ -61,10 +61,13 @@ if src_ip == "" {
 
 code = to_int(response.code) ?? 0
 status_id = 0
+status_caption = ""
 if code >= 200 && code < 400 {
   status_id = 1
+  status_caption = "Success"
 } else if code >= 400 {
   status_id = 2
+  status_caption = "Failure"
 }
 
 actor_user = {}
@@ -122,6 +125,12 @@ if (string(object_ref.apiVersion) ?? "") != "" {
 if code > 0 {
   api.response = {"code": code}
 }
+if (string(response.reason) ?? "") != "" {
+  api.response.error = string(response.reason) ?? ""
+}
+if (string(response.message) ?? "") != "" {
+  api.response.error_message = string(response.message) ?? ""
+}
 
 http = {}
 if (string(raw.requestURI) ?? "") != "" {
@@ -133,6 +142,7 @@ if (string(raw.userAgent) ?? "") != "" {
 
 # EKS audit records carry the account in the authenticator ARN.
 cloud = {"provider": "AWS"}
+tenant_uid = ""
 arn = ""
 if is_array(extra.arn) {
   arn = string(get(array!(extra.arn), [0]) ?? "") ?? ""
@@ -142,6 +152,7 @@ if length(arn_parts) > 4 {
   account = string(get(arn_parts, [4]) ?? "") ?? ""
   if account != "" {
     cloud.account = {"uid": account}
+    tenant_uid = account
   }
 }
 
@@ -160,6 +171,7 @@ out = {
   "time": time_ms,
   "severity_id": 1,
   "status_id": status_id,
+  "status": status_caption,
   "message": message,
   "actor": actor,
   "api": api,
@@ -172,12 +184,26 @@ out = {
     "log_provider": "AWS",
     "log_level": string(raw.level) ?? "",
     "event_code": verb,
+    "original_time": string(raw.requestReceivedTimestamp) ?? "",
     "product": {
       "name": "Amazon EKS",
       "vendor_name": "AWS",
       "feature": {"name": "Elastic Kubernetes Service"},
     },
   },
+}
+if tenant_uid != "" {
+  out.metadata.tenant_uid = tenant_uid
+}
+if code > 0 {
+  out.status_code = to_string(code)
+}
+if (string(object_ref.name) ?? "") != "" {
+  out.resources = [{"uid": string(object_ref.name) ?? ""}]
+}
+if is_timestamp(event_time) {
+  # requestReceivedTimestamp is UTC.
+  out.timezone_offset = 0
 }
 if length(keys(http)) > 0 {
   out.http_request = http

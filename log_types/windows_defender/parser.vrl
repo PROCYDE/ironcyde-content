@@ -199,6 +199,23 @@ metadata = {
 if record_id != "" {
   metadata.uid = record_id
 }
+original_time = detection_time_raw
+if original_time == "" {
+  original_time = system_time
+}
+if original_time != "" {
+  metadata.original_time = original_time
+}
+status_code_raw = string(get(fields, ["Status Code"]) ?? "") ?? ""
+resources = []
+if file_path != "" {
+  basename = file_path
+  if contains(basename, "\\") {
+    parts = split(basename, "\\")
+    basename = string(get(parts, [length(parts) - 1]) ?? "") ?? ""
+  }
+  resources = [{"uid": file_path, "name": basename, "type": "File"}]
+}
 
 out = {
   "class_uid": 2004,
@@ -215,6 +232,41 @@ out = {
   "finding_info": finding_info,
   "malware": [malware],
   "metadata": metadata,
+}
+if severity_raw > 0 {
+  mal_sev = 0
+  if severity_raw == 1 {
+    mal_sev = 2
+  } else if severity_raw == 2 {
+    mal_sev = 3
+  } else if severity_raw == 4 {
+    mal_sev = 4
+  } else if severity_raw >= 5 {
+    mal_sev = 5
+  }
+  if mal_sev > 0 {
+    out.malware[0].severity_id = mal_sev
+  }
+}
+if product_name != "" {
+  out.malware[0].provider = product_name
+}
+if length(resources) > 0 {
+  out.resources = resources
+}
+if status_code_raw != "" {
+  out.status_code = status_code_raw
+}
+if status_description != "" {
+  out.status_detail = status_description
+}
+if computer != "" {
+  out.device = {"hostname": computer, "type_id": 0, "os": {"name": "Windows", "type": "Windows", "type_id": 100}}
+  out.metadata.profiles = ["host"]
+}
+if is_timestamp(detection_time) || is_timestamp(system_timestamp) {
+  # Defender timestamps are UTC (trailing Z).
+  out.timezone_offset = 0
 }
 unmapped = {
   "computer": computer,

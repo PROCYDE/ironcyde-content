@@ -44,6 +44,9 @@ expected:
   metadata.log_name: ftp
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-16T02:50:22.108428Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
   metadata.uid: C7Uupd44YYLGqNO5Qf
   status_code: '200'
   status_detail: PORT command successful

@@ -101,3 +101,7 @@ expected:
   message: Unlock account
   metadata.event_code: user.account.unlock
   metadata.product.name: Okta System Log
+  metadata.original_time: '2023-09-30T10:42:16.000Z'
+  timezone_offset: 0
+  status: Success
+  status_detail: Unlock account

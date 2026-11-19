@@ -51,4 +51,7 @@ expected:
   metadata.log_name: x509
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-11-19T16:57:42.534728Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor.aod-20241107.training.corelight.io
   tls.version: Unknown

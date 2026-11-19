@@ -63,6 +63,31 @@ if uid != "" {
 }
 if (string(raw._system_name) ?? "") != "" {
   metadata.log_source = string(raw._system_name) ?? ""
+  metadata.reporter = {"hostname": string(raw._system_name) ?? ""}
+}
+native_time = string(raw.ts) ?? ""
+if native_time == "" {
+  native_time = string(raw._write_ts) ?? ""
+}
+if native_time != "" {
+  metadata.original_time = native_time
+}
+
+# Protocol number and IP version for the connection.
+proto_word = downcase(string(raw.proto) ?? "")
+protocol_num = 0
+if proto_word == "tcp" {
+  protocol_num = 6
+} else if proto_word == "udp" {
+  protocol_num = 17
+} else if proto_word == "icmp" {
+  protocol_num = 1
+}
+protocol_ver_id = 0
+if is_ipv4(orig_ip) && is_ipv4(resp_ip) {
+  protocol_ver_id = 4
+} else if is_ipv6(orig_ip) && is_ipv6(resp_ip) {
+  protocol_ver_id = 6
 }
 
 class_uid = 4001
@@ -93,6 +118,22 @@ if path == "conn" {
   app_name = string(raw.service) ?? ""
   if app_name == "" && is_array(raw.app) && length(array!(raw.app)) > 0 {
     app_name = string(get(array!(raw.app), [0]) ?? "") ?? ""
+  }
+  if app_name != "" {
+    dst.svc_name = app_name
+  }
+  # Hostnames observed for the endpoints, when the record carries them.
+  if is_array(raw."id.orig_h_name.vals") && length(array!(raw."id.orig_h_name.vals")) > 0 {
+    orig_name = string(get(array!(raw."id.orig_h_name.vals"), [0]) ?? "") ?? ""
+    if orig_name != "" {
+      src.hostname = orig_name
+    }
+  }
+  if is_array(raw."id.resp_h_name.vals") && length(array!(raw."id.resp_h_name.vals")) > 0 {
+    resp_name = string(get(array!(raw."id.resp_h_name.vals"), [0]) ?? "") ?? ""
+    if resp_name != "" {
+      dst.hostname = resp_name
+    }
   }
   duration_ms = 0
   if is_float(raw.duration) || is_integer(raw.duration) {
@@ -228,11 +269,25 @@ if path == "conn" {
     request.url = url
   }
   if is_array(raw.client_headers) {
+    header_list = []
     for_each(array!(raw.client_headers)) -> |_i, header| {
       header_text = string(header) ?? ""
       if starts_with(downcase(header_text), "x-forwarded-for:") {
         request.x_forwarded_for = [strip_whitespace(slice!(header_text, 16))]
       }
+      header_name = ""
+      header_value = ""
+      parts = split(header_text, ":")
+      if length(parts) > 1 {
+        header_name = strip_whitespace(string(get(parts, [0]) ?? "") ?? "")
+        header_value = strip_whitespace(join(slice!(parts, 1), ":"))
+      }
+      if header_name != "" {
+        header_list = push(header_list, {"name": header_name, "value": header_value})
+      }
+    }
+    if length(header_list) > 0 {
+      request.http_headers = header_list
     }
   }
   response = {
@@ -551,6 +606,25 @@ if path == "conn" {
   }
 } else {
   abort "unsupported Zeek log path: " + path
+}
+
+# Cross-cutting connection enrichment for records that carry a connection.
+if exists(out.connection_info) {
+  conn_obj = object!(out.connection_info)
+  if protocol_num > 0 {
+    conn_obj.protocol_num = protocol_num
+  }
+  if protocol_ver_id > 0 {
+    conn_obj.protocol_ver_id = protocol_ver_id
+  }
+  if uid != "" {
+    conn_obj.uid = uid
+  }
+  out.connection_info = conn_obj
+}
+if is_timestamp(ts) || is_timestamp(write_ts) {
+  # Zeek ts is epoch seconds in UTC.
+  out.timezone_offset = 0
 }
 
 . = out

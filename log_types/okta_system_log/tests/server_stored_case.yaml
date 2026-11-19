@@ -18,3 +18,8 @@ expected:
   service.name: okta
   message: User login failed
   metadata.event_code: user.session.start
+  metadata.original_time: '2026-10-15T09:44:48.000Z'
+  timezone_offset: 0
+  status: Failure
+  status_code: INVALID_CREDENTIALS
+  status_detail: User login failed

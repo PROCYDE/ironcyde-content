@@ -178,9 +178,14 @@ if status != "" {
   }
 }
 if is_array(compliance_raw.StatusReasons) && length(array!(compliance_raw.StatusReasons)) > 0 {
-  reason = get(array!(compliance_raw.StatusReasons), [0]) ?? null
-  if is_object(reason) && (string(reason.Description) ?? "") != "" {
-    compliance.status_detail = string(reason.Description) ?? ""
+  reasons = []
+  for_each(array!(compliance_raw.StatusReasons)) -> |_i, item| {
+    if is_object(item) && (string(item.Description) ?? "") != "" {
+      reasons = push(reasons, string(item.Description) ?? "")
+    }
+  }
+  if length(reasons) > 0 {
+    compliance.status_details = reasons
   }
 }
 
@@ -291,13 +296,44 @@ metadata = {
 if finding_uid != "" {
   metadata.uid = finding_uid
 }
+original_time = string(raw.ProcessedAt) ?? ""
+if original_time == "" {
+  original_time = string(raw.UpdatedAt) ?? ""
+}
+if original_time == "" {
+  original_time = string(raw.CreatedAt) ?? ""
+}
+if original_time != "" {
+  metadata.original_time = original_time
+}
+if account != "" {
+  metadata.tenant_uid = account
+}
 
 cloud = {"provider": "AWS"}
 if region != "" {
   cloud.region = region
 }
 if account != "" {
-  cloud.account = {"uid": account}
+  cloud.account = {"uid": account, "type_id": 10, "type": "AWS Account"}
+}
+
+# Workflow state of the ASFF snapshot, mapped to the OCSF finding status enum.
+workflow = upcase(string(raw.WorkflowState) ?? "")
+workflow_status_id = 0
+workflow_status = ""
+if workflow == "NEW" {
+  workflow_status_id = 1
+  workflow_status = "New"
+} else if workflow == "NOTIFIED" {
+  workflow_status_id = 2
+  workflow_status = "In Progress"
+} else if workflow == "SUPPRESSED" {
+  workflow_status_id = 3
+  workflow_status = "Suppressed"
+} else if workflow == "RESOLVED" {
+  workflow_status_id = 4
+  workflow_status = "Resolved"
 }
 
 class_name = "Detection Finding"
@@ -321,6 +357,13 @@ out = {
   "finding_info": finding_info,
   "cloud": cloud,
   "metadata": metadata,
+}
+if workflow_status_id > 0 {
+  out.status_id = workflow_status_id
+  out.status = workflow_status
+}
+if (string(raw.RecordState) ?? "") != "" {
+  out.status_code = string(raw.RecordState) ?? ""
 }
 if class_uid == 2002 {
   out.vulnerabilities = vulnerabilities

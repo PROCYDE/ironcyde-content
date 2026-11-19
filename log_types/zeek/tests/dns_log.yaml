@@ -67,4 +67,10 @@ expected:
   metadata.log_name: dns
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-18T14:30:29.145864Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
+  connection_info.protocol_num: 17
+  connection_info.uid: CSTYRyVNejbcG9lQf
+  connection_info.protocol_ver_id: 4
   metadata.uid: CSTYRyVNejbcG9lQf

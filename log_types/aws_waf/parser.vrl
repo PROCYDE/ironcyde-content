@@ -94,6 +94,47 @@ if (string(get(headers, ["user-agent"]) ?? "") ?? "") != "" {
 if length(keys(url)) > 0 {
   http_request.url = url
 }
+# The OCSF header structure is a name/value object array.
+http_headers = []
+if is_array(request.headers) {
+  for_each(array!(request.headers)) -> |_index, item| {
+    if is_object(item) {
+      hname = string(item.name) ?? ""
+      hvalue = string(item.value) ?? ""
+      if hname != "" {
+        http_headers = push(http_headers, {"name": hname, "value": hvalue})
+      }
+    }
+  }
+}
+if length(http_headers) > 0 {
+  http_request.http_headers = http_headers
+}
+content_length = string(get(headers, ["content-length"]) ?? "") ?? ""
+content_length_int = to_int(content_length) ?? null
+if content_length != "" && is_integer(content_length_int) {
+  http_request.length = content_length_int
+}
+# The scheme selects the default port.
+if (string(request.scheme) ?? "") != "" {
+  if downcase(string(request.scheme) ?? "") == "https" {
+    url.port = 443
+  } else if downcase(string(request.scheme) ?? "") == "http" {
+    url.port = 80
+  }
+  if url.port != null && length(keys(url)) > 0 {
+    http_request.url = url
+  }
+}
+# Build url_string from the parts the record actually carries.
+if (string(request.scheme) ?? "") != "" && (string(request.host) ?? "") != "" && (string(request.uri) ?? "") != "" {
+  url_string = (string(request.scheme) ?? "") + "://" + (string(request.host) ?? "") + (string(request.uri) ?? "")
+  if (string(request.args) ?? "") != "" {
+    url_string = url_string + "?" + (string(request.args) ?? "")
+  }
+  url.url_string = url_string
+  http_request.url = url
+}
 xforwarded = []
 if (string(get(headers, ["x-forwarded-for"]) ?? "") ?? "") != "" {
   xforwarded = [string(get(headers, ["x-forwarded-for"]) ?? "") ?? ""]
@@ -139,6 +180,7 @@ if is_array(raw.terminatingRuleMatchDetails) && length(array!(raw.terminatingRul
 
 # AWS web ACL ARN: arn:aws:wafv2:<region>:<account>:...
 cloud = {"provider": "AWS"}
+tenant_uid = ""
 arn_parts = split(string(raw.webaclId) ?? "", ":")
 if length(arn_parts) > 4 {
   region = string(get(arn_parts, [3]) ?? "") ?? ""
@@ -147,7 +189,8 @@ if length(arn_parts) > 4 {
     cloud.region = region
   }
   if account != "" {
-    cloud.account = {"uid": account}
+    cloud.account = {"uid": account, "type_id": 10, "type": "AWS Account"}
+    tenant_uid = account
   }
 }
 
@@ -205,6 +248,23 @@ if length(keys(http_request)) > 0 {
 }
 if length(keys(rule)) > 0 {
   out.firewall_rule = rule
+  if is_array(raw.rateBasedRuleList) && length(array!(raw.rateBasedRuleList)) > 0 {
+    rate_rule = get(array!(raw.rateBasedRuleList), [0]) ?? null
+    if is_object(rate_rule) && is_integer(rate_rule.maxRateAllowed) {
+      out.firewall_rule.rate_limit = rate_rule.maxRateAllowed
+    }
+  }
+}
+if is_integer(raw.responseCodeSent) {
+  out.http_response = {"code": raw.responseCodeSent}
+}
+if tenant_uid != "" {
+  out.metadata.tenant_uid = tenant_uid
+}
+if is_integer(raw.timestamp) || is_float(raw.timestamp) {
+  out.metadata.original_time = to_string!(raw.timestamp)
+  # The WAF timestamp is epoch milliseconds in UTC.
+  out.timezone_offset = 0
 }
 if length(ja4) > 0 {
   out.ja4_fingerprint_list = ja4

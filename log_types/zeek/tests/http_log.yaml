@@ -109,6 +109,43 @@ expected:
   http_request.user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
     (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36
   http_request.version: '1.1'
+  http_request.http_headers:
+  - name: HOST
+    value: lifeisnetwork.com
+  - name: CONNECTION
+    value: Keep-Alive
+  - name: ACCEPT-ENCODING
+    value: gzip
+  - name: CF-IPCOUNTRY
+    value: US
+  - name: X-FORWARDED-FOR
+    value: 20.115.4.12
+  - name: CF-RAY
+    value: 6bc5aa001b3f6fbb-IAD
+  - name: CONTENT-LENGTH
+    value: "28"
+  - name: X-FORWARDED-PROTO
+    value: https
+  - name: CF-VISITOR
+    value: "{\"scheme\":\"https\"}"
+  - name: ACCEPT
+    value: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8
+  - name: USER-AGENT
+    value: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36
+  - name: ACCEPT-LANGUAGE
+    value: en-US,en;q=0.9,fr;q=0.8
+  - name: CACHE-CONTROL
+    value: max-age=0
+  - name: REFERER
+    value: anonymousfox.co
+  - name: UPGRADE-INSECURE-REQUESTS
+    value: "1"
+  - name: CONTENT-TYPE
+    value: application/x-www-form-urlencoded
+  - name: CF-CONNECTING-IP
+    value: 20.115.4.12
+  - name: CDN-LOOP
+    value: cloudflare
   http_request.x_forwarded_for:
   - 20.115.4.12
   http_response.code: 404
@@ -118,5 +155,8 @@ expected:
   metadata.log_name: http
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-16T02:43:57.734946Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
   metadata.uid: CbNapWwSGFIOYRBzk
   type_uid: 400206

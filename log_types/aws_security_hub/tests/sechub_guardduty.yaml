@@ -91,7 +91,12 @@ expected:
   category_uid: 2
   activity_id: 1
   severity_id: 2
+  status_id: 1
+  status: New
+  status_code: ACTIVE
   cloud.account.uid: '111111111111'
+  cloud.account.type_id: 10
+  cloud.account.type: AWS Account
   cloud.provider: AWS
   cloud.region: us-east-2
   finding_info.desc: AWS CloudTrail trail arn:aws:cloudtrail:us-east-2:111111111111:trail/delete-me
@@ -109,3 +114,5 @@ expected:
   metadata.product.name: GuardDuty
   metadata.product.uid: arn:aws:securityhub:us-east-2::product/aws/guardduty
   metadata.product.vendor_name: Amazon
+  metadata.original_time: '2023-09-19T15:05:22.487Z'
+  metadata.tenant_uid: '111111111111'

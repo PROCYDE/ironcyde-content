@@ -100,6 +100,11 @@ connection = {
   "direction": direction,
   "tcp_flags": tcp_flags,
 }
+if is_ipv4(sip) && is_ipv4(dip) {
+  connection.protocol_ver_id = 4
+} else if is_ipv6(sip) && is_ipv6(dip) {
+  connection.protocol_ver_id = 6
+}
 
 out = {
   "class_uid": 4001,
@@ -122,6 +127,7 @@ out = {
     "version": "1.9.0",
     "log_name": "SiLK flow",
     "log_provider": "SiLK",
+    "original_time": start_raw,
     "product": {
       "name": "SiLK",
       "vendor_name": "CERT/NetSA at Carnegie Mellon University - Software Engineering Institute",
@@ -142,6 +148,10 @@ out = {
 }
 if is_timestamp(end) {
   out.end_time = to_unix_timestamp(timestamp!(end), unit: "milliseconds")
+}
+if is_timestamp(start) {
+  # SiLK export timestamps are UTC.
+  out.timezone_offset = 0
 }
 if application != "" {
   out.app_name = application

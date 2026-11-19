@@ -14,6 +14,8 @@ expected:
   type_uid: 400106
   severity_id: 1
   status_id: 1
+  status: Success
+  status_code: OK
   time: 1752247584000
   start_time: 1752247584000
   end_time: 1752247603000
@@ -29,6 +31,11 @@ expected:
   disposition: Allowed
   disposition_id: 1
   cloud.account.uid: '123456789012'
+  cloud.account.type_id: 10
+  cloud.account.type: AWS Account
+  metadata.tenant_uid: '123456789012'
+  metadata.original_time: '1752247584'
+  timezone_offset: 0
   cloud.provider: AWS
   cloud.region: us-east-2
   cloud.zone: use2-az2

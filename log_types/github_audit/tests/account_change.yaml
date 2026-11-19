@@ -64,3 +64,9 @@ expected:
   metadata.event_code: user.create
   metadata.product.name: GitHub Audit Log
   metadata.product.vendor_name: GitHub
+  metadata.original_time: '1727681685875'
+  metadata.tenant_uid: '1'
+  timezone_offset: 0
+  http_request.url.hostname: github-test.com
+  http_request.url.path: /enterprises/examplecompany/admins
+  http_request.url.scheme: https

@@ -87,6 +87,25 @@ metadata = {
 if record_number != "" {
   metadata.uid = record_number
 }
+if is_object(timestamp_match) {
+  metadata.original_time = string(timestamp_match.ts) ?? ""
+}
+status_caption = if status_id == 2 { "Failure" } else { "Success" }
+
+# The reporting host and the remote endpoint of a network logon.
+src_ip = string(get(flat, ["network_information.source_network_address"]) ?? "") ?? ""
+src_port_raw = string(get(flat, ["network_information.source_port"]) ?? "") ?? ""
+src_endpoint = {}
+if (is_ipv4(src_ip) || is_ipv6(src_ip)) && src_ip != "-" && src_ip != "::1" {
+  src_endpoint.ip = src_ip
+  src_port = to_int(src_port_raw) ?? 0
+  if src_port > 0 {
+    src_endpoint.port = src_port
+  }
+}
+if length(keys(src_endpoint)) > 0 {
+  out.src_endpoint = src_endpoint
+}
 
 # --- actor ---------------------------------------------------------------
 
@@ -100,6 +119,8 @@ actor_domain = string(get(flat, [actor_section + ".account_domain"]) ?? "") ?? "
 actor_logon = string(get(flat, [actor_section + ".logon_id"]) ?? "") ?? ""
 
 actor_user = {}
+actor_user.type_id = 1
+actor_user.type = "User"
 if actor_name != "" && actor_name != "-" {
   actor_user.name = actor_name
 }
@@ -148,6 +169,7 @@ if actor_path != "" && actor_path != "-" && contains(actor_path, "\\") {
 }
 if is_object(actor_file) {
   actor_process.file = actor_file
+  actor_process.name = actor_file.name
 }
 if length(keys(actor_process)) > 0 {
   actor.process = actor_process
@@ -169,6 +191,8 @@ if event_code == "4624" || event_code == "4625" {
   user = {}
   if user_name != "" && user_name != "-" {
     user.name = user_name
+    user.type_id = 1
+    user.type = "User"
   }
   if user_security != "" && user_security != "-" {
     user.uid = user_security
@@ -248,6 +272,7 @@ if event_code == "4624" || event_code == "4625" {
     "time": time_ms,
     "severity_id": 1,
     "status_id": status_id,
+    "status": status_caption,
     "message": message,
     "actor": actor,
     "user": user,
@@ -256,6 +281,9 @@ if event_code == "4624" || event_code == "4625" {
     "metadata": metadata,
   }
   out.metadata.profiles = ["host"]
+  if length(keys(src_endpoint)) > 0 {
+    out.src_endpoint = src_endpoint
+  }
   if logon_type_id > 0 {
     out.logon_type_id = logon_type_id
     out.logon_type = logon_type
@@ -271,6 +299,10 @@ if event_code == "4624" || event_code == "4625" {
     reason = string(get(flat, ["failure_information.failure_reason"]) ?? "") ?? ""
     if reason != "" {
       out.status_detail = reason
+    }
+    status_hex = string(get(flat, ["failure_information.status"]) ?? "") ?? ""
+    if status_hex != "" && status_hex != "-" {
+      out.status_code = status_hex
     }
   }
 } else if event_code == "4661" || event_code == "4663" || event_code == "4673" {
@@ -325,6 +357,7 @@ if event_code == "4624" || event_code == "4625" {
     "time": time_ms,
     "severity_id": 1,
     "status_id": status_id,
+    "status": status_caption,
     "message": message,
     "actor": actor,
     "api": api,
@@ -383,6 +416,7 @@ if event_code == "4624" || event_code == "4625" {
     "time": time_ms,
     "severity_id": 1,
     "status_id": status_id,
+    "status": status_caption,
     "message": message,
     "actor": actor,
     "process": process,

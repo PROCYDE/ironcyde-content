@@ -9,6 +9,7 @@ expected:
   category_uid: 4
   activity_id: 1
   status_id: 1
+  status: Success
   severity_id: 1
   src_endpoint.ip: 100.66.80.32
   dst_endpoint.ip: 172.31.98.44
@@ -22,6 +23,8 @@ expected:
   connection_info.uid: '11758'
   dst_endpoint.interface_name: inside
   metadata.event_code: '302015'
+  metadata.original_time: 'Oct 10 2018 12:34:56'
+  timezone_offset: 0
   metadata.product.name: Cisco ASA
   metadata.product.vendor_name: Cisco
   src_endpoint.interface_name: outside

@@ -41,3 +41,6 @@ expected:
   message: Linux Kernel Module Injection Detected
   metadata.product.name: Falco
   metadata.product.vendor_name: Falcosecurity
+  metadata.original_time: '2023-01-03T15:11:39.558068644Z'
+  metadata.reporter.hostname: host0.local
+  timezone_offset: 0

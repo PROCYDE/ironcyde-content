@@ -24,9 +24,12 @@ expected:
   connection_info.protocol_num: 6
   connection_info.protocol_name: tcp
   connection_info.tcp_flags: 19
+  connection_info.protocol_ver_id: 4
   traffic.bytes: 344
   traffic.packets: 8
   metadata.product.name: SiLK
   metadata.product.vendor_name: CERT/NetSA at Carnegie Mellon University - Software
     Engineering Institute
   metadata.product.feature.name: Network Flow Data
+  metadata.original_time: '2015/06/17T00:00:00.083'
+  timezone_offset: 0

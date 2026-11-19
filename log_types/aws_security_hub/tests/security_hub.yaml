@@ -200,8 +200,13 @@ expected:
   activity_id: 2
   type_uid: 200302
   severity_id: 1
+  status_id: 1
+  status: New
+  status_code: ACTIVE
   time: 1659636559100
   cloud.account.uid: '522536594833'
+  cloud.account.type_id: 10
+  cloud.account.type: AWS Account
   cloud.provider: AWS
   cloud.region: us-east-1
   compliance.control: EC2.19
@@ -209,7 +214,8 @@ expected:
   - PCI1.2
   compliance.status: PASSED
   compliance.status_id: 1
-  compliance.status_detail: CloudWatch alarms do not exist in the account
+  compliance.status_details:
+  - CloudWatch alarms do not exist in the account
   finding_info.uid: test
   finding_info.title: EC2.19 Security groups should not allow unrestricted access to
     ports with high risk
@@ -229,3 +235,5 @@ expected:
   metadata.product.name: Security Hub
   metadata.product.uid: arn:aws:securityhub:us-east-1::product/aws/securityhub
   metadata.product.vendor_name: AWS
+  metadata.original_time: '2022-08-04T18:09:19.100Z'
+  metadata.tenant_uid: '522536594833'

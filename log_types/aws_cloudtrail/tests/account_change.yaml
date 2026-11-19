@@ -62,9 +62,14 @@ expected:
   actor.user.uid: arn:aws:sts::112233445566:assumed-role/AWSServiceRole/scheduler
   actor.user.uid_alt: AROA2W7SOKHEXAMPLE:scheduler
   actor.user.account.uid: '112233445566'
+  actor.user.account.type_id: 10
+  actor.user.account.type: AWS Account
+  actor.user.has_mfa: false
   actor.user.credential_uid: ASIA2W7SOKHEXAMPLE
   actor.user.type_id: 99
-  actor.invoked_by: ecs.amazonaws.com
+  actor.application.name: ecs.amazonaws.com
+  status: Success
+  timezone_offset: 0
   actor.session.is_mfa: false
   actor.session.issuer: arn:aws:iam::112233445566:role/aws-service-role/Admin
   actor.session.uid: AROA2W7SOKHEXAMPLE
@@ -75,6 +80,8 @@ expected:
     targetGroupArn: arn:aws:elasticloadbalancing:us-east-2:112233445566:targetgroup/alpha-EXAMPLE
   api.version: '2015-12-01'
   cloud.account.uid: '112233445566'
+  cloud.account.type_id: 10
+  cloud.account.type: AWS Account
   cloud.provider: AWS
   cloud.region: us-east-2
   http_request.user_agent: ecs.amazonaws.com
@@ -85,4 +92,6 @@ expected:
   metadata.product.name: CloudTrail
   metadata.product.vendor_name: AWS
   metadata.uid: 1f28a3f1-106d-4f56-b4ab-a4a18697d7d8
+  metadata.original_time: '2025-07-18T15:02:39Z'
+  metadata.tenant_uid: '112233445566'
   actor.user.type: AssumedRole

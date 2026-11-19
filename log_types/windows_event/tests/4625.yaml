@@ -66,10 +66,16 @@ raw_sample: |-
   	- Key length indicates the length of the generated session key. This will be 0 if no session key was requested.
 
 expected:
+  metadata.original_time: 10/08/2020 12:41:47 PM
+  actor.user.type_id: 1
+  actor.user.type: User
+  user.type_id: 1
+  user.type: User
   class_uid: 3002
   category_uid: 3
   activity_id: 1
   status_id: 2
+  status: Failure
   severity_id: 1
   dst_endpoint.hostname: EC2AMAZ-6KJ2BPP
   user.name: Administrator

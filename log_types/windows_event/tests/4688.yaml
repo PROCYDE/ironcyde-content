@@ -46,10 +46,15 @@ raw_sample: |-
   Type 3 is a limited token with administrative privileges removed and administrative groups disabled.  The limited token is used when User Account Control is enabled, the application does not require administrative privilege, and the user does not choose to start the program using Run as administrator.
 
 expected:
+  metadata.original_time: 03/12/2021 10:48:14 AM
+  actor.process.name: cmd.exe
+  actor.user.type_id: 1
+  actor.user.type: User
   class_uid: 1007
   category_uid: 1
   activity_id: 1
   status_id: 1
+  status: Success
   severity_id: 1
   actor.user.name: Administrator
   actor.user.uid: ATTACKRANGE\Administrator

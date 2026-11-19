@@ -93,6 +93,10 @@ if start_ms > 0 {
 } else if last_ms > 0 {
   time_ms = last_ms
 }
+original_time = ""
+if start_ms > 0 {
+  original_time = to_string(start_ms)
+}
 
 finding_uid = to_string(offense_id)
 finding_info = {
@@ -184,6 +188,11 @@ out = {
     "event_code": "qradar.offense",
     "product": {"name": "QRadar SIEM", "vendor_name": "IBM"},
   },
+}
+if original_time != "" {
+  out.metadata.original_time = original_time
+  # start_time is epoch milliseconds in UTC.
+  out.timezone_offset = 0
 }
 status_raw = upcase(string(raw.status) ?? "")
 if status_raw != "" {

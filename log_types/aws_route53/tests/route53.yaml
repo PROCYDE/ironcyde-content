@@ -49,14 +49,21 @@ expected:
   rcode: NoError
   rcode_id: 0
   connection_info.protocol_name: UDP
+  connection_info.protocol_num: 17
+  connection_info.protocol_ver_id: 4
   cloud.provider: AWS
   cloud.region: us-east-1
   cloud.account.uid: '123456789012'
+  cloud.account.type_id: 10
+  cloud.account.type: AWS Account
+  timezone_offset: 0
   metadata.profiles:
   - cloud
   metadata.product.name: Route 53
   metadata.product.vendor_name: AWS
   metadata.product.feature.name: Resolver Query Logs
+  metadata.original_time: '2022-10-13T21:02:36Z'
+  metadata.tenant_uid: '123456789012'
   answers:
   - rdata: 127.0.0.62
     type: A

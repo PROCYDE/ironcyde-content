@@ -38,12 +38,15 @@ expected:
   type_uid: 600302
   severity_id: 1
   status_id: 1
+  status: Success
   time: 1695334972000
   src_endpoint.ip: 205.8.181.128
   actor.user.name: Level6
   actor.user.uid: arn:aws:iam::1111111111111:user/Level6
   actor.user.uid_alt: AIDADO2GQEXAMPLE
   actor.user.account.uid: '1111111111111'
+  actor.user.account.type_id: 10
+  actor.user.account.type: AWS Account
   actor.user.credential_uid: AKIA3Z2XBVEXAMPLE
   actor.user.type_id: 1
   api.operation: DescribeDirectConnectGateways
@@ -62,4 +65,7 @@ expected:
   metadata.product.name: CloudTrail
   metadata.product.vendor_name: AWS
   metadata.uid: 71c88be9-ea5c-43c7-8c82-example
+  metadata.original_time: '2023-09-21T22:22:52Z'
+  metadata.tenant_uid: '1111111111111'
+  timezone_offset: 0
   actor.user.type: IAMUser

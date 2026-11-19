@@ -99,3 +99,7 @@ expected:
   src_endpoint.ip: 10.0.0.1
   message: Delete API token
   metadata.event_code: system.api_token.delete
+  metadata.original_time: '2024-08-13T15:58:20.353Z'
+  timezone_offset: 0
+  status: Success
+  status_detail: Delete API token

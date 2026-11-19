@@ -125,7 +125,12 @@ expected:
   category_uid: 2
   activity_id: 2
   severity_id: 3
+  status_id: 1
+  status: New
+  status_code: ACTIVE
   cloud.account.uid: '111111111111'
+  cloud.account.type_id: 10
+  cloud.account.type: AWS Account
   cloud.provider: AWS
   cloud.region: us-east-2
   finding_info.desc: 'Issue summary: The AES-XTS cipher decryption implementation for
@@ -170,6 +175,8 @@ expected:
   metadata.product.name: Inspector
   metadata.product.uid: arn:aws:securityhub:us-east-2::product/aws/inspector
   metadata.product.vendor_name: Amazon
+  metadata.original_time: '2024-01-26T22:59:56.923Z'
+  metadata.tenant_uid: '111111111111'
   resource.cloud_partition: aws
   resource.data:
     AwsEcrContainerImage:

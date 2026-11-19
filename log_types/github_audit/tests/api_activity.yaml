@@ -61,4 +61,10 @@ expected:
   metadata.event_code: git.push
   metadata.product.name: GitHub Audit Log
   metadata.product.vendor_name: GitHub
+  resources:
+  - name: acme/dynamite
+    uid: '383067938'
+  metadata.original_time: '1729176166108'
+  metadata.tenant_uid: '11111'
+  timezone_offset: 0
   metadata.uid: m-111111111111==

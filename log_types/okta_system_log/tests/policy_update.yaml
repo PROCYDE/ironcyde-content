@@ -102,3 +102,7 @@ expected:
   entity.type_id: 5
   message: Update policy
   metadata.event_code: policy.lifecycle.update
+  metadata.original_time: '2024-08-13T15:58:20.353Z'
+  timezone_offset: 0
+  status: Success
+  status_detail: Update policy

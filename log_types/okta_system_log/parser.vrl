@@ -64,6 +64,7 @@ if outcome == "SUCCESS" {
 } else if outcome != "" {
   status_id = 99
 }
+outcome_label = string(outcome_obj.result) ?? ""
 
 sev = upcase(string(raw.severity) ?? "")
 severity_id = 0
@@ -349,6 +350,9 @@ if event_uid != "" {
 if txn_id != "" {
   metadata.correlation_uid = txn_id
 }
+if (string(raw.published) ?? "") != "" {
+  metadata.original_time = string(raw.published) ?? ""
+}
 
 # --- output ---------------------------------------------------------------
 
@@ -364,9 +368,29 @@ out = {
   "message": display,
   "metadata": metadata,
 }
-# A finding is created successfully even when the observed request was denied.
+# A finding is created successfully even when the observed request was denied, so the
+# request outcome is not the finding status for 2004.
 if class_uid != 2004 && status_id > 0 {
   out.status_id = status_id
+  if status_id == 1 {
+    out.status = "Success"
+  } else if status_id == 2 {
+    out.status = "Failure"
+  } else {
+    # Keep the source label for unmapped outcome results instead of "Other".
+    out.status = outcome_label
+  }
+  if display != "" {
+    out.status_detail = display
+  }
+}
+outcome_reason = string(outcome_obj.reason) ?? ""
+if outcome_reason != "" {
+  out.status_code = outcome_reason
+}
+if is_timestamp(published) {
+  # published is an ISO-8601 UTC timestamp.
+  out.timezone_offset = 0
 }
 
 if length(keys(actor_user)) > 0 {
@@ -511,6 +535,35 @@ if class_uid == 3002 {
   out.api = {"operation": event_type}
   if debug_url != "" {
     out.dst_endpoint = {"svc_name": debug_url}
+  }
+}
+# The first target is the affected resource for classes that support resources and have no
+# dedicated group/entity/user attribute for it.
+if (class_uid == 6003 || class_uid == 2004) && target0_name != "" || (class_uid == 6003 || class_uid == 2004) && target0_uid != "" {
+  resource = {}
+  if target0_uid != "" {
+    resource.uid = target0_uid
+  }
+  if target0_name != "" {
+    resource.name = target0_name
+  }
+  if target0_type != "" {
+    resource.type = target0_type
+  }
+  out.resources = [resource]
+}
+# A debug URL with scheme and host becomes the request URL hostname.
+if debug_url != "" && (starts_with(debug_url, "http://") || starts_with(debug_url, "https://")) {
+  parsed_debug = parse_url(debug_url) ?? null
+  if is_object(parsed_debug) && (string(parsed_debug.host) ?? "") != "" {
+    debug_hostname = string(parsed_debug.host) ?? ""
+    if exists(out.http_request) {
+      http_obj = object!(out.http_request)
+      url_obj = if is_object(http_obj.url) { http_obj.url } else { {} }
+      url_obj.hostname = debug_hostname
+      http_obj.url = url_obj
+      out.http_request = http_obj
+    }
   }
 }
 

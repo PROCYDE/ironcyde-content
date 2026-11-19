@@ -120,5 +120,10 @@ expected:
   metadata.event_code: user.account.lock
   metadata.product.name: Okta System Log
   metadata.product.vendor_name: Okta
+  metadata.original_time: '2023-09-30T10:42:16.000Z'
+  timezone_offset: 0
+  status: Failure
+  status_code: LOCKED_OUT
+  status_detail: Max sign in attempts exceeded
   metadata.uid: a8daaacb-7f18-1111-1111-11111111
   metadata.correlation_uid: ZvqAhyEXAMPLE

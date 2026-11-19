@@ -82,6 +82,8 @@ expected:
   metadata.log_provider: IBM QRadar
   metadata.product.name: QRadar SIEM
   metadata.product.vendor_name: IBM
+  metadata.original_time: '1682347463218'
+  timezone_offset: 0
   risk_level: High
   risk_level_id: 3
   class_name: Detection Finding

@@ -55,4 +55,7 @@ expected:
   metadata.event_code: business.sso_response
   metadata.product.name: GitHub Audit Log
   metadata.product.vendor_name: GitHub
+  metadata.original_time: '1729176166108'
+  metadata.tenant_uid: '11'
+  timezone_offset: 0
   metadata.uid: m-111111111111==

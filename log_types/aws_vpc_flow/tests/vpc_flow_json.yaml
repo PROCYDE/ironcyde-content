@@ -47,6 +47,8 @@ expected:
   type_uid: 400106
   severity_id: 1
   status_id: 2
+  status: Failure
+  status_code: OK
   time: 1649721732000
   start_time: 1649721732000
   end_time: 1649721788000
@@ -60,6 +62,11 @@ expected:
   disposition: Blocked
   disposition_id: 2
   cloud.account.uid: '123456789012'
+  cloud.account.type_id: 10
+  cloud.account.type: AWS Account
+  metadata.tenant_uid: '123456789012'
+  metadata.original_time: '1649721732'
+  timezone_offset: 0
   cloud.provider: AWS
   cloud.region: us-east-1
   cloud.zone: use1-az1

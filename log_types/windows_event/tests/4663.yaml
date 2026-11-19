@@ -35,10 +35,15 @@ raw_sample: |
       Access Mask:    0x2
 
 expected:
+  metadata.original_time: 01/14/2015 08:30:54 PM
+  actor.process.name: services.exe
+  actor.user.type_id: 1
+  actor.user.type: User
   class_uid: 6003
   category_uid: 6
   activity_id: 99
   status_id: 1
+  status: Success
   severity_id: 1
   actor.user.name: SZUSOIDC1$
   actor.user.uid: NT AUTHORITY\SYSTEM

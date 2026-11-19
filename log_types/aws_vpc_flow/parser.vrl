@@ -189,8 +189,24 @@ if (string(fields.region) ?? "") != "" {
 if (string(fields.az_id) ?? "") != "" && (string(fields.az_id) ?? "") != "-" {
   cloud.zone = string(fields.az_id) ?? ""
 }
-if (string(fields.account_id) ?? "") != "" {
-  cloud.account = {"uid": string(fields.account_id) ?? ""}
+account_id = string(fields.account_id) ?? ""
+if account_id != "" {
+  cloud.account = {"uid": account_id, "type_id": 10, "type": "AWS Account"}
+}
+
+# A service name recorded for the packet path becomes the endpoint service.
+pkt_src_service = string(fields.pkt_src_aws_service) ?? ""
+pkt_dst_service = string(fields.pkt_dst_aws_service) ?? ""
+if pkt_src_service != "" && pkt_src_service != "-" {
+  src.svc_name = pkt_src_service
+}
+if pkt_dst_service != "" && pkt_dst_service != "-" {
+  dst.svc_name = pkt_dst_service
+}
+log_status = string(fields.log_status) ?? ""
+reject_reason = string(fields.reject_reason) ?? ""
+if reject_reason == "-" {
+  reject_reason = ""
 }
 
 out = {
@@ -210,6 +226,7 @@ out = {
   "action_id": action_id,
   "disposition": disposition,
   "disposition_id": disposition_id,
+  "timezone_offset": 0,
   "message": "VPC flow " + action_raw + " " + src_ip + ":" + to_string(src_port) + " -> " + dst_ip + ":" + to_string(dst_port),
   "src_endpoint": src,
   "dst_endpoint": dst,
@@ -229,6 +246,7 @@ out = {
     "log_name": "VPC flow log",
     "log_provider": "AWS",
     "event_code": "vpc.flow",
+    "original_time": to_string(start_seconds),
     "product": {
       "name": "Amazon VPC",
       "vendor_name": "AWS",
@@ -238,6 +256,20 @@ out = {
 }
 if end_ms >= time_ms {
   out.end_time = end_ms
+}
+if status_id == 1 {
+  out.status = "Success"
+} else if status_id == 2 {
+  out.status = "Failure"
+}
+if log_status != "" && log_status != "-" {
+  out.status_code = log_status
+}
+if reject_reason != "" {
+  out.status_detail = reject_reason
+}
+if account_id != "" {
+  out.metadata.tenant_uid = account_id
 }
 
 unmapped = {

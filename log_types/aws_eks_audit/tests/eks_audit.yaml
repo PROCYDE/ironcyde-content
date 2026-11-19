@@ -364,6 +364,8 @@ expected:
   type_uid: 600301
   severity_id: 1
   status_id: 1
+  status: Success
+  status_code: '201'
   time: 1631047050502
   src_endpoint.ip: 12.0.22.33
   actor.user.name: system:node:ip-192-001-02-03.ec2.internal
@@ -381,6 +383,8 @@ expected:
   api.version: v1
   cloud.provider: AWS
   cloud.account.uid: '123456789012'
+  resources:
+  - uid: ip-192-001-02-03.ec2.internal
   http_request.url.path: /api/v1/nodes
   http_request.user_agent: kubelet/v1.21.2 (linux/amd64) kubernetes/729bdfc
   message: ResponseComplete
@@ -390,3 +394,6 @@ expected:
   metadata.product.feature.name: Elastic Kubernetes Service
   metadata.product.name: Amazon EKS
   metadata.product.vendor_name: AWS
+  metadata.original_time: '2021-09-07T20:37:30.502680Z'
+  metadata.tenant_uid: '123456789012'
+  timezone_offset: 0

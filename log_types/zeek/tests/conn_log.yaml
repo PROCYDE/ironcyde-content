@@ -76,6 +76,12 @@ expected:
   metadata.log_name: conn
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-16T04:07:01.489619Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
+  connection_info.protocol_num: 6
+  connection_info.uid: CmRFd61N7G7YA909D1
+  connection_info.protocol_ver_id: 4
   metadata.uid: CmRFd61N7G7YA909D1
   src_endpoint.mac: 00:1d:09:5b:d6:84
   status_code: SF

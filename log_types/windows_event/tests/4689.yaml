@@ -27,10 +27,15 @@ raw_sample: |-
           Exit Status:        0x0
 
 expected:
+  metadata.original_time: 09/05/2019 11:22:49 AM
+  actor.process.name: auditon.exe
+  actor.user.type_id: 1
+  actor.user.type: User
   class_uid: 1007
   category_uid: 1
   activity_id: 2
   status_id: 1
+  status: Success
   severity_id: 1
   actor.user.name: Administrator
   actor.user.uid: S-1-5-21-1135140816-2109348461-2107143693-500

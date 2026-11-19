@@ -67,6 +67,7 @@ from_ip = string(raw.FromIP) ?? ""
 src = {}
 if is_ipv4(from_ip) || is_ipv6(from_ip) {
   src.ip = from_ip
+  email.x_originating_ip = [from_ip]
 }
 
 out = {
@@ -92,6 +93,16 @@ out = {
     "uid": trace_uid,
     "product": {"name": "O365", "vendor_name": "Microsoft"},
   },
+}
+if (string(raw.Received) ?? "") != "" {
+  out.metadata.original_time = string(raw.Received) ?? ""
+}
+if (string(raw.Organization) ?? "") != "" {
+  out.metadata.tenant_uid = string(raw.Organization) ?? ""
+}
+to_ip = string(raw.ToIP) ?? ""
+if is_ipv4(to_ip) || is_ipv6(to_ip) {
+  out.dst_endpoint = {"ip": to_ip}
 }
 if status_raw != "" {
   out.status_detail = status_raw

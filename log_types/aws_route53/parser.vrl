@@ -81,7 +81,7 @@ if (string(raw.region) ?? "") != "" {
   cloud.region = string(raw.region) ?? ""
 }
 if (string(raw.account_id) ?? "") != "" {
-  cloud.account = {"uid": string(raw.account_id) ?? ""}
+  cloud.account = {"uid": string(raw.account_id) ?? "", "type_id": 10, "type": "AWS Account"}
 }
 
 src_ids = if is_object(raw.srcids) { raw.srcids } else { {} }
@@ -103,6 +103,32 @@ if (string(raw.query_class) ?? "") != "" {
   query.class = string(raw.query_class) ?? ""
 }
 
+protocol_num = 0
+transport_l = downcase(string(raw.transport) ?? "")
+if transport_l == "udp" {
+  protocol_num = 17
+} else if transport_l == "tcp" {
+  protocol_num = 6
+} else if transport_l == "icmp" {
+  protocol_num = 1
+}
+protocol_ver = 0
+if is_ipv4(src_ip) {
+  protocol_ver = 4
+} else if is_ipv6(src_ip) {
+  protocol_ver = 6
+}
+connection = {
+  "protocol_name": string(raw.transport) ?? "",
+  "direction_id": 0,
+}
+if protocol_num > 0 {
+  connection.protocol_num = protocol_num
+}
+if protocol_ver > 0 {
+  connection.protocol_ver_id = protocol_ver
+}
+
 out = {
   "class_uid": 4003,
   "class_name": "DNS Activity",
@@ -119,7 +145,8 @@ out = {
   "query": query,
   "rcode": rcode,
   "rcode_id": rcode_id,
-  "connection_info": {"protocol_name": string(raw.transport) ?? "", "direction_id": 0},
+  "connection_info": connection,
+  "timezone_offset": 0,
   "cloud": cloud,
   "metadata": {
     "version": "1.9.0",
@@ -127,12 +154,16 @@ out = {
     "log_name": "Route 53 Resolver query log",
     "log_provider": "AWS",
     "event_code": "route53.resolver.query",
+    "original_time": string(raw.query_timestamp) ?? "",
     "product": {
       "name": "Route 53",
       "vendor_name": "AWS",
       "feature": {"name": "Resolver Query Logs"},
     },
   },
+}
+if (string(raw.account_id) ?? "") != "" {
+  out.metadata.tenant_uid = string(raw.account_id) ?? ""
 }
 if length(keys(dst)) > 0 {
   out.dst_endpoint = dst

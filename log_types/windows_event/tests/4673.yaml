@@ -35,10 +35,15 @@ raw_sample: |-
   	Privileges:		SeTcbPrivilege
 
 expected:
+  metadata.original_time: 01/28/2022 04:12:19 PM
+  actor.process.name: explorer.exe
+  actor.user.type_id: 1
+  actor.user.type: User
   class_uid: 6003
   category_uid: 6
   activity_id: 99
   status_id: 2
+  status: Failure
   severity_id: 1
   actor.user.name: splunker
   actor.user.uid: SESTEST\splunker

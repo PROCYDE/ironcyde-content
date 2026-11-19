@@ -60,6 +60,10 @@ expected:
   metadata.log_name: ssh
   metadata.product.name: Zeek
   metadata.product.vendor_name: Zeek
+  metadata.original_time: "2024-10-16T04:54:04.474340Z"
+  timezone_offset: 0
+  metadata.reporter.hostname: sensor
+  connection_info.uid: CwjjT11TKp4IDDkiol
   metadata.uid: CwjjT11TKp4IDDkiol
   protocol_ver: '2'
   server_hassh.fingerprint.algorithm_id: 1
