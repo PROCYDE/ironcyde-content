@@ -1,0 +1,67 @@
+# Test data policy for this public repository; enforced by check_test_data.py in CI.
+# Every IP address, email address and domain name in the scanned files must fall under an allowed
+# network or domain below, or be listed under `exceptions` with a reason a reviewer can verify.
+# Never add customer names or internal hostnames here: this file is public. Those belong in the
+# private CONTENT_DENYLIST repository secret (one case-insensitive term per line).
+
+scan:
+  - "log_types/*"
+  - "content.yaml"
+
+allowed_networks:
+  - network: 192.0.2.0/24
+    reason: TEST-NET-1, RFC 5737 documentation range
+  - network: 198.51.100.0/24
+    reason: TEST-NET-2, RFC 5737 documentation range
+  - network: 203.0.113.0/24
+    reason: TEST-NET-3, RFC 5737 documentation range
+  - network: 2001:db8::/32
+    reason: RFC 3849 IPv6 documentation prefix
+  - network: 0.0.0.0/32
+    reason: unspecified address, identifies nothing
+  - network: 255.255.255.255/32
+    reason: limited broadcast, identifies nothing
+  - network: 127.0.0.0/8
+    reason: loopback, identifies nothing outside the host
+  - network: ::/128
+    reason: unspecified address, identifies nothing
+  - network: ::1/128
+    reason: loopback, identifies nothing outside the host
+  - network: fe80::/10
+    reason: link-local, never routed; needed to test zone-scoped addresses
+
+allowed_domains:
+  - domain: example.com
+    reason: RFC 2606 reserved example domain
+  - domain: example.net
+    reason: RFC 2606 reserved example domain
+  - domain: example.org
+    reason: RFC 2606 reserved example domain
+  - domain: example
+    reason: RFC 2606 reserved TLD
+  - domain: test
+    reason: RFC 2606 reserved TLD
+  - domain: invalid
+    reason: RFC 2606 reserved TLD
+  - domain: localhost
+    reason: RFC 2606 / RFC 6761 reserved name
+  - domain: openssh.com
+    reason: OpenSSH protocol and algorithm identifiers (e.g. chacha20-poly1305@openssh.com), not hosts
+  - domain: libssh.org
+    reason: libssh algorithm identifiers (e.g. curve25519-sha256@libssh.org), not hosts
+
+# Dotted names whose last label is a two-letter TLD are always checked; these generic TLDs too.
+# Names with other endings (file names, VRL and OCSF paths such as user.name, event types like
+# user.session.start) are ignored.
+checked_tlds: [com, net, org, edu, gov, mil, int, info, biz, pro, app, dev, cloud, online, site,
+  tech, xyz, top, live, shop, store, email, digital, solutions, services, systems, network, security,
+  local, lan, internal, corp, home, intranet, private, onion, arpa, aws, azure, microsoft, google, amazon]
+
+# Public patterns that must never appear in content (internal domains are already public knowledge).
+denylist_patterns:
+  - '\bprocyde\.(?:online|com|de|io|net|cloud|internal|local)\b'
+  - '\bironcyde\.(?:online|com|de|io|net|cloud|internal|local)\b'
+
+# Values that are allowed anyway. Each needs the exact value, the files it may appear in (globs) and a
+# reason. An exception that no longer matches anything fails the check, so the list stays current.
+exceptions: []
