@@ -1,0 +1,7 @@
+---
+raw_sample: '{"date":1794911702.361101,"ProviderName":"Microsoft-Windows-Sysmon","ProviderGuid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Qualifiers":"","EventID":22,"Version":5,"Level":4,"Task":22,"Opcode":0,"Keywords":"0x8000000000000000","TimeCreated":"2026-11-17 02:35:01 -0800","EventRecordID":26556,"ActivityID":"","RelatedActivityID":"","ProcessID":7140,"ThreadID":7516,"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"WIN-FIN01.corp.example.test","UserID":"NT AUTHORITY\\SYSTEM","Message":"Dns query:\r\nRuleName: -\r\nUtcTime: 2026-11-17 10:34:59.829\r\nProcessGuid: {8d8ead73-931c-6afb-c703-000000000a00}\r\nProcessId: 1828\r\nQueryName: query.example.com\r\nQueryStatus: 0\r\nQueryResults: type: 5 answers.example.net;type: 5 answers.example.com;::ffff:192.0.2.4;\r\nImage: C:\\Users\\domainuser\\AppData\\Local\\Microsoft\\OneDrive\\26.204.1019.0007\\OneDrive.Sync.Service.exe\r\nUser: corp\\domainuser","StringInserts":["-","2026-11-17 10:34:59.829","{8D8EAD73-931C-6AFB-C703-000000000A00}",1828,"query.example.com","0","type: 5 answers.example.net;type: 5 answers.example.com;::ffff:192.0.2.4;","C:\\Users\\domainuser\\AppData\\Local\\Microsoft\\OneDrive\\26.204.1019.0007\\OneDrive.Sync.Service.exe","corp\\domainuser"],"range_id":"TEST"}'
+expected:
+  activity_id: 1
+  actor.user.name: domainuser
+  class_uid: 4003
+  query.hostname: query.example.com

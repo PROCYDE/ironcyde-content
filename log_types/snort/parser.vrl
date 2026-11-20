@@ -1,0 +1,105 @@
+# Snort alert JSON → OCSF (gateway envelope).
+#
+# Input: event_id, source_id, source_type, ingested_at, event=<alert JSON string>
+# Sets parse_status=ok|no_match. Never emits class_uid 2001.
+# Detection Finding (2004) keeps network tuples in unmapped; Network Activity
+# (4001) keeps src/dst/connection_info on the event.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .sid != null || .msg != null {
+        raw = .
+    }
+}
+if raw == null {
+  abort "no_match"
+} else {
+  event_type = downcase(to_string(raw.event_type) ?? "alert")
+  src_ip = to_string(raw.src_ip) ?? ""
+  dst_ip = to_string(raw.dst_ip) ?? ""
+  if dst_ip == "" {
+    dst_ip = to_string(raw.dest_ip) ?? ""
+  }
+  src_port = to_int(raw.src_port) ?? 0
+  dst_port = to_int(raw.dst_port) ?? 0
+  if dst_port == 0 {
+    dst_port = to_int(raw.dest_port) ?? 0
+  }
+  proto = downcase(to_string(raw.proto) ?? "tcp")
+
+  category_uid = 2
+  class_uid = 2004
+  activity_id = 1
+  priority = to_int(raw.priority) ?? 2
+  severity_id = 3
+  if priority == 1 {
+    severity_id = 5
+  } else if priority == 2 {
+    severity_id = 4
+  } else if priority == 3 {
+    severity_id = 3
+  } else {
+    severity_id = 2
+  }
+
+  if event_type == "flow" {
+    category_uid = 4
+    class_uid = 4001
+    severity_id = 2
+  }
+
+  type_uid = class_uid * 100 + activity_id
+  msg = to_string(raw.msg) ?? ""
+  if msg == "" {
+    msg = to_string(raw.message) ?? "Snort alert"
+  }
+  sid = to_string(raw.sid) ?? "0"
+  gid = to_string(raw.gid) ?? "1"
+
+  time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+  ts_str = to_string(raw.timestamp) ?? ""
+  parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+  if parsed_ts != null {
+    time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+  }
+
+  . = {
+    "category_uid": category_uid,
+    "class_uid": class_uid,
+    "type_uid": type_uid,
+    "activity_id": activity_id,
+    "severity_id": severity_id,
+    "time": time_ms,
+    "message": "e2e-snort-alert sid=" + sid + " " + msg,
+    "metadata": {
+      "version": "1.9.0",
+      "product": {"name": "Snort", "vendor_name": "Cisco"},
+      "profiles": [],
+    },
+    "unmapped": {
+      "snort_sid": sid,
+      "snort_gid": gid,
+      "snort_classification": raw.classification,
+      "src_ip": src_ip,
+      "src_port": src_port,
+      "dst_ip": dst_ip,
+      "dst_port": dst_port,
+      "proto": proto,
+    },
+  }
+
+  if class_uid == 2004 {
+    .metadata.profiles = ["security_control"]
+    .finding_info = {
+      "title": msg,
+      "uid": "snort-" + gid + "-" + sid,
+      "types": ["TTPs/Detection"],
+    }
+  } else {
+    .src_endpoint = {"ip": src_ip, "port": src_port}
+    .dst_endpoint = {"ip": dst_ip, "port": dst_port}
+    .connection_info = {"protocol_name": proto, "direction_id": 1}
+  }
+}

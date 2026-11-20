@@ -1,0 +1,4 @@
+---
+raw_sample: '{"AlertId":"da00000000000000000000","IncidentId":100001,"Title":"Suspicious PowerShell download cradle","Severity":"High","Category":"Execution","DetectionSource":"WindowsDefenderAtp","ThreatName":"Trojan:PowerShell/Cobacis.A","DeviceId":"0000000000000000000000000000000000000000","DeviceName":"ctdl-wks-07.citadel.example","AccountName":"rsanchez","AccountDomain":"CITADEL","FileName":"powershell.exe","FolderPath":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0","SHA256":"e8d71359b5940c8dfb28a33bb84ce50732a42be8661d1f47f4c6c33d74f5793a","ProcessCommandLine":"powershell.exe -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA","InitiatingProcessFileName":"explorer.exe","EventTime":"2026-10-15T09:24:44Z","RemediationAction":"Quarantine","RemoteIP":"203.0.113.166","ReportId":1000001}'
+expected:
+  class_uid: 2004

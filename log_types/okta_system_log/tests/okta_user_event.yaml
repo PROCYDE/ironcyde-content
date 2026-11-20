@@ -1,0 +1,4 @@
+---
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000000","type":"User","alternateId":"rsanchez@citadel.example","displayName":"Rick Sanchez"},"client":{"ipAddress":"203.0.113.12","userAgent":{"rawUserAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0","os":"Windows 10","browser":"CHROME"},"geographicalContext":{"country":"SC","city":"Unknown"}},"device":{"name":"CTDL-WKS-23"},"displayMessage":"User login failed","eventType":"user.session.start","outcome":{"result":"FAILURE","reason":"INVALID_CREDENTIALS"},"published":"2026-10-15T09:44:48.000Z","severity":"WARN","authenticationContext":{"authenticationStep":0,"externalSessionId":"EXAMPLESESSION0000000000000"},"uuid":"00000000-0000-4000-8000-000000000001"}'
+expected:
+  class_uid: 3002

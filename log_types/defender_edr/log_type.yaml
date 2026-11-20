@@ -1,0 +1,4 @@
+name: Microsoft Defender EDR
+description: Microsoft Defender EDR events.
+vendor: Microsoft
+product: Microsoft Defender for Endpoint

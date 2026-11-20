@@ -1,0 +1,4 @@
+---
+raw_sample: '{"timestamp":"2026-10-15T09:18:46.762Z","flow_id":6696885413901,"in_iface":"eth0","event_type":"alert","src_ip":"203.0.113.166","src_port":35000,"dest_ip":"192.0.2.23","dest_port":53,"proto":"TCP","tx_id":1,"alert":{"action":"allowed","gid":1,"signature_id":2027758,"rev":4,"signature":"ET SCAN Nmap Scripting Engine User-Agent Detected","category":"Attempted Information Leak","severity":2,"metadata":{"affected_product":["Any"],"attack_target":["Client_and_Server"]}},"app_proto":"dns"}'
+expected:
+  class_uid: 2004

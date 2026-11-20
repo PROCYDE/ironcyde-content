@@ -1,0 +1,18 @@
+---
+raw_sample: '{"action": "logout", "app": "authentik.events.signals", "created": "2026-11-16T21:58:49.191791+00:00", "user_email": "admin@example.com", "client_ip": "2001:db8:3f41:1000:4bb9:dce9:c93a:b2a6", "context": {"asn": {"asn": 64512, "as_org": "Example ISP AG", "network": "2001:db8:c8::/29"}, "geo": {"lat": 50.9318, "city": "Example City", "long": 6.9312, "country": "DE", "continent": "EU"}, "http_request": {"args": {}, "path": "/api/v3/flows/executor/default-invalidation-flow/", "method": "GET", "request_id": "00000000000000000000000000000004", "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:159.0) Gecko/20100101 Firefox/159.0"}}}'
+expected:
+  activity_id: 2
+  auth_protocol_id: 0
+  category_uid: 3
+  class_uid: 3002
+  message: 'Authentik: logout by admin@example.com'
+  metadata.product.name: authentik
+  metadata.product.vendor_name: goauthentik.io
+  metadata.version: 1.9.0
+  service.name: authentik
+  severity_id: 1
+  src_endpoint.ip: 2001:db8:3f41:1000:4bb9:dce9:c93a:b2a6
+  status_id: 1
+  time: 1794866329191
+  type_uid: 300202
+  user.name: admin@example.com

@@ -1,0 +1,71 @@
+# Caldera ability/step JSON → OCSF (gateway envelope).
+#
+# Raw event (one chain step): host, username, command, ability{technique_id,...}
+# Sets parse_status=ok|no_match. Populates attacks[]. Never emits class_uid 2001.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .ability != null || .command != null {
+        raw = .
+    }
+}
+ability = {}
+technique_uid = ""
+if raw != null && is_object(raw.ability) {
+  ability = raw.ability
+  technique_uid = to_string(ability.technique_id) ?? ""
+}
+if raw != null && technique_uid == "" {
+  technique_uid = to_string(raw.technique_id) ?? ""
+}
+
+if raw == null || technique_uid == "" {
+  abort "no_match"
+} else {
+  technique_name = to_string(ability.technique_name) ?? ""
+  tactic_name = to_string(ability.tactic) ?? ""
+  tactic_uid = to_string(ability.tactic_id) ?? ""
+  host = to_string(raw.host) ?? ""
+  user = to_string(raw.username) ?? ""
+  if user == "" {
+    user = to_string(raw.user) ?? ""
+  }
+  command = to_string(raw.command) ?? ""
+  ability_name = to_string(ability.name) ?? "caldera-ability"
+
+  class_uid = 1007
+  category_uid = 1
+  activity_id = 1
+  severity_id = 3
+  type_uid = class_uid * 100 + activity_id
+
+  attack = {
+    "technique": {"uid": technique_uid, "name": technique_name},
+    "tactic": {"uid": tactic_uid, "name": tactic_name},
+  }
+
+  . = {
+    "category_uid": category_uid,
+    "class_uid": class_uid,
+    "type_uid": type_uid,
+    "activity_id": activity_id,
+    "severity_id": severity_id,
+    "time": to_unix_timestamp(now(), unit: "milliseconds"),
+    "message": "e2e-caldera-" + technique_uid + " " + ability_name,
+    "actor": {"user": {"name": user}},
+    "device": {"hostname": host, "type_id": 1},
+    "process": {"name": "sh", "cmd_line": command, "uid": to_string(raw.paw) ?? "0"},
+    "metadata": {
+      "version": "1.9.0",
+      "product": {"name": "MITRE Caldera", "vendor_name": "MITRE"},
+      "profiles": [],
+    },
+    "unmapped": {
+      "attacks": [attack],
+      "caldera_ability": ability_name,
+      "technique_uid": technique_uid,
+    },
+  }
+}

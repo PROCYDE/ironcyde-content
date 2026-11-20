@@ -1,0 +1,4 @@
+---
+raw_sample: '{"schema":"ironcyde.scanner_finding.v1","tool":"nuclei","tool_version":"3.3.2","finding_id":"sf-f19da263103b1945","title":"nuclei matched cloud-metadata SSRF template","severity":"high","category":"web","technique_ids":["T1595.002"],"target":{"host":"ctdl-wks-23","ip":"192.0.2.23","url":"https://portal.citadel.example/login","port":443},"observed_at":"2026-10-15T09:28:51Z","src_ip":"198.51.100.121","run_id":"synth","lab":{"mode":"authorized-assessment","authorized":true,"target_scope":"citadel.example RFC1918","blast":false},"confidence":80,"status":"open","tags":["generic","T1595.002"]}'
+expected:
+  class_uid: 2004

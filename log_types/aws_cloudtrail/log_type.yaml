@@ -1,0 +1,4 @@
+name: AWS CloudTrail
+description: AWS CloudTrail events.
+vendor: Amazon
+product: AWS CloudTrail

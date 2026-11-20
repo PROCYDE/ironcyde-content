@@ -1,0 +1,4 @@
+---
+raw_sample: '{"timestamp":"2026-10-14T14:39:42.887+0000","gid":1,"sid":2100001,"rev":1,"msg":"ET SCAN Potential SSH Scan","classification":"policy-violation","priority":2,"proto":"TCP","src_ip":"203.0.113.44","src_port":42000,"dst_ip":"198.51.100.35","dst_port":22,"action":"alert"}'
+expected:
+  class_uid: 2004
