@@ -57,6 +57,33 @@ checked_tlds: [com, net, org, edu, gov, mil, int, info, biz, pro, app, dev, clou
   tech, xyz, top, live, shop, store, email, digital, solutions, services, systems, network, security,
   local, lan, internal, corp, home, intranet, private, onion, arpa, aws, azure, microsoft, google, amazon]
 
+# Last labels that are file extensions or field suffixes in this content, not hosts. A real host
+# whose last label matches one of these suffixes is not checked mechanically; reviewers still read
+# every sample. Keep the list small and add a suffix only for a non-host finding, not speculatively.
+non_domain_suffixes:
+  - suffix: md
+    reason: Markdown file extension (README.md, SCHEMA.md), not a host
+  - suffix: sh
+    reason: shell script file extension (install.sh), not a host
+  - suffix: py
+    reason: Python file extension (check.py), not a host
+  - suffix: gz
+    reason: gzip file extension (foo.tar.gz), not a host
+  - suffix: js
+    reason: JavaScript file extension, not a host
+  - suffix: ts
+    reason: TypeScript file extension, not a host
+  - suffix: db
+    reason: database file extension, not a host
+  - suffix: ip
+    reason: OCSF field suffix such as src_endpoint.ip; .ip is not a TLD
+
+# Exact dotted identifiers that are field paths, not hostnames. Keep this list short and exact;
+# a real host in a TLD such as .info must still be found.
+non_domains:
+  - value: container.info
+    reason: Falco output field placeholder in samples, not a host
+
 # Public patterns that must never appear in content (internal domains are already public knowledge).
 denylist_patterns:
   - '\bprocyde\.(?:online|com|de|io|net|cloud|internal|local)\b'

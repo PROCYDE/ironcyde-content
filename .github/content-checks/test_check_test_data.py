@@ -53,6 +53,35 @@ class Names(unittest.TestCase):
         self.assertEqual(kinds("raw_sample: 'chacha20-poly1305@openssh.com curve25519-sha256@libssh.org'"), [])
 
 
+class FalsePositives(unittest.TestCase):
+    def test_json_keys_are_not_domains(self):
+        self.assertEqual(kinds('raw_sample: \'{"container.id":"abc"}\''), [])
+
+    def test_json_values_are_still_scanned(self):
+        self.assertEqual(kinds('raw_sample: \'{"host":"api.acme.io"}\''),
+                         [("domain", "api.acme.io")])
+
+    def test_filenames_are_not_domains(self):
+        self.assertEqual(kinds("raw_sample: 'see README.md, install.sh, check.py and foo.tar.gz'"), [])
+
+    def test_vrl_comment_filename_is_not_a_domain(self):
+        self.assertEqual(kinds("# see SCHEMA.md\n", "log_types/x/parser.vrl"), [])
+
+    def test_falco_field_name_value_is_not_a_domain(self):
+        self.assertEqual(kinds('raw_sample: \'{"container.info":"container.info"}\''), [])
+
+    def test_ocsf_ip_suffix_is_not_a_domain(self):
+        self.assertEqual(kinds("# see src_endpoint.ip\n", "log_types/x/parser.vrl"), [])
+
+    def test_real_domains_are_still_flagged(self):
+        self.assertEqual(kinds("raw_sample: 'api.acme.io and api.acme.id'"),
+                         [("domain", "api.acme.io"), ("domain", "api.acme.id")])
+
+    def test_vendor_domain_is_still_flagged(self):
+        self.assertEqual(kinds("expected:\n  metadata.product.vendor_name: goauthentik.io\n"),
+                         [("domain", "goauthentik.io")])
+
+
 class Denylists(unittest.TestCase):
     def test_public_denylist(self):
         self.assertEqual(kinds("# see registry.procyde.online\n", "log_types/x/parser.vrl")[-1][0], "matches")

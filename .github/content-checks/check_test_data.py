@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import ipaddress
+import json
 import os
 import re
 import subprocess
@@ -69,6 +70,8 @@ class Policy:
     networks: list[ipaddress._BaseNetwork]
     domains: list[str]
     tlds: set[str]
+    non_domain_suffixes: set[str]
+    non_domains: set[str]
     denylist: list[re.Pattern]
     exceptions: list[Exception_] = field(default_factory=list)
 
@@ -97,12 +100,24 @@ def load_policy(path: Path) -> Policy:
             if not item.get("paths"):
                 raise PolicyError(f"exception {item.get('value')!r} names no paths")
             exceptions.append(Exception_(str(item["value"]), list(item["paths"]), item["reason"]))
+        non_domain_suffixes = set()
+        for item in data.get("non_domain_suffixes") or []:
+            if not str(item.get("reason", "")).strip():
+                raise PolicyError(f"non-domain suffix {item.get('suffix')!r} has no reason")
+            non_domain_suffixes.add(str(item["suffix"]).lower().lstrip("."))
+        non_domains = set()
+        for item in data.get("non_domains") or []:
+            if not str(item.get("reason", "")).strip():
+                raise PolicyError(f"non-domain {item.get('value')!r} has no reason")
+            non_domains.add(str(item["value"]).lower().rstrip("."))
         denylist = [re.compile(p, re.IGNORECASE) for p in data.get("denylist_patterns") or []]
         return Policy(
             scan=list(data["scan"]),
             networks=networks,
             domains=domains,
             tlds={t.lower() for t in data["checked_tlds"]},
+            non_domain_suffixes=non_domain_suffixes,
+            non_domains=non_domains,
             denylist=denylist,
             exceptions=exceptions,
         )
@@ -124,6 +139,12 @@ def domain_allowed(policy: Policy, domain: str) -> bool:
     return any(d == a or d.endswith("." + a) for a in policy.domains)
 
 
+def is_non_domain(policy: Policy, domain: str) -> bool:
+    """True for file names and field paths that the domain rule would otherwise mistake for hosts."""
+    d = domain.lower().rstrip(".")
+    return d in policy.non_domains or d.rsplit(".", 1)[-1] in policy.non_domain_suffixes
+
+
 def line_of(text: str, needle: str, start: int = 0) -> int:
     idx = text.find(needle, start)
     if idx < 0:
@@ -132,7 +153,7 @@ def line_of(text: str, needle: str, start: int = 0) -> int:
 
 
 def strings_in(node) -> list[str]:
-    """All string values (not keys) of a decoded YAML document."""
+    """All string values (not keys) of a decoded YAML or JSON document."""
     out: list[str] = []
     if isinstance(node, str):
         out.append(node)
@@ -142,6 +163,20 @@ def strings_in(node) -> list[str]:
     elif isinstance(node, list):
         for v in node:
             out.extend(strings_in(v))
+    return out
+
+
+def expand_json(value: str, depth: int = 0) -> list[str]:
+    """Split a JSON object/array string into its string values, leaving other strings unchanged."""
+    if depth > 5 or not value.lstrip().startswith(("{", "[")):
+        return [value]
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        return [value]
+    out: list[str] = []
+    for item in strings_in(parsed):
+        out.extend(expand_json(item, depth + 1))
     return out
 
 
@@ -174,10 +209,15 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
     # A dotted name counts when its last label is a two-letter (country code) TLD or listed in checked_tlds.
     if rel.endswith((".yaml", ".yml")):
         try:
-            texts = strings_in(yaml.safe_load(text)) + comment_lines(text)
+            data = yaml.safe_load(text)
         except yaml.YAMLError as err:
             found.append(Finding(rel, 1, "file is not valid YAML", str(err).splitlines()[0]))
             texts = []
+        else:
+            texts = []
+            for value in strings_in(data):
+                texts.extend(expand_json(value))
+            texts += comment_lines(text)
     else:
         texts = comment_lines(text)
     seen = set()
@@ -190,6 +230,8 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
             if ip_allowed(policy, domain) is not None:
                 continue
             if domain.lower() in email_domains or domain_allowed(policy, domain):
+                continue
+            if is_non_domain(policy, domain):
                 continue
             found.append(Finding(rel, line_of(text, domain), "domain outside reserved names", domain))
 

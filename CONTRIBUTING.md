@@ -55,6 +55,10 @@ CI enforces this on every pull request (`content-checks` workflow):
   list of customer names and internal hostnames (`CONTENT_DENYLIST` repository secret) is checked too;
   it is not available to pull requests from forks, so reviewers still read every sample.
 
+File names such as `README.md` and field paths such as `container.id` are not domains. The policy
+ignores common file extensions and JSON object keys; a real host that ends in one of those extensions
+is therefore not checked mechanically, so reviewers still read every sample.
+
 Run the test data check locally with Python 3 and PyYAML:
 
 ```bash
