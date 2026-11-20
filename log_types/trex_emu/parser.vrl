@@ -1,8 +1,3 @@
-# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
-# source: go/internal/api/vector/vrl/trex_emu_to_ocsf.vrl
-# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
-# REVIEW before promote: run gate tests with synth samples.
-
 # trex-emu traffic records → OCSF (gateway envelope).
 #
 # Raw: kind=dns|http|dhcp|netflow|arp|icmp plus client/server fields.

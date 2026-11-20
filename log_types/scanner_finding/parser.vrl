@@ -1,13 +1,8 @@
-# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
-# source: go/internal/api/vector/vrl/scanner_finding_to_ocsf.vrl
-# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
-# REVIEW before promote: run gate tests with synth samples.
-
 # IRONCYDE scanner/recon finding envelope → OCSF Detection Finding (2004).
 #
 # Input is a gateway Kafka envelope:
 #   event_id, source_id, source_type, ingested_at, event=<JSON string>
-# Schema: ironcyde.scanner_finding.v1 (see dev/synth/scanners/SCHEMA.md).
+# Schema: ironcyde.scanner_finding.v1.
 # Offline/tests may also pass finding fields already flattened on the root.
 #
 # One shared remap for nuclei/nmap/trivy/gitleaks/… — tool identity lives in

@@ -18,7 +18,6 @@ This repository contains Log Type definitions, VRL normalization parsers, and re
 | `falco` | Falco runtime-security alerts (file, process, network, detection). |
 | `kubernetes_audit` | Kubernetes API audit events. |
 | `linux_auth` | Linux sshd, PAM, login, and sudo authentication outcomes, plus sudo command activity. |
-| `linux_pia` | Linux sshd, sudo, su, login, CRON, and PAM authentication outcomes (raw syslog or FluentBit JSON) and sudo command activity. |
 | `okta_system_log` | Okta System Log authentication, admin, and lifecycle events. |
 | `palo_alto` | Palo Alto PAN-OS traffic and threat logs. |
 | `scanner_finding` | IRONCYDE scanner/recon findings (nuclei, nmap, trivy, gitleaks, ...). |

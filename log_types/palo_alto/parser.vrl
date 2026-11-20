@@ -1,8 +1,3 @@
-# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
-# source: go/internal/api/vector/vrl/palo_alto_to_ocsf.vrl
-# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
-# REVIEW before promote: run gate tests with synth samples.
-
 # Palo Alto firewall / threat log (JSON or CEF-ish fields) → OCSF Network Activity.
 #
 # Gateway envelope: event=<JSON string>. Prefer JSON keys src/dst/sport/dport/proto/action.

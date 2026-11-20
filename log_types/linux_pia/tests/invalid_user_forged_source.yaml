@@ -1,8 +1,0 @@
----
-raw_sample: 'Sep 29 10:00:00 web-01 sshd[811]: Invalid user deploy from 198.51.100.5 port 22 from 203.0.113.9 port 51000'
-expected:
-  activity_id: 1
-  actor.user.name: deploy from 198.51.100.5 port 22
-  class_uid: 3002
-  src_endpoint.ip: 203.0.113.9
-  status_id: 2

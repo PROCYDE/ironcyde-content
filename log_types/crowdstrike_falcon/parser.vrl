@@ -1,8 +1,3 @@
-# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
-# source: go/internal/api/vector/vrl/crowdstrike_falcon_to_ocsf.vrl
-# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
-# REVIEW before promote: run gate tests with synth samples.
-
 # CrowdStrike Falcon DetectionSummaryEvent / Alert JSON → OCSF Detection Finding (2004).
 # Gateway envelope. Never class_uid 2001. Scale: one parse_json, fixed unmapped keys.
 

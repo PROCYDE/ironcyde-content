@@ -1,9 +1,0 @@
----
-raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: Failed password for root from fe80::1234%eth0 port 51000 ssh2'
-expected:
-  activity_id: 1
-  actor.user.name: root
-  class_uid: 3002
-  dst_endpoint.hostname: web1
-  src_endpoint.ip: fe80::1234
-  status_id: 2

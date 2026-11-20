@@ -1,16 +1,10 @@
-# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
-# source: go/internal/api/vector/vrl/aws_cloudtrail_to_ocsf.vrl
-# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
-# REVIEW before promote: run gate tests with synth samples.
-
 # AWS CloudTrail JSON → OCSF API Activity (class_uid 6003).
 #
 # Input is a gateway Kafka envelope:
 #   event_id, source_id, source_type, ingested_at, event=<CloudTrail JSON string>
 # Offline/tests may also pass CloudTrail fields already flattened on the root.
 #
-# Field logic adapted from nano OCSF CloudTrail remap + nano-rs identity rules:
-# never use assumed-role session ARN suffix as actor.user.name (cardinality bomb).
+# Identity rules: never use an assumed-role session ARN suffix as actor.user.name (cardinality bomb).
 # Never emits deprecated security_finding 2001.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()

@@ -1,4 +1,0 @@
-name: Linux PIA
-description: Linux sshd, sudo, su, login, CRON, and PAM authentication outcomes (raw syslog or FluentBit JSON) and sudo command activity.
-vendor: Linux
-product: linux

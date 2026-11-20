@@ -1,9 +1,0 @@
----
-raw_sample: 'Sep 29 09:59:57 web-01 sudo: pam_unix(sudo:auth): authentication failure; logname=alice uid=1000 euid=0 tty=/dev/pts/0 ruser=alice rhost=  user=alice'
-expected:
-  activity_id: 1
-  actor.user.name: alice
-  class_uid: 3002
-  dst_endpoint.hostname: web-01
-  src_endpoint.ip: null
-  status_id: 2

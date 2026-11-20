@@ -1,9 +1,0 @@
----
-raw_sample: 'Sep 29 10:00:00 web-01 sshd(pam_unix)[812]: session closed for user deploy'
-expected:
-  activity_id: 2
-  actor.user.name: deploy
-  class_uid: 3002
-  dst_endpoint.hostname: web-01
-  src_endpoint.ip: null
-  status_id: 1

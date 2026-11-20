@@ -1,11 +1,6 @@
-# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
-# source: go/internal/api/vector/vrl/exim_to_ocsf.vrl
-# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
-# REVIEW before promote: run gate tests with synth samples.
-
 # Exim4 mainlog → OCSF Email Activity (class_uid 4009) for SMTP VRFY / mail recon.
 #
-# Schema: go/internal/ocsf/ocsf-schema-v1.9.0.json — 4009 email_activity (SMTP).
+# Schema: OCSF 1.9.0 — 4009 email_activity (SMTP).
 # NOT 5001 Device Inventory Info. NOT 2004 Detection Finding (that is for security
 # products / scanner_finding). VRFY enumeration → activity_id 3 (Scan).
 #

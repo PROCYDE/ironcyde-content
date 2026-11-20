@@ -1,12 +1,7 @@
-# Adapted for IRONCYDE staging UI / ADR-0016 from ironcyde-sergio
-# source: go/internal/api/vector/vrl/windows_event_to_ocsf.vrl
-# contract: .message in → abort on fail → OCSF object out (no lineage/parse_status)
-# REVIEW before promote: run gate tests with synth samples.
-
 # Windows Security Event Log JSON → OCSF.
 #
 # Gateway envelope: event=<winevt JSON> with event_id / EventID, event_data / EventData,
-# computer / Computer. Ported from nano windows_event_log OCSF remap (cheap Event-ID switch).
+# computer / Computer. Uses a cheap Event-ID switch for the common event IDs.
 # Never emits class_uid 2001.
 # Class-shaped attributes only: Auth keeps user+dst_endpoint; Process keeps
 # process+device.type_id and drops Auth-only fields.
