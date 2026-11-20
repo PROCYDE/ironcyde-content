@@ -12,50 +12,135 @@ ingested = timestamp(%ironcyde.ingested_at) ?? now()
 text = string(.message) ?? ""
 raw = parse_json(text) ?? null
 if !is_object(raw) {
-    if .EventID != null || .event_data != null || .EventData != null {
+    if .EventID != null || .event_data != null || .EventData != null || .StringInserts != null {
         raw = .
     }
 }
 if !is_object(raw) {
     abort "no_match"
 }
-    ed = {}
-    if is_object(raw.event_data) {
-        ed = raw.event_data
-    } else if is_object(raw.EventData) {
-        ed = raw.EventData
-    }
 
     eid = to_int(raw.EventID) ?? 0
     if eid == 0 {
         eid = to_int(raw.EventId) ?? 0
     }
 
-    computer = downcase(to_string(raw.Computer) ?? to_string(raw.computer) ?? to_string(raw.host) ?? "sysmon-host")
-    msg = to_string(raw.message) ?? ""
+    # Fluent Bit's winevtlog input sends the rendered event text in `Message`
+    # and the positional values in `StringInserts`; classic shippers use
+    # `message` with `event_data`/`EventData`. Prefer the labelled message:
+    # its field order is stable across Sysmon versions, while StringInserts
+    # order changes between versions (Event 1 gained file metadata fields).
+    msg_text = to_string(raw.Message) ?? ""
+    if msg_text == "" {
+        msg_text = to_string(raw.message) ?? ""
+    }
+    fields = {}
+    if msg_text != "" {
+        normalised = replace(string!(msg_text), "\r\n", "\n")
+        lines = split(normalised, "\n")
+        body = normalised
+        if length(lines) > 0 {
+            body = join(slice!(lines, 1), "\n")
+        }
+        fields = parse_key_value(body, key_value_delimiter: ": ", field_delimiter: "\n") ?? {}
+    }
+
+    ed = {}
+    have_fields = false
+    if is_object(fields) && length(fields) > 0 {
+        ed = fields
+        have_fields = true
+    } else if is_object(raw.event_data) {
+        ed = raw.event_data
+        have_fields = true
+    } else if is_object(raw.EventData) {
+        ed = raw.EventData
+        have_fields = true
+    }
+
+    # Fallback for shippers that omit the rendered message. The order below
+    # follows the event templates emitted by current Sysmon versions; the
+    # labelled Message above remains the authoritative source when present.
+    if !have_fields && is_array(raw.StringInserts) {
+        inserts = array(raw.StringInserts) ?? []
+        names = get({
+            "1": ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "Image", "FileVersion", "Description", "Product", "Company", "OriginalFileName", "CommandLine", "CurrentDirectory", "User", "LogonGuid", "LogonId", "TerminalSessionId", "IntegrityLevel", "Hashes", "ParentProcessGuid", "ParentProcessId", "ParentImage", "ParentCommandLine", "ParentUser"],
+            "3": ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "Image", "User", "Protocol", "Initiated", "SourceIsIpv6", "SourceIp", "SourceHostname", "SourcePort", "SourcePortName", "DestinationIsIpv6", "DestinationIp", "DestinationHostname", "DestinationPort", "DestinationPortName"],
+            "5": ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "Image", "User"],
+            "10": ["RuleName", "UtcTime", "SourceProcessGUID", "SourceProcessId", "SourceThreadId", "SourceImage", "TargetProcessGUID", "TargetProcessId", "TargetImage", "GrantedAccess", "CallTrace"],
+            "11": ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "Image", "TargetFilename", "CreationUtcTime", "User"],
+            "22": ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "QueryName", "QueryStatus", "QueryResults", "Image", "User"],
+            "23": ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "User", "Image", "TargetFilename", "Hashes", "IsExecutable", "Archived"],
+            "7": ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "Image", "ImageLoaded", "FileVersion", "Description", "Product", "Company", "OriginalFileName", "Hashes", "Signed", "Signature", "SignatureStatus", "User"],
+            "12": ["RuleName", "EventType", "UtcTime", "ProcessGuid", "ProcessId", "Image", "TargetObject"],
+            "13": ["RuleName", "EventType", "UtcTime", "ProcessGuid", "ProcessId", "Image", "TargetObject", "Details"],
+        }, [to_string(eid)]) ?? []
+        for_each(array(names) ?? []) -> |i, n| {
+            v = get(inserts, [i]) ?? null
+            if v != null && v != "" && v != "-" {
+                ed = set(ed, [string!(n)], v) ?? ed
+            }
+        }
+    }
+
+    computer = downcase(to_string(raw.Computer) ?? "")
+    if computer == "" {
+        computer = downcase(to_string(raw.computer) ?? "")
+    }
+    if computer == "" {
+        computer = downcase(to_string(raw.host) ?? "")
+    }
+    if computer == "" {
+        computer = "sysmon-host"
+    }
+    msg = msg_text
+    if contains(msg, "\r\n") {
+        msg = string!(split(msg, "\r\n", 2)[0])
+    } else if contains(msg, "\n") {
+        msg = string!(split(msg, "\n", 2)[0])
+    }
     if msg == "" {
         msg = "sysmon event " + to_string(eid)
     }
     time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    ts_str = to_string(raw.TimeCreated) ?? to_string(raw.timestamp) ?? ""
+    ts_str = to_string(raw.TimeCreated) ?? ""
+    if ts_str == "" {
+        ts_str = to_string(raw.timestamp) ?? ""
+    }
+    # Sysmon's UtcTime is unambiguous; TimeCreated carries a numeric offset.
+    time_from_event = false
+    utc_str = to_string(ed.UtcTime) ?? ""
+    if utc_str != "" {
+        parsed_utc = parse_timestamp(utc_str, format: "%Y-%m-%d %H:%M:%S%.f") ?? null
+        if parsed_utc != null {
+            time_ms = to_unix_timestamp(parsed_utc, unit: "milliseconds") ?? time_ms
+            time_from_event = true
+        }
+    }
+    if !time_from_event && ts_str != "" {
+        parsed_ts = parse_timestamp(ts_str, format: "%Y-%m-%d %H:%M:%S %z") ?? null
+        if parsed_ts == null {
+            parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+        }
+        if parsed_ts != null {
+            time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? time_ms
+        }
+    }
     # Process GUIDs: fall back to PID, then "0" — a plain ?? never fires because
     # to_string(null) is "".
-    puid = to_string(ed.ProcessGuid) ?? to_string(ed.ProcessId) ?? ""
+    puid = to_string(ed.ProcessGuid) ?? ""
+    if puid == "" {
+        puid = to_string(ed.ProcessId) ?? ""
+    }
     if puid == "" {
         puid = "0"
     }
-    ppuid = to_string(ed.ParentProcessGuid) ?? to_string(ed.ParentProcessId) ?? ""
+    ppuid = to_string(ed.ParentProcessGuid) ?? ""
+    if ppuid == "" {
+        ppuid = to_string(ed.ParentProcessId) ?? ""
+    }
     if ppuid == "" {
         ppuid = "0"
-    }
-    if ts_str != "" {
-        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-        if parsed_ts != null {
-            time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
-        }
-    }
-    if time_ms == 0 {
-        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
     }
 
     if eid == 1 {
@@ -138,7 +223,15 @@ if !is_object(raw) {
         dst_ip = to_string(ed.DestinationIp) ?? ""
         src_port = to_int(ed.SourcePort) ?? 0
         dst_port = to_int(ed.DestinationPort) ?? 0
-        process_name = to_string(ed.Image) ?? "unknown"
+        process_path = to_string(ed.Image) ?? "unknown"
+        process_name = process_path
+        if contains(process_path, "\\") {
+            path_parts = split(process_path, "\\")
+            process_name = to_string(path_parts[-1])
+        } else if contains(process_path, "/") {
+            path_parts = split(process_path, "/")
+            process_name = to_string(path_parts[-1])
+        }
         user = downcase(to_string(ed.User) ?? "unknown")
         if contains(user, "\\") {
             user_parts = split(user, "\\")
@@ -312,6 +405,14 @@ if !is_object(raw) {
                 user_parts = split(user, "\\")
                 user = to_string(user_parts[-1])
             }
+            file_name = path
+            if contains(path, "\\") {
+                fn_parts = split(path, "\\")
+                file_name = to_string(fn_parts[-1])
+            } else if contains(path, "/") {
+                fn_parts = split(path, "/")
+                file_name = to_string(fn_parts[-1])
+            }
             class_uid = 1001
             category_uid = 1
             activity_id = 1
@@ -334,7 +435,7 @@ if !is_object(raw) {
                         "uid": puid,
                     },
                 },
-                "file": { "path": path, "name": path, "type_id": 1 },
+                "file": { "path": path, "name": file_name, "type_id": 1 },
                 "device": { "hostname": computer, "type_id": 1 },
                 "metadata": {
                     "version": "1.9.0",
