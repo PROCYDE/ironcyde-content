@@ -131,6 +131,8 @@ def ip_allowed(policy: Policy, text: str) -> bool | None:
         addr = ipaddress.ip_address(text.split("%", 1)[0])
     except ValueError:
         return None
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
     return any(addr.version == n.version and addr in n for n in policy.networks)
 
 

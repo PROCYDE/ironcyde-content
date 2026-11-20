@@ -23,6 +23,13 @@ class Addresses(unittest.TestCase):
     def test_public_ipv6_fails(self):
         self.assertEqual(kinds("raw_sample: 'from 2a00:1450:4001::1 port 1'"), [("IPv6", "2a00:1450:4001::1")])
 
+    def test_ipv4_mapped_documentation_addresses_pass(self):
+        self.assertEqual(kinds("raw_sample: 'from ::ffff:192.0.2.4 port 1'"), [])
+
+    def test_ipv4_mapped_public_addresses_fail(self):
+        self.assertEqual(kinds("raw_sample: 'from ::ffff:8.8.8.8 port 1'"),
+                         [("IPv4", "8.8.8.8"), ("IPv6", "::ffff:8.8.8.8")])
+
     def test_versions_times_and_fingerprints_are_not_addresses(self):
         text = ("raw_sample: 'Chrome/124.0.6367.91 at 09:59:58 OID 1.3.6.1.4.1 "
                 "MD5:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff'")
