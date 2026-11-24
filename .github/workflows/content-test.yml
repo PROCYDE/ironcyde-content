@@ -1,0 +1,64 @@
+name: content-test
+
+# Runs every Log Type through IRONCYDE's own content check: the `content test` command of the API image,
+# which applies the checks a content source runs before installation (layout, parser safety checks, every
+# regression case through the pinned Vector, expected fields, OCSF validation).
+#
+# The API image is not public. Its read-only registry credential is in the `ironcyde-registry` environment,
+# which only workflows from main may use, so a branch that adds or changes a workflow never receives it.
+# Pull requests are tested through pull_request_target: this workflow runs as it is on main, and the pull
+# request's files are only read as data, inside a container without network access. Pull requests from forks
+# are not tested. The image is never cached, because pull request runs can read caches.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  IRONCYDE_API_IMAGE: registry.procyde.online/ironcyde/ironcyde-api
+  # The IRONCYDE release whose checks the content must pass.
+  # renovate: datasource=docker depName=registry.procyde.online/ironcyde/ironcyde-api
+  IRONCYDE_API_VERSION: 2.0.0
+
+jobs:
+  content-test:
+    name: content test (IRONCYDE)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: ironcyde-registry
+    steps:
+      # On pull_request_target the default checkout is main; read the pull request's head instead, as data only.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: content
+          persist-credentials: false
+
+      - name: Pull the IRONCYDE API image
+        env:
+          REGISTRY_USERNAME: ${{ secrets.IRONCYDE_REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.IRONCYDE_REGISTRY_PASSWORD }}
+        run: |
+          printf '%s' "$REGISTRY_PASSWORD" |
+            docker login "${IRONCYDE_API_IMAGE%%/*}" --username "$REGISTRY_USERNAME" --password-stdin
+          docker pull --quiet "$IRONCYDE_API_IMAGE:$IRONCYDE_API_VERSION"
+          docker logout "${IRONCYDE_API_IMAGE%%/*}"
+
+      # Annotations mark each failing case or parser file; the last line summarizes the run.
+      - name: Test the content
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges --pids-limit 512 --memory 4g \
+            --volume "$GITHUB_WORKSPACE/content:/content:ro" \
+            "$IRONCYDE_API_IMAGE:$IRONCYDE_API_VERSION" content test --format github /content
+

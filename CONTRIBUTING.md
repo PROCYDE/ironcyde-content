@@ -75,10 +75,24 @@ maintainer to clean up the history. Deleting the file or the branch alone does n
 
 ## Validate
 
-The `content-checks` workflow does not run the parsers yet. Use the supported IRONCYDE parser
-workspace/server runner to test the candidate with its regression cases.
-The authoritative gate checks VRL restrictions, output shape, field assertions, and OCSF errors.
-Browser-only preview is not a substitute.
+The `content-test` workflow runs every Log Type through IRONCYDE's own content check, the same check a
+content source applies before installation: the repository format, the parser safety checks, every
+regression case through the pinned Vector, expected field assertions, and OCSF validation. Failing cases
+and parsers are annotated on their files. The workflow pins the IRONCYDE release it checks against.
+
+It runs for pull requests from branches of this repository and for every change on `main`. Pull requests
+from forks are not tested automatically; a maintainer runs the check before merging.
+
+With access to the IRONCYDE image registry, run the same check locally from the repository root, using the
+release the workflow pins:
+
+```bash
+docker run --rm --network none -v "$PWD:/content:ro" \
+  registry.procyde.online/ironcyde/ironcyde-api:<version> content test /content
+```
+
+`--log-type <key>` limits the run to one Log Type, `--strict` fails cases on OCSF recommendations too, and
+`--format json` prints the complete report, including each case's normalized event.
 
 ## Publish a reviewed update
 
