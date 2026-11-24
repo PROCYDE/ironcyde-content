@@ -91,4 +91,25 @@ denylist_patterns:
 
 # Values that are allowed anyway. Each needs the exact value, the files it may appear in (globs) and a
 # reason. An exception that no longer matches anything fails the check, so the list stays current.
-exceptions: []
+exceptions:
+  - value: goauthentik.io
+    paths: ["log_types/authentik/*"]
+    reason: Authentik's vendor name as the parser sets it in metadata.product.vendor_name, not a host in the samples
+  - value: s3.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/parser.vrl"]
+    reason: public AWS service endpoint in a comment that explains how the parser derives the service name
+  - value: iam.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/tests/cloudtrail_event.yaml"]
+    reason: public AWS service endpoint that CloudTrail reports as eventSource
+  - value: cloudtrail.eu-central-1.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/tests/cloudtrail_event.yaml"]
+    reason: public regional AWS service endpoint that CloudTrail reports, identifies no account
+  - value: falcon.eu-1.crowdstrike.com
+    paths: ["log_types/crowdstrike_falcon/tests/falcon_detection.yaml"]
+    reason: CrowdStrike's public EU cloud console host in a detection link, identifies no customer
+  - value: docker.io
+    paths: ["log_types/falco/tests/falco_write_below_binary.yaml"]
+    reason: public Docker Hub registry name in a container image reference
+  - value: audit.k8s.io
+    paths: ["log_types/kubernetes_audit/tests/get_endpoints.yaml"]
+    reason: Kubernetes API group of audit events (apiVersion audit.k8s.io/v1), not a host

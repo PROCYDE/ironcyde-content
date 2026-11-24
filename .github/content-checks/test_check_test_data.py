@@ -108,9 +108,14 @@ class Exceptions(unittest.TestCase):
         self.assertFalse(ex.covers("log_types/y/tests/a.yaml", "8.8.8.8"))
 
     def test_exception_without_reason_is_a_policy_error(self):
+        import re
         import tempfile
-        text = (Path(__file__).resolve().parent / "test_data_policy.yaml").read_text().replace(
-            "exceptions: []", "exceptions:\n  - value: 8.8.8.8\n    paths: ['log_types/*']\n    reason: ''")
+        # Prepends the entry, so the test holds whether the policy lists exceptions or none.
+        text = re.sub(
+            r"(?m)^exceptions:.*$",
+            "exceptions:\n  - value: 8.8.8.8\n    paths: ['log_types/*']\n    reason: ''",
+            (Path(__file__).resolve().parent / "test_data_policy.yaml").read_text(),
+        )
         with tempfile.NamedTemporaryFile("w", suffix=".yaml") as f:
             f.write(text)
             f.flush()
