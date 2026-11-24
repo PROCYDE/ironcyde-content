@@ -1,0 +1,31 @@
+---
+raw_sample: '{"kind":"Event","apiVersion":"audit.k8s.io/v1","level":"Metadata","auditID":"00000000-0000-0000-0000-000000000001","stage":"ResponseComplete","requestURI":"/api/v1/namespaces/kube-system/endpoints/kubelet","verb":"get","user":{"username":"system:serviceaccount:monitoring:metrics-operator","uid":"00000000-0000-0000-0000-000000000002","groups":["system:serviceaccounts","system:serviceaccounts:monitoring","system:authenticated"],"extra":{"authentication.kubernetes.io/credential-id":["JTI=00000000-0000-0000-0000-000000000003"],"authentication.kubernetes.io/node-name":["k8s-worker-02"],"authentication.kubernetes.io/node-uid":["00000000-0000-0000-0000-000000000004"],"authentication.kubernetes.io/pod-name":["metrics-operator-7d9f784487-5hfp7"],"authentication.kubernetes.io/pod-uid":["00000000-0000-0000-0000-000000000005"]}},"sourceIPs":["192.0.2.2"],"userAgent":"PrometheusOperator/0.95.2","objectRef":{"resource":"endpoints","namespace":"kube-system","name":"kubelet","apiVersion":"v1"},"responseStatus":{"metadata":{},"code":200},"requestReceivedTimestamp":"2026-11-16T21:48:06.933696Z","stageTimestamp":"2026-11-16T21:48:07.203887Z","annotations":{"authorization.k8s.io/decision":"allow","authorization.k8s.io/reason":"RBAC: allowed by ClusterRoleBinding \"metrics-operator\" of ClusterRole \"metrics-operator\" to ServiceAccount \"metrics-operator/monitoring\"","k8s.io/deprecated":"true"}}'
+expected:
+  activity_id: 2
+  actor.user.groups:
+  - name: system:serviceaccounts
+  - name: system:serviceaccounts:monitoring
+  - name: system:authenticated
+  actor.user.name: system:serviceaccount:monitoring:metrics-operator
+  actor.user.uid: 00000000-0000-0000-0000-000000000002
+  api.operation: get
+  api.request.uid: 00000000-0000-0000-0000-000000000001
+  api.version: v1
+  category_uid: 6
+  class_uid: 6003
+  message: 'Kubernetes audit: get /api/v1/namespaces/kube-system/endpoints/kubelet'
+  metadata.product.name: kubernetes_audit
+  metadata.product.vendor_name: Kubernetes
+  metadata.version: 1.9.0
+  resources:
+  - name: kubelet
+    namespace: kube-system
+    role_id: 1
+    type: endpoints
+    uid: null
+    version: v1
+  severity_id: 1
+  src_endpoint.ip: 192.0.2.2
+  status_id: 1
+  time: 1794865686933
+  type_uid: 600302

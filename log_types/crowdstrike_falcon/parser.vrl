@@ -1,0 +1,156 @@
+# CrowdStrike Falcon DetectionSummaryEvent / Alert JSON → OCSF Detection Finding (2004).
+# Gateway envelope. Never class_uid 2001. Scale: one parse_json, fixed unmapped keys.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .DetectName != null || .detect_name != null || .DetectionId != null || .aid != null {
+        raw = .
+    }
+}
+if !is_object(raw) {
+    abort "no_match"
+}
+    title = to_string(raw.DetectName) ?? ""
+    if title == "" {
+        title = to_string(raw.detect_name) ?? ""
+    }
+    if title == "" {
+        title = to_string(raw.Name) ?? "Falcon detection"
+    }
+    det_id = to_string(raw.DetectionId) ?? ""
+    if det_id == "" {
+        det_id = to_string(raw.detection_id) ?? ""
+    }
+    if det_id == "" {
+        det_id = to_string(raw.id) ?? ""
+    }
+    severity_raw = downcase(to_string(raw.SeverityName) ?? "")
+    if severity_raw == "" {
+        severity_raw = downcase(to_string(raw.severity) ?? "")
+    }
+    sev_num = to_int(raw.Severity) ?? 0
+    if sev_num == 0 {
+        sev_num = to_int(raw.severity) ?? 0
+    }
+    severity_id = 3
+    if severity_raw == "informational" || severity_raw == "low" || sev_num == 1 || sev_num == 2 {
+        severity_id = 2
+    } else if severity_raw == "medium" || sev_num == 3 || sev_num == 4 {
+        severity_id = 3
+    } else if severity_raw == "high" || sev_num == 5 {
+        severity_id = 4
+    } else if severity_raw == "critical" || sev_num >= 6 {
+        severity_id = 5
+    }
+
+    host = to_string(raw.ComputerName) ?? ""
+    if host == "" {
+        host = to_string(raw.hostname) ?? ""
+    }
+    if host == "" {
+        host = to_string(raw.device_name) ?? ""
+    }
+    actor = to_string(raw.UserName) ?? ""
+    if actor == "" {
+        actor = to_string(raw.user_name) ?? ""
+    }
+    proc = to_string(raw.FileName) ?? ""
+    if proc == "" {
+        proc = to_string(raw.filename) ?? ""
+    }
+    if proc == "" {
+        proc = to_string(raw.ImageFileName) ?? ""
+    }
+    cmd = to_string(raw.CommandLine) ?? ""
+    if cmd == "" {
+        cmd = to_string(raw.cmdline) ?? ""
+    }
+    src_ip = to_string(raw.LocalIP) ?? ""
+    if src_ip == "" {
+        src_ip = to_string(raw.local_ip) ?? ""
+    }
+    if src_ip == "" {
+        src_ip = to_string(raw.NetworkAccessesIP) ?? ""
+    }
+    if src_ip != "" {
+        ok4 = is_ipv4(src_ip)
+        ok6 = is_ipv6(src_ip)
+        if !ok4 && !ok6 { src_ip = "" }
+    }
+
+    # Empty-string fields must not short-circuit ?? — check each key explicitly.
+    time_ms = 0
+    ts_str = to_string(raw.ProcessStartTime) ?? ""
+    if ts_str == "" {
+        ts_str = to_string(raw.timestamp) ?? ""
+    }
+    if ts_str == "" {
+        ts_str = to_string(raw.created_timestamp) ?? ""
+    }
+    if ts_str != "" {
+        secs = to_float(ts_str) ?? 0.0
+        if secs > 1_000_000_000_000.0 {
+            # already epoch milliseconds
+            time_ms = to_int(secs)
+        } else if secs > 1_000_000_000.0 {
+            # epoch seconds (Falcon often sends these as strings)
+            time_ms = to_int(secs * 1000.0)
+        } else {
+            parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+            if parsed_ts != null {
+                time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+            }
+        }
+    }
+    if time_ms == 0 {
+        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+    }
+
+    category_uid = 2
+    class_uid = 2004
+    activity_id = 1
+    type_uid = class_uid * 100 + activity_id
+
+    msg = "falcon " + title
+    if proc != "" {
+        msg = msg + " proc=" + proc
+    }
+
+    . = {
+        "category_uid": category_uid,
+        "class_uid": class_uid,
+        "class_name": "Detection Finding",
+        "category_name": "Findings",
+        "type_uid": type_uid,
+        "activity_id": activity_id,
+        "severity_id": severity_id,
+        "status_id": 1,
+        "time": time_ms,
+        "message": msg,
+        "finding_info": {
+            "title": title,
+            "uid": det_id,
+            "types": ["TTPs/Detection"],
+        },
+        "metadata": {
+            "version": "1.9.0",
+            "uid": det_id,
+            "log_name": "DetectionSummaryEvent",
+            "log_provider": "CrowdStrike Falcon",
+            "product": { "name": "CrowdStrike Falcon", "vendor_name": "CrowdStrike" },
+            "profiles": ["security_control"],
+        },
+        "unmapped": {
+            "detection_id": det_id,
+            "tactic": to_string(raw.Tactic) ?? to_string(raw.tactic) ?? "",
+            "technique": to_string(raw.Technique) ?? to_string(raw.technique) ?? "",
+            "aid": to_string(raw.aid) ?? "",
+            "actor_user": actor,
+            "device_hostname": host,
+            "process_name": proc,
+            "process_cmd": cmd,
+            "src_ip": src_ip,
+        },
+    }

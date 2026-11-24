@@ -1,0 +1,4 @@
+---
+raw_sample: '{"type":"TRAFFIC","receive_time":"2026-10-15T09:48:46Z","serial":"000000000000000","src":"192.0.2.12","dst":"203.0.113.34","natsrc":"203.0.113.10","sport":40000,"dport":4444,"proto":"tcp","action":"deny","app":"unknown-tcp","rule":"block-suspicious-egress","from_zone":"trust","to_zone":"untrust","bytes_sent":37116,"bytes_received":214894,"session_id":1234567,"category":"malware"}'
+expected:
+  class_uid: 4001

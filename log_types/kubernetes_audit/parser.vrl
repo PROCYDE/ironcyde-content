@@ -1,0 +1,107 @@
+raw = string(.message) ?? ""
+e = parse_json(raw) ?? {}
+if !is_object(e) {
+  abort "not a JSON object"
+}
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+ts_str = string(e.requestReceivedTimestamp) ?? ""
+ts = parse_timestamp(ts_str, "%+") ?? ingested
+time_ms = to_unix_timestamp(ts, unit: "milliseconds")
+
+verb = downcase(string(e.verb) ?? "")
+activity_id = if verb == "create" {
+  1
+} else if match(verb, r'^(get|list|watch)$') {
+  2
+} else if match(verb, r'^(update|patch)$') {
+  3
+} else if verb == "delete" {
+  4
+} else {
+  99
+}
+
+code = to_int(e.responseStatus.code) ?? 0
+status_id = if code >= 200 && code < 400 { 1 } else { 2 }
+
+resp_msg = string(e.responseStatus.message) ?? ""
+status_detail = if resp_msg != "" { resp_msg } else { null }
+activity_name = if activity_id == 99 { verb } else { null }
+
+oref = e.objectRef
+res = null
+if is_object(oref) {
+  o_name = string(oref.name) ?? ""
+  o_uid = string(oref.uid) ?? ""
+  if o_name != "" || o_uid != "" {
+    r_name = null
+    if o_name != "" {
+      r_name = o_name
+    }
+    r_uid = null
+    if o_uid != "" {
+      r_uid = o_uid
+    }
+    res = [{ "name": r_name, "uid": r_uid, "type": string(oref.resource) ?? null, "namespace": string(oref.namespace) ?? null, "version": string(oref.apiVersion) ?? null, "role_id": 1 }]
+  }
+}
+
+sips = e.sourceIPs
+src_ip = null
+if is_array(sips) {
+  arr = array!(sips)
+  if length(arr) > 0 {
+    src_ip = string(arr[0]) ?? null
+  }
+}
+
+u = e.user
+uname = if is_object(u) { string(u.username) ?? null } else { null }
+uuid_ = if is_object(u) { string(u.uid) ?? null } else { null }
+groups = []
+if is_object(u) && is_array(u.groups) {
+  raw_groups = array!(u.groups)
+  for_each(raw_groups) -> |idx, g| {
+    groups = append(groups, [{ "name": string(g) ?? null }])
+  }
+}
+
+apis = { "operation": verb, "request": { "uid": string(e.auditID) ?? null } }
+api_group_name = string(oref.apiGroup) ?? ""
+api_version = string(oref.apiVersion) ?? ""
+if api_group_name != "" {
+  apis.group = { "name": api_group_name }
+}
+if api_version != "" {
+  apis.version = api_version
+}
+
+. = {
+  "class_uid": 6003,
+  "category_uid": 6,
+  "activity_id": activity_id,
+  "activity_name": activity_name,
+  "type_uid": 600300 + activity_id,
+  "time": time_ms,
+  "severity_id": 1,
+  "status_id": status_id,
+  "status_code": string(code) ?? null,
+  "status_detail": status_detail,
+  "message": "Kubernetes audit: " + verb + " " + (string(e.requestURI) ?? ""),
+  "metadata": { "product": { "name": "kubernetes_audit", "vendor_name": "Kubernetes" }, "version": "1.9.0" },
+  "actor": { "user": { "name": uname, "uid": uuid_, "groups": groups } },
+  "api": apis,
+  "src_endpoint": { "ip": src_ip },
+  "resources": res,
+  "unmapped": {
+    "auditID": e.auditID,
+    "stage": e.stage,
+    "level": e.level,
+    "userAgent": e.userAgent,
+    "stageTimestamp": e.stageTimestamp,
+    "requestURI": e.requestURI,
+    "annotations": e.annotations,
+    "sourceIPs": sips
+  }
+}

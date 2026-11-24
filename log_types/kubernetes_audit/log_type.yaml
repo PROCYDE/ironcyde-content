@@ -1,0 +1,4 @@
+name: Kubernetes Audit
+description: Kubernetes Audit events.
+vendor: Kubernetes
+product: kubernetes_audit

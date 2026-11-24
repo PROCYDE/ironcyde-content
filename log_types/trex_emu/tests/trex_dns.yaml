@@ -1,0 +1,4 @@
+---
+raw_sample: '{"kind":"dns","client_ip":"203.0.113.25","ns_server":"198.51.100.1","query":"host0.citadel.example","qtype":"SRV","rcode":"NXDOMAIN","proto":"udp","emu_namespace":0,"emu_thread":0,"trex_emu":true,"profile":"rich_clients"}'
+expected:
+  class_uid: 4003

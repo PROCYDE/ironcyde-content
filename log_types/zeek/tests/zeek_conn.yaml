@@ -1,0 +1,6 @@
+---
+raw_sample: '{"ts":"1792056883.0","uid":"Ceu5D6nX3hl07Nfx2h","id.orig_h":"192.0.2.23","id.orig_p":40000,"id.resp_h":"198.51.100.78","id.resp_p":8080,"proto":"tcp","duration":91.509496,"orig_bytes":26956,"resp_bytes":339720,"conn_state":"S0","orig_pkts":183,"resp_pkts":464,"service":"http"}'
+expected:
+  category_uid: 4
+  class_uid: 4001
+  metadata.product.name: Zeek

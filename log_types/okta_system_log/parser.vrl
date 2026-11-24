@@ -1,0 +1,325 @@
+# Okta System Log JSON → OCSF (authentication / account / API).
+#
+# Input is a gateway Kafka envelope:
+#   event_id, source_id, source_type, ingested_at, event=<Okta LogEvent JSON string>
+# Offline/tests may also pass Okta fields already flattened on the root.
+#
+# Maps the public System Log shape (eventType, actor, client, outcome, published).
+# Never emits deprecated security_finding 2001.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+text = string(.message) ?? ""
+raw = parse_json(text) ?? null
+if !is_object(raw) {
+    if .eventType != null {
+        raw = .
+    }
+}
+if !is_object(raw) {
+    abort "no_match"
+}
+    actor_obj = if is_object(raw.actor) { raw.actor } else { {} }
+    client_obj = if is_object(raw.client) { raw.client } else { {} }
+    outcome_obj = if is_object(raw.outcome) { raw.outcome } else { {} }
+    auth_ctx = if is_object(raw.authenticationContext) { raw.authenticationContext } else { {} }
+    ua_obj = if is_object(client_obj.userAgent) { client_obj.userAgent } else { {} }
+    device_obj = if is_object(raw.device) { raw.device } else { {} }
+
+    group_uid = ""
+    group_name = ""
+    if is_array(raw.target) {
+        t0 = get(raw.target, [0]) ?? {}
+        if is_object(t0) {
+            ttype0 = downcase(to_string(t0.type) ?? "")
+            if contains(ttype0, "group") || ttype0 == "usergroup" {
+                group_uid = to_string(t0.id) ?? ""
+                group_name = to_string(t0.displayName) ?? to_string(t0.alternateId) ?? ""
+            }
+        }
+        if group_uid == "" {
+            t1 = get(raw.target, [1]) ?? {}
+            if is_object(t1) {
+                ttype1 = downcase(to_string(t1.type) ?? "")
+                if contains(ttype1, "group") || ttype1 == "usergroup" {
+                    group_uid = to_string(t1.id) ?? ""
+                    group_name = to_string(t1.displayName) ?? to_string(t1.alternateId) ?? ""
+                }
+            }
+        }
+    }
+
+    event_type = to_string(raw.eventType) ?? ""
+    event_type_l = downcase(event_type)
+    display = to_string(raw.displayMessage) ?? ""
+    if display == "" {
+        display = event_type
+    }
+
+    outcome = upcase(to_string(outcome_obj.result) ?? "")
+    status_id = 1
+    if outcome == "FAILURE" || outcome == "DENY" || outcome == "SKIPPED" {
+        status_id = 2
+    } else if outcome == "CHALLENGE" {
+        status_id = 3
+    } else if outcome == "" || outcome == "UNKNOWN" {
+        status_id = 0
+    }
+
+    sev_raw = upcase(to_string(raw.severity) ?? "INFO")
+    severity_id = 1
+    if sev_raw == "WARN" || sev_raw == "WARNING" {
+        severity_id = 2
+    } else if sev_raw == "ERROR" {
+        severity_id = 3
+    }
+    if status_id == 2 && severity_id < 2 {
+        severity_id = 2
+    }
+
+    # Class selection from eventType prefix / keywords.
+    category_uid = 3
+    class_uid = 3002
+    class_name = "Authentication"
+    category_name = "Identity & Access Management"
+    activity_id = 1
+
+    if starts_with(event_type_l, "user.session") || starts_with(event_type_l, "user.authentication") || contains(event_type_l, "login") || contains(event_type_l, "mfa") || contains(event_type_l, "sso") {
+        class_uid = 3002
+        class_name = "Authentication"
+        if contains(event_type_l, "end") || contains(event_type_l, "logout") || contains(event_type_l, "revoke") {
+            activity_id = 2
+        } else if status_id == 2 {
+            activity_id = 1
+        } else {
+            activity_id = 1
+        }
+    } else if starts_with(event_type_l, "user.account") || starts_with(event_type_l, "user.lifecycle") || starts_with(event_type_l, "user.credential") || contains(event_type_l, "password") {
+        class_uid = 3001
+        class_name = "Account Change"
+        activity_id = 1
+        if contains(event_type_l, "delete") || contains(event_type_l, "deactivate") {
+            activity_id = 4
+        } else if contains(event_type_l, "update") || contains(event_type_l, "change") || contains(event_type_l, "reset") {
+            activity_id = 3
+        } else if contains(event_type_l, "create") || contains(event_type_l, "activate") || contains(event_type_l, "import") {
+            activity_id = 1
+        }
+    } else if starts_with(event_type_l, "group.") {
+        class_uid = 3006
+        class_name = "Group Management"
+        activity_id = 1
+        if contains(event_type_l, "remove") || contains(event_type_l, "delete") {
+            activity_id = 4
+        } else if contains(event_type_l, "add") || contains(event_type_l, "create") {
+            activity_id = 1
+        } else {
+            activity_id = 3
+        }
+    } else if starts_with(event_type_l, "policy.") || starts_with(event_type_l, "security.") || contains(event_type_l, "threat") || contains(event_type_l, "risk") {
+        # Detection finding (modern), never 2001.
+        category_uid = 2
+        category_name = "Findings"
+        class_uid = 2004
+        class_name = "Detection Finding"
+        activity_id = 1
+        if severity_id < 3 {
+            severity_id = 3
+        }
+    } else {
+        # App / system / API-ish catch-all.
+        category_uid = 6
+        category_name = "Application Activity"
+        class_uid = 6003
+        class_name = "API Activity"
+        activity_id = 1
+        if contains(event_type_l, "delete") || contains(event_type_l, "revoke") {
+            activity_id = 4
+        } else if contains(event_type_l, "update") || contains(event_type_l, "modify") {
+            activity_id = 3
+        } else if contains(event_type_l, "create") || contains(event_type_l, "add") {
+            activity_id = 1
+        } else {
+            activity_id = 2
+        }
+    }
+
+    type_uid = class_uid * 100 + activity_id
+
+    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+    ts_str = to_string(raw.published) ?? ""
+    if ts_str != "" {
+        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+        if parsed_ts != null {
+            time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+        }
+    }
+
+    caller = to_string(actor_obj.displayName) ?? ""
+    if caller == "" {
+        caller = to_string(actor_obj.alternateId) ?? ""
+    }
+    actor_uid = to_string(actor_obj.id) ?? ""
+    actor_email = to_string(actor_obj.alternateId) ?? ""
+
+    src_ip = to_string(client_obj.ipAddress) ?? ""
+    if src_ip != "" {
+        ipv4_ok = is_ipv4(src_ip)
+        ipv6_ok = is_ipv6(src_ip)
+        if !ipv4_ok && !ipv6_ok {
+            src_ip = ""
+        }
+    }
+
+    ua = to_string(ua_obj.rawUserAgent) ?? ""
+    session_uid = to_string(auth_ctx.externalSessionId) ?? ""
+    if session_uid == "" {
+        session_uid = to_string(auth_ctx.rootSessionId) ?? ""
+    }
+
+    host = to_string(device_obj.name) ?? ""
+    if host == "" {
+        host = to_string(client_obj.device) ?? ""
+    }
+
+    txn_id = ""
+    if is_object(raw.transaction) {
+        txn_id = to_string(raw.transaction.id) ?? ""
+    }
+
+    req_uri = ""
+    if is_object(raw.debugContext) && is_object(raw.debugContext.debugData) {
+        req_uri = to_string(raw.debugContext.debugData.requestUri) ?? ""
+    }
+
+    . = {
+        "category_uid": category_uid,
+        "class_uid": class_uid,
+        "class_name": class_name,
+        "category_name": category_name,
+        "type_uid": type_uid,
+        "activity_id": activity_id,
+        "severity_id": severity_id,
+        "status_id": status_id,
+        "time": time_ms,
+        "message": display,
+        "actor": {
+            "user": {
+                "name": caller,
+                "uid": actor_uid,
+                "email_addr": actor_email,
+            },
+            "session": {
+                "uid": session_uid,
+            },
+        },
+        "user": {
+            "name": caller,
+            "uid": actor_uid,
+            "email_addr": actor_email,
+        },
+        "src_endpoint": {
+            "ip": src_ip,
+        },
+        "device": {
+            "hostname": host,
+            "uid": to_string(device_obj.id) ?? "",
+            "name": host,
+        },
+        "metadata": {
+            "version": "1.9.0",
+            "uid": to_string(raw.uuid) ?? "",
+            "event_code": event_type,
+            "log_name": "Okta System Log",
+            "log_provider": "Okta",
+            "correlation_uid": txn_id,
+            "product": {
+                "name": "Okta System Log",
+                "vendor_name": "Okta",
+            },
+        },
+        "unmapped": {
+            "event_type": event_type,
+            "api_operation": event_type,
+            "api_service": "okta",
+            "legacy_event_type": to_string(raw.legacyEventType) ?? "",
+            "outcome": outcome,
+            "outcome_reason": to_string(outcome_obj.reason) ?? "",
+            "okta_severity": sev_raw,
+            "client_device": to_string(client_obj.device) ?? "",
+            "browser": to_string(ua_obj.browser) ?? "",
+            "os": to_string(ua_obj.os) ?? "",
+            "source_ip_raw": to_string(client_obj.ipAddress) ?? "",
+            "request_uri": req_uri,
+        },
+    }
+
+    if ua != "" {
+        .http_request = {
+            "user_agent": ua,
+            "uid": txn_id,
+        }
+    }
+
+    if class_uid == 6003 && req_uri != "" {
+        .dst_endpoint = {
+            "svc_name": req_uri,
+        }
+    }
+
+    if class_uid == 2004 {
+        # Detection Finding requires finding_info; enable security_control for the
+        # profile-gated fields the finding class carries. 2004 has no actor,
+        # http_request, or src_endpoint attribute, so those move to unmapped.
+        .finding_info = {
+            "title": display,
+            "uid": to_string(raw.uuid) ?? "",
+            "types": ["TTPs/Detection"],
+        }
+        .metadata.profiles = ["security_control"]
+        .unmapped.okta_actor = to_string(get(.actor, ["user", "name"]) ?? null) ?? ""
+        .unmapped.okta_actor_uid = to_string(get(.actor, ["user", "uid"]) ?? null) ?? ""
+        del(.actor)
+        if exists(.user) {
+            del(.user)
+        }
+        if exists(.http_request) {
+            .unmapped.http_user_agent = to_string(get(.http_request, ["user_agent"]) ?? null) ?? ""
+            del(.http_request)
+        }
+        if exists(.src_endpoint) {
+            .unmapped.client_ip = to_string(get(.src_endpoint, ["ip"]) ?? null) ?? ""
+            del(.src_endpoint)
+        }
+    }
+
+    if class_uid == 3002 {
+        # 3002 requires at_least_one of service/dst_endpoint; Okta is the
+        # authentication service, so declare it.
+        .service = {"name": "okta"}
+    }
+
+    if class_uid == 3001 || class_uid == 3002 || class_uid == 3006 {
+        # device is host-profile gated on IAM classes; the client zone info
+        # stays in unmapped.
+        if exists(.device) {
+            .unmapped.device_zone = to_string(get(.device, ["uid"]) ?? null) ?? ""
+            .unmapped.device_hostname = to_string(get(.device, ["hostname"]) ?? null) ?? ""
+            del(.device)
+        }
+    }
+
+    # Group Management (3006) requires group; api/device are not class attributes at 1.9.0.
+    if class_uid == 3006 {
+        gname = group_name
+        if gname == "" {
+            gname = event_type
+        }
+        .group = {
+            "uid": group_uid,
+            "name": gname,
+        }
+        .unmapped.okta_api_operation = event_type
+        .unmapped.okta_device_hostname = host
+        del(.api)
+        del(.device)
+    }
