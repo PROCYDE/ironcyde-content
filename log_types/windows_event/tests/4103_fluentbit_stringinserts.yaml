@@ -5,6 +5,7 @@ expected:
   actor.user.name: domainuser
   class_uid: 1009
   device.hostname: dc01.corp.example.test
+  metadata.event_code: '4103'
   metadata.log_name: Microsoft-Windows-PowerShell/Operational
   metadata.log_provider: Microsoft-Windows-PowerShell
   metadata.uid: '12345'

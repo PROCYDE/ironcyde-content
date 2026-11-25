@@ -4,6 +4,7 @@ expected:
   activity_id: 1
   class_uid: 1009
   device.hostname: win-fin01.corp.example.test
+  metadata.event_code: '4104'
   metadata.log_name: Microsoft-Windows-PowerShell/Operational
   script.name: script.ps1
   script.script_content.value: Write-Host "hello"
