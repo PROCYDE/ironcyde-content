@@ -81,6 +81,14 @@ class Names(unittest.TestCase):
         self.assertEqual(kinds("raw_sample: 'see https://portal.customer.travel/login and user.name'"),
                          [("domain", "portal.customer.travel")])
 
+    def test_url_hosts_ignore_file_name_and_field_path_exclusions(self):
+        self.assertEqual(kinds("raw_sample: 'see https://portal.customer.sh/login and https://container.id/'"),
+                         [("domain", "portal.customer.sh"), ("domain", "container.id")])
+
+    def test_excluded_bare_name_does_not_hide_a_later_url(self):
+        self.assertEqual(kinds("raw_sample: 'field container.id, host https://container.id/'"),
+                         [("domain", "container.id")])
+
     def test_documentation_url_hosts_pass(self):
         self.assertEqual(kinds("raw_sample: 'see https://portal.example.com/login'"), [])
 

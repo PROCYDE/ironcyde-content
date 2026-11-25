@@ -245,19 +245,20 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
         texts = comments_and_strings(text, vrl=True)
     seen = set()
     for chunk in texts:
+        # (name, from a URL): file name and field path exclusions apply only to bare names, never to a URL's host.
         candidates = [(m.group(1), True) for m in URL_HOST_RE.finditer(chunk)]
-        candidates += [(m.group(1), m.group(2).lower() in policy.tlds or len(m.group(2)) == 2)
-                       for m in DOMAIN_RE.finditer(chunk)]
-        for domain, checked in candidates:
-            if not checked or domain.lower() in seen:
+        candidates += [(m.group(1), False) for m in DOMAIN_RE.finditer(chunk)
+                       if m.group(2).lower() in policy.tlds or len(m.group(2)) == 2]
+        for domain, from_url in candidates:
+            key = domain.lower()
+            if key in seen or ip_allowed(policy, domain) is not None:
                 continue
-            seen.add(domain.lower())
-            if ip_allowed(policy, domain) is not None:
+            if key in email_domains or domain_allowed(policy, domain):
                 continue
-            if domain.lower() in email_domains or domain_allowed(policy, domain):
+            if not from_url and is_non_domain(policy, domain):
                 continue
-            if is_non_domain(policy, domain):
-                continue
+            # Only reported names count as seen, so an excluded bare name never hides the same name in a URL.
+            seen.add(key)
             found.append(Finding(rel, line_of(text, domain), "domain outside reserved names", domain))
 
     for pattern in policy.denylist:
