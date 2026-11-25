@@ -59,8 +59,7 @@ jobs:
         run: python -m pip install --no-deps --require-hashes -r .github/content-checks/requirements.txt
       - name: Self-test the checker
         run: python -m unittest discover -s .github/content-checks -v
+      # The private denylist is not checked here: this job runs the pull request's own checker, which must never
+      # see a secret. The content-denylist workflow checks it with the checker from main.
       - name: Check test data
-        env:
-          # Optional, private: customer names and internal hostnames, one per line. Unset for forks.
-          CONTENT_DENYLIST: ${{ secrets.CONTENT_DENYLIST }}
         run: python .github/content-checks/check_test_data.py

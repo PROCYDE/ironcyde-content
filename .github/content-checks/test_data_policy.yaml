@@ -45,10 +45,6 @@ allowed_domains:
     reason: RFC 2606 reserved TLD
   - domain: localhost
     reason: RFC 2606 / RFC 6761 reserved name
-  - domain: openssh.com
-    reason: OpenSSH protocol and algorithm identifiers (e.g. chacha20-poly1305@openssh.com), not hosts
-  - domain: libssh.org
-    reason: libssh algorithm identifiers (e.g. curve25519-sha256@libssh.org), not hosts
 
 # Dotted names whose last label is a two-letter TLD are always checked; these generic TLDs too.
 # Names with other endings (file names, VRL and OCSF paths such as user.name, event types like
@@ -83,6 +79,8 @@ non_domain_suffixes:
 non_domains:
   - value: container.info
     reason: Falco output field placeholder in samples, not a host
+  - value: container.id
+    reason: Falco output field name that the parser reads, not a host
 
 # Public patterns that must never appear in content (internal domains are already public knowledge).
 denylist_patterns:

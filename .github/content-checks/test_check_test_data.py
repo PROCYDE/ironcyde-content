@@ -56,8 +56,33 @@ class Names(unittest.TestCase):
     def test_vrl_code_paths_are_ignored(self):
         self.assertEqual(kinds('x = string(.src.id) ?? ""\n', "log_types/x/parser.vrl"), [])
 
-    def test_ssh_algorithm_identifiers_pass(self):
-        self.assertEqual(kinds("raw_sample: 'chacha20-poly1305@openssh.com curve25519-sha256@libssh.org'"), [])
+    def test_ssh_algorithm_identifiers_need_an_exception(self):
+        # No global allowance: a real address at openssh.com must not pass with them.
+        self.assertEqual(kinds("raw_sample: 'chacha20-poly1305@openssh.com alice@openssh.com'"),
+                         [("email", "chacha20-poly1305@openssh.com"), ("email", "alice@openssh.com")])
+
+    def test_vrl_string_literals_are_checked(self):
+        self.assertEqual(kinds('.host = "customer.acme.com"\n.raw = s\'api.acme.io\'\n', "log_types/x/parser.vrl"),
+                         [("domain", "customer.acme.com"), ("domain", "api.acme.io")])
+
+    def test_vrl_inline_comments_are_checked(self):
+        self.assertEqual(kinds('x = 1 # see mx.acme-corp.de\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
+    def test_yaml_inline_comments_are_checked(self):
+        self.assertEqual(kinds("expected:\n  class_uid: 3002 # from mx.acme-corp.de\n"),
+                         [("domain", "mx.acme-corp.de")])
+
+    def test_field_paths_in_vrl_strings_are_ignored(self):
+        self.assertEqual(kinds('x = get(.fields, ["user.name"]) ?? "src_endpoint.ip"\n', "log_types/x/parser.vrl"),
+                         [])
+
+    def test_url_hosts_are_checked_whatever_their_tld(self):
+        self.assertEqual(kinds("raw_sample: 'see https://portal.customer.travel/login and user.name'"),
+                         [("domain", "portal.customer.travel")])
+
+    def test_documentation_url_hosts_pass(self):
+        self.assertEqual(kinds("raw_sample: 'see https://portal.example.com/login'"), [])
 
 
 class FalsePositives(unittest.TestCase):
@@ -99,6 +124,25 @@ class Denylists(unittest.TestCase):
         self.assertTrue(found[0].secret)
         self.assertNotIn("acmebank", found[0].render().lower())
         self.assertNotIn("acmebank", found[0].annotation().lower())
+
+    def test_private_term_in_another_finding_is_hidden(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "raw_sample: 'from Jane@ACMEBANK.com'", ["acmebank"])
+        self.assertGreaterEqual(len(found), 2)
+        for f in found:
+            self.assertTrue(f.secret)
+            self.assertNotIn("acmebank", f.render().lower())
+            self.assertNotIn("acmebank", f.annotation().lower())
+
+    def test_private_term_in_the_path_is_hidden(self):
+        found = c.scan_file(POLICY, "log_types/acmebank/tests/a.yaml", "raw_sample: 'from 8.8.8.8'", ["acmebank"])
+        self.assertEqual(len(found), 2)
+        for f in found:
+            self.assertNotIn("acmebank", f.render().lower())
+            self.assertNotIn("acmebank", f.annotation().lower())
+
+    def test_private_only_checks_nothing_else(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", "raw_sample: 'ACMEBANK at 8.8.8.8'", ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
 
 
 class Exceptions(unittest.TestCase):

@@ -51,13 +51,16 @@ CI enforces this on every pull request (`content-checks` workflow):
   vendor-documented example credentials are allowlisted.
 - **Test data policy**: [`check_test_data.py`](.github/content-checks/check_test_data.py) checks every
   IP address, email address and domain name in `log_types/` against
-  [`test_data_policy.yaml`](.github/content-checks/test_data_policy.yaml). A maintainer-managed private
-  list of customer names and internal hostnames (`CONTENT_DENYLIST` repository secret) is checked too;
-  it is not available to pull requests from forks, so reviewers still read every sample.
+  [`test_data_policy.yaml`](.github/content-checks/test_data_policy.yaml). Domains are looked for in
+  sample data, comments, parser strings and URLs.
+- **Private denylist**: the `content-denylist` workflow checks a maintainer-managed private list of
+  customer names and internal hostnames (`CONTENT_DENYLIST`) with the checker from `main`, so the list
+  never reaches code a pull request changes. Matches are reported without the term. Pull requests from
+  forks are not checked, so reviewers still read every sample.
 
 File names such as `README.md` and field paths such as `container.id` are not domains. The policy
 ignores common file extensions and JSON object keys; a real host that ends in one of those extensions
-is therefore not checked mechanically, so reviewers still read every sample.
+is therefore not checked mechanically, unless it appears in a URL, so reviewers still read every sample.
 
 Run the test data check locally with Python 3 and PyYAML:
 

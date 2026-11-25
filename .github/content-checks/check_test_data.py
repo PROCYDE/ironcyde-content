@@ -6,7 +6,7 @@ reserved for documentation (RFC 5737, RFC 3849, RFC 2606, RFC 6761) or be listed
 reason in test_data_policy.yaml. Optionally, a private denylist (customer names, internal hostnames) is
 read from the CONTENT_DENYLIST environment variable; its terms are never printed.
 
-Usage: check_test_data.py [--root DIR] [--policy FILE]
+Usage: check_test_data.py [--root DIR] [--policy FILE] [--private-only]
 Exit status: 0 when clean, 1 on findings, 2 on a broken policy.
 """
 
@@ -33,6 +33,10 @@ IPV4_RE = re.compile(r"(?<![\w.])((?:\d{1,3}\.){3}\d{1,3})(?![\w]|\.\w)")
 # IPv6 candidates: hex groups with at least two colons, optional zone. ipaddress decides what is real.
 IPV6_RE = re.compile(r"(?<![\w:.])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?:\.\d{1,3}){0,3})(?:%[\w.-]+)?(?![\w:])")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,63})\b")
+# The host of a URL is checked whatever its top-level domain, because a URL leaves no doubt that it names a host.
+URL_HOST_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://(?:[^/\s@\"']*@)?([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z][A-Za-z0-9-]*)")
+# String literals in VRL and YAML: double-quoted with escapes, single-quoted (YAML), and VRL raw strings s'...'.
+STRING_RE = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|s?'(?:[^'\\\n]|\\.)*'")
 DOMAIN_RE = re.compile(r"(?<![\w.@-])((?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+([A-Za-z]{2,63}))\b(?![.-]\w)")
 
 
@@ -43,13 +47,18 @@ class Finding:
     kind: str
     value: str
     secret: bool = False
+    # The path itself contains a private term, so it is never printed either.
+    secret_path: bool = False
 
     def render(self) -> str:
         shown = "a CONTENT_DENYLIST entry" if self.secret else repr(self.value)
-        return f"{self.path}:{self.line}: {self.kind}: {shown}"
+        where = "a file whose path contains a CONTENT_DENYLIST entry" if self.secret_path else f"{self.path}:{self.line}"
+        return f"{where}: {self.kind}: {shown}"
 
     def annotation(self) -> str:
         shown = "a CONTENT_DENYLIST entry" if self.secret else self.value
+        if self.secret_path:
+            return f"::error title=Test data policy::a file whose path contains a CONTENT_DENYLIST entry: {self.kind}: {shown}"
         return f"::error file={self.path},line={self.line},title=Test data policy::{self.kind}: {shown}"
 
 
@@ -182,8 +191,19 @@ def expand_json(value: str, depth: int = 0) -> list[str]:
     return out
 
 
-def comment_lines(text: str) -> list[str]:
-    return [ln.split("#", 1)[1] if "#" in ln else "" for ln in text.splitlines() if ln.lstrip().startswith("#")]
+def comments_and_strings(text: str, vrl: bool) -> list[str]:
+    """The comments, inline ones included, and for VRL the string literals of a file: where hostnames can appear
+    without being mistaken for the dotted paths of code and YAML keys."""
+    out: list[str] = []
+    for line in text.splitlines():
+        literals = STRING_RE.findall(line) if vrl else []
+        rest = STRING_RE.sub('""', line)
+        # A YAML comment starts at a # that begins the line or follows whitespace; in VRL any # outside a string.
+        m = re.search(r"#" if vrl else r"(?:^|\s)#", rest)
+        if m:
+            out.append(rest[m.end():])
+        out.extend(lit[2:-1] if lit.startswith("s'") else lit[1:-1] for lit in literals)
+    return out
 
 
 def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> list[Finding]:
@@ -207,8 +227,9 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
         if not domain_allowed(policy, m.group(1)):
             found.append(Finding(rel, line_of(text, m.group(0), m.start()), "email address outside reserved domains", m.group(0)))
 
-    # Domain names are only looked for in data and comments: VRL code and YAML keys are full of dotted paths.
-    # A dotted name counts when its last label is a two-letter (country code) TLD or listed in checked_tlds.
+    # Domain names are only looked for in data, comments and VRL strings: code and YAML keys are full of dotted
+    # paths. A dotted name counts when its last label is a two-letter (country code) TLD or listed in checked_tlds;
+    # a URL's host counts whatever its last label.
     if rel.endswith((".yaml", ".yml")):
         try:
             data = yaml.safe_load(text)
@@ -219,14 +240,16 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
             texts = []
             for value in strings_in(data):
                 texts.extend(expand_json(value))
-            texts += comment_lines(text)
+            texts += comments_and_strings(text, vrl=False)
     else:
-        texts = comment_lines(text)
+        texts = comments_and_strings(text, vrl=True)
     seen = set()
     for chunk in texts:
-        for m in DOMAIN_RE.finditer(chunk):
-            domain, tld = m.group(1), m.group(2).lower()
-            if (tld not in policy.tlds and len(tld) != 2) or domain.lower() in seen:
+        candidates = [(m.group(1), True) for m in URL_HOST_RE.finditer(chunk)]
+        candidates += [(m.group(1), m.group(2).lower() in policy.tlds or len(m.group(2)) == 2)
+                       for m in DOMAIN_RE.finditer(chunk)]
+        for domain, checked in candidates:
+            if not checked or domain.lower() in seen:
                 continue
             seen.add(domain.lower())
             if ip_allowed(policy, domain) is not None:
@@ -240,11 +263,25 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
     for pattern in policy.denylist:
         for m in pattern.finditer(text):
             found.append(Finding(rel, line_of(text, m.group(0), m.start()), f"matches denylist pattern {pattern.pattern!r}", m.group(0)))
+    found += scan_private(rel, text, private_terms)
+    # Any finding that shows a private term, in any spelling, must not print it.
+    for f in found:
+        f.secret = f.secret or any(t in f.value.lower() for t in private_terms)
+        f.secret_path = any(t in rel.lower() for t in private_terms)
+    return found
+
+
+def scan_private(rel: str, text: str, private_terms: list[str]) -> list[Finding]:
+    """Findings for the private denylist alone; they never carry the term."""
+    found: list[Finding] = []
     lowered = text.lower()
     for term in private_terms:
         idx = lowered.find(term)
         if idx >= 0:
-            found.append(Finding(rel, text.count("\n", 0, idx) + 1, "private denylist", term, secret=True))
+            found.append(Finding(rel, text.count("\n", 0, idx) + 1, "private denylist", term, secret=True,
+                                 secret_path=any(t in rel.lower() for t in private_terms)))
+        elif term in rel.lower():
+            found.append(Finding(rel, 1, "private denylist in the file path", term, secret=True, secret_path=True))
     return found
 
 
@@ -257,10 +294,13 @@ def tracked_files(root: Path, patterns: list[str]) -> list[str]:
     return sorted(f for f in files if any(fnmatch.fnmatch(f, p) for p in patterns))
 
 
-def run(root: Path, policy: Policy, private_terms: list[str]) -> list[Finding]:
+def run(root: Path, policy: Policy, private_terms: list[str], private_only: bool = False) -> list[Finding]:
     findings: list[Finding] = []
     for rel in tracked_files(root, policy.scan):
         text = (root / rel).read_text(encoding="utf-8", errors="replace")
+        if private_only:
+            findings += scan_private(rel, text, private_terms)
+            continue
         for f in scan_file(policy, rel, text, private_terms):
             excused = False
             if not f.secret:
@@ -276,6 +316,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--root", type=Path, default=Path.cwd())
     ap.add_argument("--policy", type=Path, default=HERE / "test_data_policy.yaml")
+    ap.add_argument("--private-only", action="store_true",
+                    help="check only the CONTENT_DENYLIST terms, as the trusted private denylist workflow does")
     args = ap.parse_args(argv)
     gha = os.environ.get("GITHUB_ACTIONS") == "true"
 
@@ -291,11 +333,13 @@ def main(argv: list[str] | None = None) -> int:
         for t in private_terms:
             print(f"::add-mask::{t}")
     if not private_terms:
-        print("note: CONTENT_DENYLIST is not set; the private denylist check is skipped "
-              "(expected for pull requests from forks).")
+        print("note: CONTENT_DENYLIST is not set here; the private denylist check runs in the trusted "
+              "content-denylist workflow.")
+        if args.private_only:
+            return 0
 
-    findings = run(args.root.resolve(), policy, private_terms)
-    unused = [ex for ex in policy.exceptions if not ex.used]
+    findings = run(args.root.resolve(), policy, private_terms, args.private_only)
+    unused = [] if args.private_only else [ex for ex in policy.exceptions if not ex.used]
 
     for f in findings:
         print(f.annotation() if gha else f.render())
