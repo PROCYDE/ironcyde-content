@@ -191,69 +191,102 @@ def expand_json(value: str, depth: int = 0) -> list[str]:
     return out
 
 
+def comment_start(line: str, vrl: bool) -> int | None:
+    """Where the comment of a line begins, after its #, or None. In VRL a # inside a string literal starts no comment.
+    In YAML any # at the start or after whitespace counts, quotes or not: a quoted value is checked as data anyway,
+    and this way neither quotes inside a comment nor a stray apostrophe before it can hide the comment's text."""
+    if not vrl:
+        m = re.search(r"(?:^|(?<=\s))#", line)
+        return m.end() if m else None
+    pos = 0
+    while True:
+        hash_ = line.find("#", pos)
+        lit = STRING_RE.search(line, pos)
+        if hash_ < 0:
+            return None
+        if lit is None or hash_ < lit.start():
+            return hash_ + 1
+        pos = lit.end()
+
+
 def comments_and_strings(text: str, vrl: bool) -> list[str]:
     """The comments, inline ones included, and for VRL the string literals of a file: where hostnames can appear
-    without being mistaken for the dotted paths of code and YAML keys."""
+    without being mistaken for the dotted paths of code and YAML keys. A comment is taken as written, quotes and all."""
     out: list[str] = []
     for line in text.splitlines():
-        literals = STRING_RE.findall(line) if vrl else []
-        rest = STRING_RE.sub('""', line)
-        # A YAML comment starts at a # that begins the line or follows whitespace; in VRL any # outside a string.
-        m = re.search(r"#" if vrl else r"(?:^|\s)#", rest)
-        if m:
-            out.append(rest[m.end():])
-        out.extend(lit[2:-1] if lit.startswith("s'") else lit[1:-1] for lit in literals)
+        start = comment_start(line, vrl)
+        code = line if start is None else line[:start - 1]
+        if start is not None:
+            out.append(line[start:])
+        if vrl:
+            out.extend(lit[2:-1] if lit.startswith("s'") else lit[1:-1] for lit in STRING_RE.findall(code))
     return out
+
+
+def decoded_strings(rel: str, text: str) -> tuple[list[str], str | None]:
+    """The string values of a YAML file after decoding, JSON samples expanded, and the YAML error if it has one.
+    Escapes such as \\u0038 only show their meaning here, so every check also looks at these values."""
+    if not rel.endswith((".yaml", ".yml")):
+        return [], None
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as err:
+        return [], str(err).splitlines()[0]
+    out: list[str] = []
+    for value in strings_in(data):
+        out.extend(expand_json(value))
+    return out, None
 
 
 def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> list[Finding]:
     found: list[Finding] = []
 
-    # Addresses and emails are precise enough to check in the whole file, code and comments included.
-    for m in IPV4_RE.finditer(text):
-        ok = ip_allowed(policy, m.group(1))
-        if ok is False:
-            found.append(Finding(rel, line_of(text, m.group(1), m.start()), "IPv4 address outside documentation ranges", m.group(1)))
-    for m in IPV6_RE.finditer(text):
-        cand = m.group(1)
-        if cand.count(":") < 2:
-            continue
-        ok = ip_allowed(policy, cand)
-        if ok is False:
-            found.append(Finding(rel, line_of(text, cand, m.start()), "IPv6 address outside documentation ranges", cand))
-    email_domains = set()
-    for m in EMAIL_RE.finditer(text):
-        email_domains.add(m.group(1).lower())
-        if not domain_allowed(policy, m.group(1)):
-            found.append(Finding(rel, line_of(text, m.group(0), m.start()), "email address outside reserved domains", m.group(0)))
+    decoded, yaml_error = decoded_strings(rel, text)
+    if yaml_error is not None:
+        found.append(Finding(rel, 1, "file is not valid YAML", yaml_error))
+
+    # Addresses and emails are precise enough to check in the whole file, code and comments included, and again in
+    # the decoded string values, where an escape such as \\u0038 no longer hides them.
+    reported: set[tuple[str, str]] = set()
+
+    def report(kind: str, value: str, line: int) -> None:
+        if (kind, value.lower()) not in reported:
+            reported.add((kind, value.lower()))
+            found.append(Finding(rel, line, kind, value))
+
+    for i, chunk in enumerate([text] + decoded):
+        raw = i == 0
+        for m in IPV4_RE.finditer(chunk):
+            if ip_allowed(policy, m.group(1)) is False:
+                report("IPv4 address outside documentation ranges", m.group(1),
+                       line_of(text, m.group(1), m.start() if raw else 0))
+        for m in IPV6_RE.finditer(chunk):
+            cand = m.group(1)
+            if cand.count(":") >= 2 and ip_allowed(policy, cand) is False:
+                report("IPv6 address outside documentation ranges", cand, line_of(text, cand, m.start() if raw else 0))
+        for m in EMAIL_RE.finditer(chunk):
+            if not domain_allowed(policy, m.group(1)):
+                report("email address outside reserved domains", m.group(0),
+                       line_of(text, m.group(0), m.start() if raw else 0))
 
     # Domain names are only looked for in data, comments and VRL strings: code and YAML keys are full of dotted
     # paths. A dotted name counts when its last label is a two-letter (country code) TLD or listed in checked_tlds;
-    # a URL's host counts whatever its last label.
+    # a URL's host counts whatever its last label. Email addresses are removed first: they are checked above, and an
+    # exception for one never allows its domain anywhere else.
     if rel.endswith((".yaml", ".yml")):
-        try:
-            data = yaml.safe_load(text)
-        except yaml.YAMLError as err:
-            found.append(Finding(rel, 1, "file is not valid YAML", str(err).splitlines()[0]))
-            texts = []
-        else:
-            texts = []
-            for value in strings_in(data):
-                texts.extend(expand_json(value))
-            texts += comments_and_strings(text, vrl=False)
+        texts = decoded + comments_and_strings(text, vrl=False)
     else:
         texts = comments_and_strings(text, vrl=True)
     seen = set()
     for chunk in texts:
+        chunk = EMAIL_RE.sub(" ", chunk)
         # (name, from a URL): file name and field path exclusions apply only to bare names, never to a URL's host.
         candidates = [(m.group(1), True) for m in URL_HOST_RE.finditer(chunk)]
         candidates += [(m.group(1), False) for m in DOMAIN_RE.finditer(chunk)
                        if m.group(2).lower() in policy.tlds or len(m.group(2)) == 2]
         for domain, from_url in candidates:
             key = domain.lower()
-            if key in seen or ip_allowed(policy, domain) is not None:
-                continue
-            if key in email_domains or domain_allowed(policy, domain):
+            if key in seen or ip_allowed(policy, domain) is not None or domain_allowed(policy, domain):
                 continue
             if not from_url and is_non_domain(policy, domain):
                 continue
@@ -262,9 +295,11 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
             found.append(Finding(rel, line_of(text, domain), "domain outside reserved names", domain))
 
     for pattern in policy.denylist:
-        for m in pattern.finditer(text):
-            found.append(Finding(rel, line_of(text, m.group(0), m.start()), f"matches denylist pattern {pattern.pattern!r}", m.group(0)))
-    found += scan_private(rel, text, private_terms)
+        for i, chunk in enumerate([text] + decoded):
+            for m in pattern.finditer(chunk):
+                report(f"matches denylist pattern {pattern.pattern!r}", m.group(0),
+                       line_of(text, m.group(0), m.start() if i == 0 else 0))
+    found += scan_private(rel, text, private_terms, decoded)
     # Any finding that shows a private term, in any spelling, must not print it.
     for f in found:
         f.secret = f.secret or any(t in f.value.lower() for t in private_terms)
@@ -272,12 +307,17 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
     return found
 
 
-def scan_private(rel: str, text: str, private_terms: list[str]) -> list[Finding]:
-    """Findings for the private denylist alone; they never carry the term."""
+def scan_private(rel: str, text: str, private_terms: list[str], decoded: list[str] | None = None) -> list[Finding]:
+    """Findings for the private denylist alone, in the file and its decoded string values; they never carry the term."""
     found: list[Finding] = []
     lowered = text.lower()
+    if decoded is None:
+        decoded = decoded_strings(rel, text)[0]
+    lowered_decoded = [d.lower() for d in decoded]
     for term in private_terms:
         idx = lowered.find(term)
+        if idx < 0 and any(term in d for d in lowered_decoded):
+            idx = 0
         if idx >= 0:
             found.append(Finding(rel, text.count("\n", 0, idx) + 1, "private denylist", term, secret=True,
                                  secret_path=any(t in rel.lower() for t in private_terms)))

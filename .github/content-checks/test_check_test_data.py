@@ -92,6 +92,35 @@ class Names(unittest.TestCase):
     def test_documentation_url_hosts_pass(self):
         self.assertEqual(kinds("raw_sample: 'see https://portal.example.com/login'"), [])
 
+    def test_email_exception_does_not_allow_its_domain_elsewhere(self):
+        self.assertEqual(kinds("raw_sample: 'chacha20-poly1305@openssh.com https://openssh.com/customer'"),
+                         [("email", "chacha20-poly1305@openssh.com"), ("domain", "openssh.com")])
+
+    def test_quoted_text_in_yaml_comments_is_checked(self):
+        self.assertEqual(kinds('expected:\n  class_uid: 3002 # see "mx.acme-corp.de"\n'), [("domain", "mx.acme-corp.de")])
+
+    def test_apostrophe_before_a_yaml_comment_does_not_hide_it(self):
+        self.assertEqual(kinds("note: it's here # mx.acme-corp.de 'x'\n"), [("domain", "mx.acme-corp.de")])
+
+    def test_vrl_comment_after_a_hash_in_a_string_is_checked(self):
+        self.assertEqual(kinds('x = "#" # see "mx.acme-corp.de"\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
+
+class DecodedStrings(unittest.TestCase):
+    def test_json_escapes_do_not_hide_addresses(self):
+        self.assertEqual(kinds('raw_sample: \'{"sourceIPAddress":"\\u0038.8.8.8"}\''), [("IPv4", "8.8.8.8")])
+
+    def test_yaml_escapes_do_not_hide_emails(self):
+        self.assertIn(("email", "alice@acme.com"), kinds('raw_sample: "mail \\x61lice@acme.com"'))
+
+    def test_plain_addresses_are_reported_once(self):
+        self.assertEqual(kinds("raw_sample: 'from 8.8.8.8'"), [("IPv4", "8.8.8.8")])
+
+    def test_escapes_do_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", 'raw_sample: "\\x41CMEBANK"', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
 
 class FalsePositives(unittest.TestCase):
     def test_json_keys_are_not_domains(self):
