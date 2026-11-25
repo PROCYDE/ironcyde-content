@@ -209,6 +209,18 @@ class DecodedStrings(unittest.TestCase):
         self.assertEqual([(f.kind, f.value) for f in found], [("file cannot be checked", "KeyError")])
         self.assertNotIn("acmebank", found[0].render().lower())
 
+    def test_multiline_vrl_literals_are_decoded(self):
+        program = '.x = "first line\n\\u{61}cmebank at \\u{38}.8.8.8 # not a comment\nmx\\u{2e}acme-corp.de"\n'
+        found = c.scan_private("log_types/x/parser.vrl", program, ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+        found = kinds(program, "log_types/x/parser.vrl")
+        self.assertIn(("IPv4", "8.8.8.8"), found)
+        self.assertIn(("domain", "mx.acme-corp.de"), found)
+
+    def test_quotes_in_vrl_comments_do_not_start_literals(self):
+        self.assertEqual(kinds('# it\'s "quoted"\n.x = "mx.acme-corp.de"\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
     def test_json_nested_deeper_than_five_levels_is_decoded(self):
         inner = '{"k": "' + "\\" + 'u0061cmebank"}'  # the escape is decoded only by the innermost level
         for _ in range(8):

@@ -40,8 +40,6 @@ IPV6_KEYED_RE = re.compile(r"(?<![\w:.-])[\w.-]*[G-Zg-z_-][\w.-]*:" + _IPV6)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,63})\b")
 # The host of a URL is checked whatever its top-level domain, because a URL leaves no doubt that it names a host.
 URL_HOST_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://(?:[^/\s@\"']*@)?([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z][A-Za-z0-9-]*)")
-# String literals in VRL and YAML: double-quoted with escapes, single-quoted (YAML), and VRL raw strings s'...'.
-STRING_RE = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|s?'(?:[^'\\\n]|\\.)*'")
 DOMAIN_RE = re.compile(r"(?<![\w.@-])((?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+([A-Za-z]{2,63}))\b(?![.-]\w)")
 
 
@@ -237,36 +235,50 @@ def expand_json(value: str, depth: int = 0, keys: list[str] | None = None) -> li
     return out
 
 
-def comment_start(line: str, vrl: bool) -> int | None:
-    """Where the comment of a line begins, after its #, or None. In VRL a # inside a string literal starts no comment.
-    In YAML any # at the start or after whitespace counts, quotes or not: a quoted value is checked as data anyway,
-    and this way neither quotes inside a comment nor a stray apostrophe before it can hide the comment's text."""
-    if not vrl:
+def yaml_comments(text: str) -> list[str]:
+    """The comments of a YAML file, inline ones included. Any # at the start or after whitespace counts, quotes or
+    not: a quoted value is checked as data anyway, and this way neither quotes inside a comment nor a stray
+    apostrophe before it can hide the comment's text."""
+    out: list[str] = []
+    for line in text.splitlines():
         m = re.search(r"(?:^|(?<=\s))#", line)
-        return m.end() if m else None
-    pos = 0
-    while True:
-        hash_ = line.find("#", pos)
-        lit = STRING_RE.search(line, pos)
-        if hash_ < 0:
-            return None
-        if lit is None or hash_ < lit.start():
-            return hash_ + 1
-        pos = lit.end()
+        if m:
+            out.append(line[m.end():])
+    return out
+
+
+def vrl_tokens(text: str) -> tuple[list[str], list[tuple[bool, str]]]:
+    """The comments and string literals of a VRL program, read as VRL does: a literal may span lines, and a # inside
+    one starts no comment. Each literal is (escaped, body): "..." literals take escapes; s'...', r'...' and t'...'
+    do not."""
+    comments: list[str] = []
+    literals: list[tuple[bool, str]] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "#":
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            comments.append(text[i + 1:end])
+            i = end
+        elif ch in "\"'":
+            j = i + 1
+            while j < n and text[j] != ch:
+                j += 2 if text[j] == "\\" else 1
+            literals.append((ch == '"', text[i + 1:min(j, n)]))
+            i = j + 1
+        else:
+            i += 1
+    return comments, literals
 
 
 def comments_and_strings(text: str, vrl: bool) -> list[str]:
-    """The comments, inline ones included, and for VRL the string literals of a file: where hostnames can appear
-    without being mistaken for the dotted paths of code and YAML keys. A comment is taken as written, quotes and all."""
-    out: list[str] = []
-    for line in text.splitlines():
-        start = comment_start(line, vrl)
-        code = line if start is None else line[:start - 1]
-        if start is not None:
-            out.append(line[start:])
-        if vrl:
-            out.extend(lit[2:-1] if lit.startswith("s'") else lit[1:-1] for lit in STRING_RE.findall(code))
-    return out
+    """The comments, inline ones included, and for VRL the string literals of a file, as written: where hostnames can
+    appear without being mistaken for the dotted paths of code and YAML keys."""
+    if not vrl:
+        return yaml_comments(text)
+    comments, literals = vrl_tokens(text)
+    return comments + [body for _, body in literals]
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -307,7 +319,7 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
     checked against the denylists: as hostnames they would be mistaken for field paths."""
     if rel.endswith(".vrl"):
         # Raw strings s'...' have no escapes but may hold JSON, as the others may.
-        literals = [lit[2:-1] if lit.startswith("s'") else vrl_unescape(lit[1:-1]) for lit in STRING_RE.findall(text)]
+        literals = [vrl_unescape(body) if escaped else body for escaped, body in vrl_tokens(text)[1]]
         values: list[str] = []
         keys: list[str] = []
         error = None
