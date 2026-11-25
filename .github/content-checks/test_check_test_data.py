@@ -25,6 +25,13 @@ class Addresses(unittest.TestCase):
     def test_public_ipv6_fails(self):
         self.assertEqual(kinds("raw_sample: 'from 2a00:1450:4001::1 port 1'"), [("IPv6", "2a00:1450:4001::1")])
 
+    def test_compressed_ipv6_after_a_key_fails(self):
+        self.assertEqual(kinds("raw_sample: 'addr:2a00::1 src_ip:2a00:1450::200e'"),
+                         [("IPv6", "2a00::1"), ("IPv6", "2a00:1450::200e")])
+
+    def test_fingerprints_after_a_key_are_not_addresses(self):
+        self.assertEqual(kinds("raw_sample: 'MD5:43:51:43:a1:b5:fc:8b:b7:43:51:43:a1:b5:fc:8b:b7 at 12:34:56'"), [])
+
     def test_ipv4_mapped_documentation_addresses_pass(self):
         self.assertEqual(kinds("raw_sample: 'from ::ffff:192.0.2.4 port 1'"), [])
 
@@ -125,6 +132,11 @@ class DecodedStrings(unittest.TestCase):
 
     def test_keys_in_json_samples_do_not_hide_private_terms(self):
         found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", 'raw_sample: \'{"\\u0061cmebank": 1}\'', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_keys_in_nested_json_do_not_hide_private_terms(self):
+        sample = r"""raw_sample: '{"msg": "{\"\\u0061cmebank\": 1}"}'"""
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", sample, ["acmebank"])
         self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
 
     def test_unreadable_file_does_not_print_a_private_path(self):

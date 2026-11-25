@@ -31,7 +31,11 @@ HERE = Path(__file__).resolve().parent
 # 192.0.2.4.example.net are handled by the domain rule).
 IPV4_RE = re.compile(r"(?<![\w.])((?:\d{1,3}\.){3}\d{1,3})(?![\w]|\.\w)")
 # IPv6 candidates: hex groups with at least two colons, optional zone. ipaddress decides what is real.
-IPV6_RE = re.compile(r"(?<![\w:.])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?:\.\d{1,3}){0,3})(?:%[\w.-]+)?(?![\w:])")
+_IPV6 = r"([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?:\.\d{1,3}){0,3})(?:%[\w.-]+)?(?![\w:])"
+IPV6_RE = re.compile(r"(?<![\w:.])" + _IPV6)
+# The same after a key and a colon (addr:2a00::1), when the key is no hex group itself: a fingerprint such as
+# SHA256:43:51:... never ends in time for the address to stop before the next colon.
+IPV6_KEYED_RE = re.compile(r"(?<![\w:.-])[\w-]*[G-Zg-z_-][\w-]*:" + _IPV6)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,63})\b")
 # The host of a URL is checked whatever its top-level domain, because a URL leaves no doubt that it names a host.
 URL_HOST_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://(?:[^/\s@\"']*@)?([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z][A-Za-z0-9-]*)")
@@ -190,17 +194,20 @@ def strings_in(node) -> list[str]:
     return out
 
 
-def expand_json(value: str, depth: int = 0) -> list[str]:
-    """Split a JSON object/array string into its string values, leaving other strings unchanged."""
+def expand_json(value: str, depth: int = 0, keys: list[str] | None = None) -> list[str]:
+    """Split a JSON object/array string into its string values, leaving other strings unchanged. The keys of every
+    JSON level, nested JSON strings included, are added to keys when it is given."""
     if depth > 5 or not value.lstrip().startswith(("{", "[")):
         return [value]
     try:
         parsed = json.loads(value)
     except ValueError:
         return [value]
+    if keys is not None:
+        keys.extend(keys_in(parsed))
     out: list[str] = []
     for item in strings_in(parsed):
-        out.extend(expand_json(item, depth + 1))
+        out.extend(expand_json(item, depth + 1, keys))
     return out
 
 
@@ -249,12 +256,7 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
     values: list[str] = []
     keys = keys_in(data)
     for value in strings_in(data):
-        values.extend(expand_json(value))
-        if value.lstrip().startswith(("{", "[")):
-            try:
-                keys.extend(keys_in(json.loads(value)))
-            except ValueError:
-                pass
+        values.extend(expand_json(value, keys=keys))
     return values, keys, None
 
 
@@ -280,7 +282,7 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
             if ip_allowed(policy, m.group(1)) is False:
                 report("IPv4 address outside documentation ranges", m.group(1),
                        line_of(text, m.group(1), m.start() if raw else 0))
-        for m in IPV6_RE.finditer(chunk):
+        for m in [*IPV6_RE.finditer(chunk), *IPV6_KEYED_RE.finditer(chunk)]:
             cand = m.group(1)
             if cand.count(":") >= 2 and ip_allowed(policy, cand) is False:
                 report("IPv6 address outside documentation ranges", cand, line_of(text, cand, m.start() if raw else 0))
