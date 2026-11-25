@@ -29,6 +29,13 @@ class Addresses(unittest.TestCase):
         self.assertEqual(kinds("raw_sample: 'addr:2a00::1 src_ip:2a00:1450::200e'"),
                          [("IPv6", "2a00::1"), ("IPv6", "2a00:1450::200e")])
 
+    def test_ipv6_before_a_closing_colon_fails(self):
+        self.assertEqual(kinds("raw_sample: 'sshd: from 2a00::1: Accepted, peer.src_ip:2a00::2'"),
+                         [("IPv6", "2a00::1"), ("IPv6", "2a00::2")])
+
+    def test_ipv4_mapped_prefix_in_a_vrl_pattern_is_not_an_address(self):
+        self.assertEqual(kinds("x = replace(s, r'::ffff:', \"\")\n", "log_types/x/parser.vrl"), [])
+
     def test_fingerprints_after_a_key_are_not_addresses(self):
         self.assertEqual(kinds("raw_sample: 'MD5:43:51:43:a1:b5:fc:8b:b7:43:51:43:a1:b5:fc:8b:b7 at 12:34:56'"), [])
 

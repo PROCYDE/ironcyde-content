@@ -31,11 +31,12 @@ HERE = Path(__file__).resolve().parent
 # 192.0.2.4.example.net are handled by the domain rule).
 IPV4_RE = re.compile(r"(?<![\w.])((?:\d{1,3}\.){3}\d{1,3})(?![\w]|\.\w)")
 # IPv6 candidates: hex groups with at least two colons, optional zone. ipaddress decides what is real.
-_IPV6 = r"([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?:\.\d{1,3}){0,3})(?:%[\w.-]+)?(?![\w:])"
+# An address may end in a colon that is no further group, as in a syslog line "from 2a00::1: Accepted".
+_IPV6 = r"([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?:\.\d{1,3}){0,3})(?:%[\w.-]+)?(?!\w|:[0-9A-Fa-f:])"
 IPV6_RE = re.compile(r"(?<![\w:.])" + _IPV6)
 # The same after a key and a colon (addr:2a00::1), when the key is no hex group itself: a fingerprint such as
 # SHA256:43:51:... never ends in time for the address to stop before the next colon.
-IPV6_KEYED_RE = re.compile(r"(?<![\w:.-])[\w-]*[G-Zg-z_-][\w-]*:" + _IPV6)
+IPV6_KEYED_RE = re.compile(r"(?<![\w:.-])[\w.-]*[G-Zg-z_-][\w.-]*:" + _IPV6)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,63})\b")
 # The host of a URL is checked whatever its top-level domain, because a URL leaves no doubt that it names a host.
 URL_HOST_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://(?:[^/\s@\"']*@)?([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z][A-Za-z0-9-]*)")
@@ -290,6 +291,8 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
                        line_of(text, m.group(1), m.start() if raw else 0))
         for m in [*IPV6_RE.finditer(chunk), *IPV6_KEYED_RE.finditer(chunk)]:
             cand = m.group(1)
+            if cand.endswith(":") and not cand.endswith("::") and chunk[m.end(1):m.end(1) + 1].isspace():
+                cand = cand[:-1]  # the colon that ends a log prefix ("from 2a00::1: Accepted"), not an empty group
             if cand.count(":") >= 2 and ip_allowed(policy, cand) is False:
                 report("IPv6 address outside documentation ranges", cand, line_of(text, cand, m.start() if raw else 0))
         for m in EMAIL_RE.finditer(chunk):
