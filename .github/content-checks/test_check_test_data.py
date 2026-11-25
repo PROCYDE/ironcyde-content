@@ -1,6 +1,8 @@
 """Self-tests for check_test_data.py: run with `python3 -m unittest discover -s .github/content-checks`."""
 
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import check_test_data as c
@@ -116,6 +118,26 @@ class DecodedStrings(unittest.TestCase):
 
     def test_plain_addresses_are_reported_once(self):
         self.assertEqual(kinds("raw_sample: 'from 8.8.8.8'"), [("IPv4", "8.8.8.8")])
+
+    def test_escaped_keys_do_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", 'expected:\n  "\\x41CMEBANK": 1\n', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_keys_in_json_samples_do_not_hide_private_terms(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", 'raw_sample: \'{"\\u0061cmebank": 1}\'', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_unreadable_file_does_not_print_a_private_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "log_types" / "acmebank" / "tests" / "a.yaml").mkdir(parents=True)  # a directory, not a file
+            policy = c.Policy(scan=["log_types/**"], networks=[], domains=[], tlds=set(), non_domain_suffixes=set(),
+                              non_domains=set(), denylist=[])
+            with mock.patch.object(c, "tracked_files", return_value=["log_types/acmebank/tests/a.yaml"]):
+                found = c.run(root, policy, ["acmebank"])
+        self.assertEqual([f.kind for f in found], ["file cannot be read"])
+        self.assertNotIn("acmebank", found[0].render().lower())
+        self.assertNotIn("acmebank", found[0].annotation().lower())
 
     def test_escapes_do_not_hide_private_terms(self):
         found = c.scan_private("log_types/x/tests/a.yaml", 'raw_sample: "\\x41CMEBANK"', ["acmebank"])

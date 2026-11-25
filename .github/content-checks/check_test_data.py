@@ -163,6 +163,19 @@ def line_of(text: str, needle: str, start: int = 0) -> int:
     return text.count("\n", 0, max(idx, 0)) + 1
 
 
+def keys_in(node) -> list[str]:
+    """All mapping keys of a decoded YAML or JSON document, as strings."""
+    out: list[str] = []
+    if isinstance(node, dict):
+        for k, v in node.items():
+            out.append(str(k))
+            out.extend(keys_in(v))
+    elif isinstance(node, list):
+        for v in node:
+            out.extend(keys_in(v))
+    return out
+
+
 def strings_in(node) -> list[str]:
     """All string values (not keys) of a decoded YAML or JSON document."""
     out: list[str] = []
@@ -223,25 +236,32 @@ def comments_and_strings(text: str, vrl: bool) -> list[str]:
     return out
 
 
-def decoded_strings(rel: str, text: str) -> tuple[list[str], str | None]:
-    """The string values of a YAML file after decoding, JSON samples expanded, and the YAML error if it has one.
-    Escapes such as \\u0038 only show their meaning here, so every check also looks at these values."""
+def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | None]:
+    """The string values and the keys of a YAML file after decoding, JSON samples expanded, and the YAML error if it
+    has one. Escapes such as \\u0038 only show their meaning here, so the checks also look at these. Keys are only
+    checked against the denylists: as hostnames they would be mistaken for field paths."""
     if not rel.endswith((".yaml", ".yml")):
-        return [], None
+        return [], [], None
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as err:
-        return [], str(err).splitlines()[0]
-    out: list[str] = []
+        return [], [], str(err).splitlines()[0]
+    values: list[str] = []
+    keys = keys_in(data)
     for value in strings_in(data):
-        out.extend(expand_json(value))
-    return out, None
+        values.extend(expand_json(value))
+        if value.lstrip().startswith(("{", "[")):
+            try:
+                keys.extend(keys_in(json.loads(value)))
+            except ValueError:
+                pass
+    return values, keys, None
 
 
 def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> list[Finding]:
     found: list[Finding] = []
 
-    decoded, yaml_error = decoded_strings(rel, text)
+    decoded, keys, yaml_error = decoded_strings(rel, text)
     if yaml_error is not None:
         found.append(Finding(rel, 1, "file is not valid YAML", yaml_error))
 
@@ -295,11 +315,11 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
             found.append(Finding(rel, line_of(text, domain), "domain outside reserved names", domain))
 
     for pattern in policy.denylist:
-        for i, chunk in enumerate([text] + decoded):
+        for i, chunk in enumerate([text] + decoded + keys):
             for m in pattern.finditer(chunk):
                 report(f"matches denylist pattern {pattern.pattern!r}", m.group(0),
                        line_of(text, m.group(0), m.start() if i == 0 else 0))
-    found += scan_private(rel, text, private_terms, decoded)
+    found += scan_private(rel, text, private_terms, decoded + keys)
     # Any finding that shows a private term, in any spelling, must not print it.
     for f in found:
         f.secret = f.secret or any(t in f.value.lower() for t in private_terms)
@@ -308,11 +328,13 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
 
 
 def scan_private(rel: str, text: str, private_terms: list[str], decoded: list[str] | None = None) -> list[Finding]:
-    """Findings for the private denylist alone, in the file and its decoded string values; they never carry the term."""
+    """Findings for the private denylist alone, in the file and its decoded strings and keys; they never carry the
+    term."""
     found: list[Finding] = []
     lowered = text.lower()
     if decoded is None:
-        decoded = decoded_strings(rel, text)[0]
+        values, keys, _ = decoded_strings(rel, text)
+        decoded = values + keys
     lowered_decoded = [d.lower() for d in decoded]
     for term in private_terms:
         idx = lowered.find(term)
@@ -338,7 +360,13 @@ def tracked_files(root: Path, patterns: list[str]) -> list[str]:
 def run(root: Path, policy: Policy, private_terms: list[str], private_only: bool = False) -> list[Finding]:
     findings: list[Finding] = []
     for rel in tracked_files(root, policy.scan):
-        text = (root / rel).read_text(encoding="utf-8", errors="replace")
+        try:
+            text = (root / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError as err:
+            # Reported as a finding, never as a traceback: the path may contain a private term.
+            findings.append(Finding(rel, 1, "file cannot be read", err.strerror or type(err).__name__,
+                                    secret_path=any(t in rel.lower() for t in private_terms)))
+            continue
         if private_only:
             findings += scan_private(rel, text, private_terms)
             continue
