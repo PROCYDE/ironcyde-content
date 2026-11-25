@@ -1,4 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>PROCYDE/renovate-config"]
+  "extends": ["local>PROCYDE/renovate-config"],
+  "customManagers": [
+    {
+      "description": "The IRONCYDE API image the content test runs, pinned by tag and digest",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/content-test\\.yml$/"],
+      "matchStrings": [
+        "IRONCYDE_API_IMAGE: (?<depName>[^\\s:@]+):(?<currentValue>[^\\s@]+)@(?<currentDigest>sha256:[0-9a-f]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ]
 }
