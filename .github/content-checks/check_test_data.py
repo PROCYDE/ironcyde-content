@@ -310,12 +310,15 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
         literals = [lit[2:-1] if lit.startswith("s'") else vrl_unescape(lit[1:-1]) for lit in STRING_RE.findall(text)]
         values: list[str] = []
         keys: list[str] = []
-        try:
-            for literal in literals:
+        error = None
+        for literal in literals:
+            try:
                 values.extend(expand_json(literal, keys=keys))
-        except RecursionError:
-            return [], [], "a string literal is nested too deeply"
-        return values, keys, None
+            except RecursionError:
+                # The other literals are still decoded and checked; the file fails all the same.
+                values.append(literal)
+                error = "a string literal is nested too deeply"
+        return values, keys, error
     if not rel.endswith((".yaml", ".yml")):
         return [], [], None
     try:
@@ -413,9 +416,14 @@ def scan_private(rel: str, text: str, private_terms: list[str], decoded: list[st
     term."""
     found: list[Finding] = []
     lowered = text.lower()
+    secret_path = any(t in rel.lower() for t in private_terms)
     if decoded is None:
-        values, keys, _ = decoded_strings(rel, text)
+        values, keys, error = decoded_strings(rel, text)
         decoded = values + keys
+        if error is not None and private_terms:
+            # What cannot be decoded cannot be checked, so the file fails; the message names neither term nor cause.
+            found.append(Finding(rel, 1, "file cannot be decoded", "the private denylist cannot check it",
+                                 secret_path=secret_path))
     lowered_decoded = [d.lower() for d in decoded]
     for term in private_terms:
         idx = lowered.find(term)
@@ -423,7 +431,7 @@ def scan_private(rel: str, text: str, private_terms: list[str], decoded: list[st
             idx = 0
         if idx >= 0:
             found.append(Finding(rel, text.count("\n", 0, idx) + 1, "private denylist", term, secret=True,
-                                 secret_path=any(t in rel.lower() for t in private_terms)))
+                                 secret_path=secret_path))
         elif term in rel.lower():
             found.append(Finding(rel, 1, "private denylist in the file path", term, secret=True, secret_path=True))
     return found

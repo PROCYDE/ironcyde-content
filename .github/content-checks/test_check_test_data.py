@@ -179,6 +179,18 @@ class DecodedStrings(unittest.TestCase):
         found = c.scan_private("log_types/x/parser.vrl", '.x = s\'{"k": "\\u0061cmebank"}\'\n', ["acmebank"])
         self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
 
+    def test_private_only_fails_on_a_file_it_cannot_decode(self):
+        deep = '.y = s\'' + "[" * 100000 + "]" * 100000 + "'\n"
+        found = c.scan_private("log_types/acmebank/parser.vrl", '.x = "\\u{61}cmebank"\n' + deep, ["acmebank"])
+        self.assertEqual(sorted(f.kind for f in found), ["file cannot be decoded", "private denylist"])
+        for f in found:
+            self.assertNotIn("acmebank", f.render().lower())
+            self.assertNotIn("acmebank", f.annotation().lower())
+
+    def test_private_only_fails_on_invalid_yaml(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", 'raw_sample: "\\x61cmebank"\n  bad: [\n', ["acmebank"])
+        self.assertEqual([f.kind for f in found], ["file cannot be decoded"])
+
     def test_json_nested_deeper_than_five_levels_is_decoded(self):
         inner = '{"k": "' + "\\" + 'u0061cmebank"}'  # the escape is decoded only by the innermost level
         for _ in range(8):
