@@ -45,6 +45,17 @@ STRING_RE = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|s?'(?:[^'\\\n]|\\.)*'")
 DOMAIN_RE = re.compile(r"(?<![\w.@-])((?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+([A-Za-z]{2,63}))\b(?![.-]\w)")
 
 
+def gha_data(text: str) -> str:
+    """Escapes a workflow command's message, so a file name or value from a pull request cannot end the command and
+    start another one."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def gha_property(text: str) -> str:
+    """Escapes a workflow command's property value, such as the file name."""
+    return gha_data(text).replace(":", "%3A").replace(",", "%2C")
+
+
 @dataclass
 class Finding:
     path: str
@@ -63,8 +74,10 @@ class Finding:
     def annotation(self) -> str:
         shown = "a CONTENT_DENYLIST entry" if self.secret else self.value
         if self.secret_path:
-            return f"::error title=Test data policy::a file whose path contains a CONTENT_DENYLIST entry: {self.kind}: {shown}"
-        return f"::error file={self.path},line={self.line},title=Test data policy::{self.kind}: {shown}"
+            return ("::error title=Test data policy::"
+                    + gha_data(f"a file whose path contains a CONTENT_DENYLIST entry: {self.kind}: {shown}"))
+        return (f"::error file={gha_property(self.path)},line={self.line},title=Test data policy::"
+                + gha_data(f"{self.kind}: {shown}"))
 
 
 @dataclass
@@ -168,10 +181,18 @@ def line_of(text: str, needle: str, start: int = 0) -> int:
     return text.count("\n", 0, max(idx, 0)) + 1
 
 
+class Pairs(list):
+    """A JSON object as all of its key/value pairs, so a duplicate key cannot hide an earlier value."""
+
+
 def keys_in(node) -> list[str]:
     """All mapping keys of a decoded YAML or JSON document, as strings."""
     out: list[str] = []
-    if isinstance(node, dict):
+    if isinstance(node, Pairs):
+        for k, v in node:
+            out.append(str(k))
+            out.extend(keys_in(v))
+    elif isinstance(node, dict):
         for k, v in node.items():
             out.append(str(k))
             out.extend(keys_in(v))
@@ -186,6 +207,9 @@ def strings_in(node) -> list[str]:
     out: list[str] = []
     if isinstance(node, str):
         out.append(node)
+    elif isinstance(node, Pairs):
+        for _, v in node:
+            out.extend(strings_in(v))
     elif isinstance(node, dict):
         for v in node.values():
             out.extend(strings_in(v))
@@ -201,7 +225,7 @@ def expand_json(value: str, depth: int = 0, keys: list[str] | None = None) -> li
     if depth > 5 or not value.lstrip().startswith(("{", "[")):
         return [value]
     try:
-        parsed = json.loads(value)
+        parsed = json.loads(value, object_pairs_hook=Pairs)
     except ValueError:
         return [value]
     if keys is not None:
@@ -244,6 +268,19 @@ def comments_and_strings(text: str, vrl: bool) -> list[str]:
     return out
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """A safe loader that refuses duplicate mapping keys, which would hide all but the last value."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(None, None, f"duplicate key {key!r}", key_node.start_mark)
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | None]:
     """The string values and the keys of a YAML file after decoding, JSON samples expanded, and the YAML error if it
     has one. Escapes such as \\u0038 only show their meaning here, so the checks also look at these. Keys are only
@@ -255,7 +292,7 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
         for event in yaml.parse(text, Loader=yaml.SafeLoader):
             if isinstance(event, yaml.AliasEvent):
                 return [], [], "YAML aliases are not allowed in content"
-        data = yaml.safe_load(text)
+        data = yaml.load(text, Loader=UniqueKeyLoader)  # noqa: S506 - a SafeLoader subclass
         values: list[str] = []
         keys = keys_in(data)
         for value in strings_in(data):
@@ -425,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f.annotation() if gha else f.render())
     for ex in unused:
         msg = f"exception {ex.value!r} for {ex.paths} is no longer needed; remove it from the policy"
-        print(f"::error title=Test data policy::{msg}" if gha else f"policy: {msg}")
+        print(f"::error title=Test data policy::{gha_data(msg)}" if gha else f"policy: {msg}")
 
     if findings or unused:
         print(f"\n{len(findings)} finding(s), {len(unused)} stale exception(s). Use documentation values "

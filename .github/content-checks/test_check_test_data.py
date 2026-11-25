@@ -124,6 +124,14 @@ class Names(unittest.TestCase):
 
 
 class DecodedStrings(unittest.TestCase):
+    def test_duplicate_json_keys_do_not_hide_values(self):
+        sample = """raw_sample: '{"host": "mx.acme-corp.de", "host": "mx.example.com"}'"""
+        self.assertEqual(kinds(sample), [("domain", "mx.acme-corp.de")])
+
+    def test_duplicate_yaml_keys_are_refused(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "raw_sample: a\nraw_sample: b\n", [])
+        self.assertEqual([f.kind for f in found], ["file is not valid YAML"])
+
     def test_json_escapes_do_not_hide_addresses(self):
         self.assertEqual(kinds('raw_sample: \'{"sourceIPAddress":"\\u0038.8.8.8"}\''), [("IPv4", "8.8.8.8")])
 
@@ -226,6 +234,13 @@ class Denylists(unittest.TestCase):
         for f in found:
             self.assertNotIn("acmebank", f.render().lower())
             self.assertNotIn("acmebank", f.annotation().lower())
+
+    def test_annotations_escape_file_names_and_values(self):
+        f = c.Finding("log_types/x/tests/a,b:c%\n::warning::x.yaml", 3, "domain outside reserved names", "a\nb")
+        line = f.annotation()
+        self.assertNotIn("\n", line)
+        self.assertEqual(line, "::error file=log_types/x/tests/a%2Cb%3Ac%25%0A%3A%3Awarning%3A%3Ax.yaml,line=3,"
+                               "title=Test data policy::domain outside reserved names: a%0Ab")
 
     def test_private_only_checks_nothing_else(self):
         found = c.scan_private("log_types/x/tests/a.yaml", "raw_sample: 'ACMEBANK at 8.8.8.8'", ["acmebank"])
