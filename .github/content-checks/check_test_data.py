@@ -367,7 +367,8 @@ def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> 
     if rel.endswith((".yaml", ".yml")):
         texts = decoded + comments_and_strings(text, vrl=False)
     else:
-        texts = comments_and_strings(text, vrl=True)
+        # The decoded literals too, so an escape such as \\u{2e} cannot hide a host.
+        texts = comments_and_strings(text, vrl=True) + decoded
     seen = set()
     for chunk in texts:
         chunk = EMAIL_RE.sub(" ", chunk)

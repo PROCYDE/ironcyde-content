@@ -171,6 +171,10 @@ class DecodedStrings(unittest.TestCase):
     def test_vrl_escapes_do_not_hide_addresses(self):
         self.assertEqual(kinds('.x = "\\u{38}.8.8.8"\n', "log_types/x/parser.vrl"), [("IPv4", "8.8.8.8")])
 
+    def test_vrl_escapes_do_not_hide_domains(self):
+        self.assertEqual(kinds('.x = "mx\\u{2e}acme-corp\\x2ede"\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
     def test_json_nested_deeper_than_five_levels_is_decoded(self):
         inner = '{"k": "' + "\\" + 'u0061cmebank"}'  # the escape is decoded only by the innermost level
         for _ in range(8):
