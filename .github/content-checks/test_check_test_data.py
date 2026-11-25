@@ -1,5 +1,6 @@
 """Self-tests for check_test_data.py: run with `python3 -m unittest discover -s .github/content-checks`."""
 
+import json
 import tempfile
 import unittest
 from unittest import mock
@@ -162,6 +163,20 @@ class DecodedStrings(unittest.TestCase):
         sample = "raw_sample: '" + "[" * 100000 + "]" * 100000 + "'\n"
         self.assertEqual([f.kind for f in c.scan_file(POLICY, "log_types/x/tests/a.yaml", sample, [])],
                          ["file is not valid YAML"])
+
+    def test_vrl_escapes_do_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/parser.vrl", '.x = "\\u{61}cme\\x62ank"\n', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_vrl_escapes_do_not_hide_addresses(self):
+        self.assertEqual(kinds('.x = "\\u{38}.8.8.8"\n', "log_types/x/parser.vrl"), [("IPv4", "8.8.8.8")])
+
+    def test_json_nested_deeper_than_five_levels_is_decoded(self):
+        inner = '{"k": "' + "\\" + 'u0061cmebank"}'  # the escape is decoded only by the innermost level
+        for _ in range(8):
+            inner = json.dumps({"k": inner})
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "raw_sample: " + json.dumps(inner), ["acmebank"])
+        self.assertIn(("private denylist", True), [(f.kind, f.secret) for f in found])
 
     def test_unreadable_file_does_not_print_a_private_path(self):
         with tempfile.TemporaryDirectory() as tmp:

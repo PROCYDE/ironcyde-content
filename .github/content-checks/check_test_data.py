@@ -222,7 +222,8 @@ def strings_in(node) -> list[str]:
 def expand_json(value: str, depth: int = 0, keys: list[str] | None = None) -> list[str]:
     """Split a JSON object/array string into its string values, leaving other strings unchanged. The keys of every
     JSON level, nested JSON strings included, are added to keys when it is given."""
-    if depth > 5 or not value.lstrip().startswith(("{", "[")):
+    # No depth limit: a document too deep to decode raises RecursionError, which the caller reports as a finding.
+    if not value.lstrip().startswith(("{", "[")):
         return [value]
     try:
         parsed = json.loads(value, object_pairs_hook=Pairs)
@@ -281,10 +282,32 @@ class UniqueKeyLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
+VRL_ESCAPE_RE = re.compile(r"\\(u\{[0-9A-Fa-f]{1,6}\}|x[0-9A-Fa-f]{2}|.)", re.DOTALL)
+VRL_SIMPLE_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "\\": "\\", '"': '"', "'": "'", "{": "{", "}": "}"}
+
+
+def vrl_unescape(literal: str) -> str:
+    """The value of a VRL string literal's body, so an escape such as \\u{61} cannot hide a term."""
+    def one(m: re.Match) -> str:
+        esc = m.group(1)
+        if esc.startswith("u{"):
+            try:
+                return chr(int(esc[2:-1], 16))
+            except (ValueError, OverflowError):
+                return m.group(0)
+        if esc.startswith("x") and len(esc) == 3:
+            return chr(int(esc[1:], 16))
+        return VRL_SIMPLE_ESCAPES.get(esc, m.group(0))
+    return VRL_ESCAPE_RE.sub(one, literal)
+
+
 def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | None]:
     """The string values and the keys of a YAML file after decoding, JSON samples expanded, and the YAML error if it
     has one. Escapes such as \\u0038 only show their meaning here, so the checks also look at these. Keys are only
     checked against the denylists: as hostnames they would be mistaken for field paths."""
+    if rel.endswith(".vrl"):
+        # Raw strings s'...' have no escapes; only the others need decoding.
+        return [vrl_unescape(lit[1:-1]) for lit in STRING_RE.findall(text) if lit.startswith('"')], [], None
     if not rel.endswith((".yaml", ".yml")):
         return [], [], None
     try:
