@@ -306,8 +306,16 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
     has one. Escapes such as \\u0038 only show their meaning here, so the checks also look at these. Keys are only
     checked against the denylists: as hostnames they would be mistaken for field paths."""
     if rel.endswith(".vrl"):
-        # Raw strings s'...' have no escapes; only the others need decoding.
-        return [vrl_unescape(lit[1:-1]) for lit in STRING_RE.findall(text) if lit.startswith('"')], [], None
+        # Raw strings s'...' have no escapes but may hold JSON, as the others may.
+        literals = [lit[2:-1] if lit.startswith("s'") else vrl_unescape(lit[1:-1]) for lit in STRING_RE.findall(text)]
+        values: list[str] = []
+        keys: list[str] = []
+        try:
+            for literal in literals:
+                values.extend(expand_json(literal, keys=keys))
+        except RecursionError:
+            return [], [], "a string literal is nested too deeply"
+        return values, keys, None
     if not rel.endswith((".yaml", ".yml")):
         return [], [], None
     try:
@@ -330,9 +338,10 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
 def scan_file(policy: Policy, rel: str, text: str, private_terms: list[str]) -> list[Finding]:
     found: list[Finding] = []
 
-    decoded, keys, yaml_error = decoded_strings(rel, text)
-    if yaml_error is not None:
-        found.append(Finding(rel, 1, "file is not valid YAML", yaml_error))
+    decoded, keys, decode_error = decoded_strings(rel, text)
+    if decode_error is not None:
+        kind = "file is not valid YAML" if rel.endswith((".yaml", ".yml")) else "file cannot be decoded"
+        found.append(Finding(rel, 1, kind, decode_error))
 
     # Addresses and emails are precise enough to check in the whole file, code and comments included, and again in
     # the decoded string values, where an escape such as \\u0038 no longer hides them.

@@ -175,6 +175,10 @@ class DecodedStrings(unittest.TestCase):
         self.assertEqual(kinds('.x = "mx\\u{2e}acme-corp\\x2ede"\n', "log_types/x/parser.vrl"),
                          [("domain", "mx.acme-corp.de")])
 
+    def test_json_in_vrl_literals_does_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/parser.vrl", '.x = s\'{"k": "\\u0061cmebank"}\'\n', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
     def test_json_nested_deeper_than_five_levels_is_decoded(self):
         inner = '{"k": "' + "\\" + 'u0061cmebank"}'  # the escape is decoded only by the innermost level
         for _ in range(8):
