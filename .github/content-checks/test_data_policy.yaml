@@ -1,0 +1,113 @@
+# Test data policy for this public repository; enforced by check_test_data.py in CI.
+# Every IP address, email address and domain name in the scanned files must fall under an allowed
+# network or domain below, or be listed under `exceptions` with a reason a reviewer can verify.
+# Never add customer names or internal hostnames here: this file is public. Those belong in the
+# private CONTENT_DENYLIST repository secret (one case-insensitive term per line).
+
+scan:
+  - "log_types/*"
+  - "content.yaml"
+
+allowed_networks:
+  - network: 192.0.2.0/24
+    reason: TEST-NET-1, RFC 5737 documentation range
+  - network: 198.51.100.0/24
+    reason: TEST-NET-2, RFC 5737 documentation range
+  - network: 203.0.113.0/24
+    reason: TEST-NET-3, RFC 5737 documentation range
+  - network: 2001:db8::/32
+    reason: RFC 3849 IPv6 documentation prefix
+  - network: 0.0.0.0/32
+    reason: unspecified address, identifies nothing
+  - network: 255.255.255.255/32
+    reason: limited broadcast, identifies nothing
+  - network: 127.0.0.0/8
+    reason: loopback, identifies nothing outside the host
+  - network: ::/128
+    reason: unspecified address, identifies nothing
+  - network: ::1/128
+    reason: loopback, identifies nothing outside the host
+  - network: fe80::/10
+    reason: link-local, never routed; needed to test zone-scoped addresses
+
+allowed_domains:
+  - domain: example.com
+    reason: RFC 2606 reserved example domain
+  - domain: example.net
+    reason: RFC 2606 reserved example domain
+  - domain: example.org
+    reason: RFC 2606 reserved example domain
+  - domain: example
+    reason: RFC 2606 reserved TLD
+  - domain: test
+    reason: RFC 2606 reserved TLD
+  - domain: invalid
+    reason: RFC 2606 reserved TLD
+  - domain: localhost
+    reason: RFC 2606 / RFC 6761 reserved name
+
+# Dotted names whose last label is a two-letter TLD are always checked; these generic TLDs too.
+# Names with other endings (file names, VRL and OCSF paths such as user.name, event types like
+# user.session.start) are ignored.
+checked_tlds: [com, net, org, edu, gov, mil, int, info, biz, pro, app, dev, cloud, online, site,
+  tech, xyz, top, live, shop, store, email, digital, solutions, services, systems, network, security,
+  local, lan, internal, corp, home, intranet, private, onion, arpa, aws, azure, microsoft, google, amazon]
+
+# Last labels that are file extensions or field suffixes in this content, not hosts. A real host
+# whose last label matches one of these suffixes is not checked mechanically; reviewers still read
+# every sample. Keep the list small and add a suffix only for a non-host finding, not speculatively.
+non_domain_suffixes:
+  - suffix: md
+    reason: Markdown file extension (README.md, SCHEMA.md), not a host
+  - suffix: sh
+    reason: shell script file extension (install.sh), not a host
+  - suffix: py
+    reason: Python file extension (check.py), not a host
+  - suffix: gz
+    reason: gzip file extension (foo.tar.gz), not a host
+  - suffix: js
+    reason: JavaScript file extension, not a host
+  - suffix: ts
+    reason: TypeScript file extension, not a host
+  - suffix: db
+    reason: database file extension, not a host
+  - suffix: ip
+    reason: OCSF field suffix such as src_endpoint.ip; .ip is not a TLD
+
+# Exact dotted identifiers that are field paths, not hostnames. Keep this list short and exact;
+# a real host in a TLD such as .info must still be found.
+non_domains:
+  - value: container.info
+    reason: Falco output field placeholder in samples, not a host
+  - value: container.id
+    reason: Falco output field name that the parser reads, not a host
+
+# Public patterns that must never appear in content (internal domains are already public knowledge).
+denylist_patterns:
+  - '\bprocyde\.(?:online|com|de|io|net|cloud|internal|local)\b'
+  - '\bironcyde\.(?:online|com|de|io|net|cloud|internal|local)\b'
+
+# Values that are allowed anyway. Each needs the exact value, the files it may appear in (globs) and a
+# reason. An exception that no longer matches anything fails the check, so the list stays current.
+exceptions:
+  - value: goauthentik.io
+    paths: ["log_types/authentik/*"]
+    reason: Authentik's vendor name as the parser sets it in metadata.product.vendor_name, not a host in the samples
+  - value: s3.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/parser.vrl"]
+    reason: public AWS service endpoint in a comment that explains how the parser derives the service name
+  - value: iam.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/tests/cloudtrail_event.yaml"]
+    reason: public AWS service endpoint that CloudTrail reports as eventSource
+  - value: cloudtrail.eu-central-1.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/tests/cloudtrail_event.yaml"]
+    reason: public regional AWS service endpoint that CloudTrail reports, identifies no account
+  - value: falcon.eu-1.crowdstrike.com
+    paths: ["log_types/crowdstrike_falcon/tests/falcon_detection.yaml"]
+    reason: CrowdStrike's public EU cloud console host in a detection link, identifies no customer
+  - value: docker.io
+    paths: ["log_types/falco/tests/falco_write_below_binary.yaml"]
+    reason: public Docker Hub registry name in a container image reference
+  - value: audit.k8s.io
+    paths: ["log_types/kubernetes_audit/tests/get_endpoints.yaml"]
+    reason: Kubernetes API group of audit events (apiVersion audit.k8s.io/v1), not a host

@@ -1,0 +1,48 @@
+name: content-denylist
+
+# Checks content against the private denylist of customer names and internal hostnames (CONTENT_DENYLIST, one term
+# per line), which must never reach code a pull request controls. The secret is in the `content-denylist`
+# environment, which only workflows from main may use. Pull requests are checked through pull_request_target: the
+# checker and its dependencies come from main, and the pull request's files are only read as data. Matching terms
+# are never printed. Pull requests from forks are not checked. Without the secret, the job passes with a note.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-denylist-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  private-denylist:
+    name: private denylist
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: content-denylist
+    steps:
+      # The checker as it is on main (pull_request_target's default ref), never the pull request's.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: trusted
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: content
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --no-deps --require-hashes -r trusted/.github/content-checks/requirements.txt
+      - name: Check the private denylist
+        env:
+          CONTENT_DENYLIST: ${{ secrets.CONTENT_DENYLIST }}
+        run: python trusted/.github/content-checks/check_test_data.py --private-only --root content

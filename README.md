@@ -55,7 +55,7 @@ log_types/
 ## Contribute
 
 Follow [CONTRIBUTING.md](CONTRIBUTING.md). Preserve existing keys, include representative sanitized
-regression cases, and validate changes with IRONCYDE's authoritative server runner.
+regression cases, and validate changes with IRONCYDE's content check; pull requests run it automatically.
 
 Report issues and propose changes through this repository's GitHub issues and pull requests.
 Do not attach production logs containing credentials, personal data, or confidential identifiers.

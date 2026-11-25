@@ -1,0 +1,15 @@
+# gitleaks configuration for this public content repository; CI runs it on every pull request.
+# The default gitleaks rules apply. Only documented, published example values are allowed here;
+# never allow a value because it "looks fake" — rotate it and replace it with a documented example.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Vendor-documented example credentials (AWS docs use these exact values)"
+# Anchored to the whole secret: a real credential that merely contains an example value is still reported.
+regexTarget = "secret"
+regexes = [
+  '''^AKIAIOSFODNN7EXAMPLE$''',
+  '''^wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY$''',
+]

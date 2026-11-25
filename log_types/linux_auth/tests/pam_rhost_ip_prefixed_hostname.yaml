@@ -1,4 +1,4 @@
-raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.4.nip.io  user=bob'
+raw_sample: 'Oct  6 10:00:01 web1 sshd[4242]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=192.0.2.4.example.net  user=bob'
 expected:
   class_uid: 3002
   activity_id: 1

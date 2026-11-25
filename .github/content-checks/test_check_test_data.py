@@ -1,0 +1,338 @@
+"""Self-tests for check_test_data.py: run with `python3 -m unittest discover -s .github/content-checks`."""
+
+import json
+import tempfile
+import unittest
+from unittest import mock
+from pathlib import Path
+
+import check_test_data as c
+
+POLICY = c.load_policy(Path(__file__).resolve().parent / "test_data_policy.yaml")
+
+
+def kinds(text: str, path: str = "log_types/x/tests/case.yaml", private=()) -> list[tuple[str, str]]:
+    return [(f.kind.split()[0], f.value) for f in c.scan_file(POLICY, path, text, list(private))]
+
+
+class Addresses(unittest.TestCase):
+    def test_documentation_ranges_pass(self):
+        self.assertEqual(kinds("raw_sample: 'from 192.0.2.1 198.51.100.2 203.0.113.3 2001:db8::5 fe80::1%eth0'"), [])
+
+    def test_public_and_private_ipv4_fail(self):
+        self.assertEqual(kinds("raw_sample: 'from 8.8.8.8 port 1 and 10.0.0.7'"),
+                         [("IPv4", "8.8.8.8"), ("IPv4", "10.0.0.7")])
+
+    def test_public_ipv6_fails(self):
+        self.assertEqual(kinds("raw_sample: 'from 2a00:1450:4001::1 port 1'"), [("IPv6", "2a00:1450:4001::1")])
+
+    def test_compressed_ipv6_after_a_key_fails(self):
+        self.assertEqual(kinds("raw_sample: 'addr:2a00::1 src_ip:2a00:1450::200e'"),
+                         [("IPv6", "2a00::1"), ("IPv6", "2a00:1450::200e")])
+
+    def test_ipv6_before_a_closing_colon_fails(self):
+        self.assertEqual(kinds("raw_sample: 'sshd: from 2a00::1: Accepted, peer.src_ip:2a00::2'"),
+                         [("IPv6", "2a00::1"), ("IPv6", "2a00::2")])
+
+    def test_ipv4_mapped_prefix_in_a_vrl_pattern_is_not_an_address(self):
+        self.assertEqual(kinds("x = replace(s, r'::ffff:', \"\")\n", "log_types/x/parser.vrl"), [])
+
+    def test_fingerprints_after_a_key_are_not_addresses(self):
+        self.assertEqual(kinds("raw_sample: 'MD5:43:51:43:a1:b5:fc:8b:b7:43:51:43:a1:b5:fc:8b:b7 at 12:34:56'"), [])
+
+    def test_ipv4_mapped_documentation_addresses_pass(self):
+        self.assertEqual(kinds("raw_sample: 'from ::ffff:192.0.2.4 port 1'"), [])
+
+    def test_ipv4_mapped_public_addresses_fail(self):
+        self.assertEqual(kinds("raw_sample: 'from ::ffff:8.8.8.8 port 1'"),
+                         [("IPv4", "8.8.8.8"), ("IPv6", "::ffff:8.8.8.8")])
+
+    def test_versions_times_and_fingerprints_are_not_addresses(self):
+        text = ("raw_sample: 'Chrome/124.0.6367.91 at 09:59:58 OID 1.3.6.1.4.1 "
+                "MD5:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff'")
+        self.assertEqual(kinds(text), [])
+
+    def test_vrl_comments_are_checked_for_addresses(self):
+        self.assertEqual(kinds("# from 10.0.0.1 port 22\nx = 1\n", "log_types/x/parser.vrl"), [("IPv4", "10.0.0.1")])
+
+
+class Names(unittest.TestCase):
+    def test_reserved_domains_pass(self):
+        self.assertEqual(kinds("raw_sample: 'rhost=cafe.example.com h.test a@example.org x.example'"), [])
+
+    def test_real_domain_and_email_fail(self):
+        self.assertEqual(kinds("raw_sample: 'mail from jane@acme-corp.de via mx.acme-corp.de'"),
+                         [("email", "jane@acme-corp.de"), ("domain", "mx.acme-corp.de")])
+
+    def test_ip_prefixed_hostname_is_a_domain(self):
+        self.assertEqual(kinds("raw_sample: 'rhost=1.2.3.4.nip.io'"), [("domain", "1.2.3.4.nip.io")])
+
+    def test_yaml_keys_and_ocsf_paths_are_ignored(self):
+        self.assertEqual(kinds("expected:\n  actor.user.name: bob\n  metadata.event_code: user.session.start\n"), [])
+
+    def test_vrl_code_paths_are_ignored(self):
+        self.assertEqual(kinds('x = string(.src.id) ?? ""\n', "log_types/x/parser.vrl"), [])
+
+    def test_ssh_algorithm_identifiers_need_an_exception(self):
+        # No global allowance: a real address at openssh.com must not pass with them.
+        self.assertEqual(kinds("raw_sample: 'chacha20-poly1305@openssh.com alice@openssh.com'"),
+                         [("email", "chacha20-poly1305@openssh.com"), ("email", "alice@openssh.com")])
+
+    def test_vrl_string_literals_are_checked(self):
+        self.assertEqual(kinds('.host = "customer.acme.com"\n.raw = s\'api.acme.io\'\n', "log_types/x/parser.vrl"),
+                         [("domain", "customer.acme.com"), ("domain", "api.acme.io")])
+
+    def test_vrl_inline_comments_are_checked(self):
+        self.assertEqual(kinds('x = 1 # see mx.acme-corp.de\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
+    def test_yaml_inline_comments_are_checked(self):
+        self.assertEqual(kinds("expected:\n  class_uid: 3002 # from mx.acme-corp.de\n"),
+                         [("domain", "mx.acme-corp.de")])
+
+    def test_field_paths_in_vrl_strings_are_ignored(self):
+        self.assertEqual(kinds('x = get(.fields, ["user.name"]) ?? "src_endpoint.ip"\n', "log_types/x/parser.vrl"),
+                         [])
+
+    def test_url_hosts_are_checked_whatever_their_tld(self):
+        self.assertEqual(kinds("raw_sample: 'see https://portal.customer.travel/login and user.name'"),
+                         [("domain", "portal.customer.travel")])
+
+    def test_url_hosts_ignore_file_name_and_field_path_exclusions(self):
+        self.assertEqual(kinds("raw_sample: 'see https://portal.customer.sh/login and https://container.id/'"),
+                         [("domain", "portal.customer.sh"), ("domain", "container.id")])
+
+    def test_excluded_bare_name_does_not_hide_a_later_url(self):
+        self.assertEqual(kinds("raw_sample: 'field container.id, host https://container.id/'"),
+                         [("domain", "container.id")])
+
+    def test_documentation_url_hosts_pass(self):
+        self.assertEqual(kinds("raw_sample: 'see https://portal.example.com/login'"), [])
+
+    def test_email_exception_does_not_allow_its_domain_elsewhere(self):
+        self.assertEqual(kinds("raw_sample: 'chacha20-poly1305@openssh.com https://openssh.com/customer'"),
+                         [("email", "chacha20-poly1305@openssh.com"), ("domain", "openssh.com")])
+
+    def test_quoted_text_in_yaml_comments_is_checked(self):
+        self.assertEqual(kinds('expected:\n  class_uid: 3002 # see "mx.acme-corp.de"\n'), [("domain", "mx.acme-corp.de")])
+
+    def test_apostrophe_before_a_yaml_comment_does_not_hide_it(self):
+        self.assertEqual(kinds("note: it's here # mx.acme-corp.de 'x'\n"), [("domain", "mx.acme-corp.de")])
+
+    def test_vrl_comment_after_a_hash_in_a_string_is_checked(self):
+        self.assertEqual(kinds('x = "#" # see "mx.acme-corp.de"\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
+
+class DecodedStrings(unittest.TestCase):
+    def test_duplicate_json_keys_do_not_hide_values(self):
+        sample = """raw_sample: '{"host": "mx.acme-corp.de", "host": "mx.example.com"}'"""
+        self.assertEqual(kinds(sample), [("domain", "mx.acme-corp.de")])
+
+    def test_duplicate_yaml_keys_are_refused(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "raw_sample: a\nraw_sample: b\n", [])
+        self.assertEqual([f.kind for f in found], ["file is not valid YAML"])
+
+    def test_json_escapes_do_not_hide_addresses(self):
+        self.assertEqual(kinds('raw_sample: \'{"sourceIPAddress":"\\u0038.8.8.8"}\''), [("IPv4", "8.8.8.8")])
+
+    def test_yaml_escapes_do_not_hide_emails(self):
+        self.assertIn(("email", "alice@acme.com"), kinds('raw_sample: "mail \\x61lice@acme.com"'))
+
+    def test_plain_addresses_are_reported_once(self):
+        self.assertEqual(kinds("raw_sample: 'from 8.8.8.8'"), [("IPv4", "8.8.8.8")])
+
+    def test_escaped_keys_do_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", 'expected:\n  "\\x41CMEBANK": 1\n', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_keys_in_json_samples_do_not_hide_private_terms(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", 'raw_sample: \'{"\\u0061cmebank": 1}\'', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_keys_in_nested_json_do_not_hide_private_terms(self):
+        sample = r"""raw_sample: '{"msg": "{\"\\u0061cmebank\": 1}"}'"""
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", sample, ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_yaml_aliases_are_refused(self):
+        self.assertEqual([f.value for f in c.scan_file(POLICY, "log_types/x/tests/a.yaml", "a: &a [*a]\n", [])],
+                         ["YAML aliases are not allowed in content"])
+
+    def test_deeply_nested_json_is_refused_without_a_crash(self):
+        sample = "raw_sample: '" + "[" * 100000 + "]" * 100000 + "'\n"
+        self.assertEqual([f.kind for f in c.scan_file(POLICY, "log_types/x/tests/a.yaml", sample, [])],
+                         ["file is not valid YAML"])
+
+    def test_vrl_escapes_do_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/parser.vrl", '.x = "\\u{61}cme\\x62ank"\n', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_vrl_escapes_do_not_hide_addresses(self):
+        self.assertEqual(kinds('.x = "\\u{38}.8.8.8"\n', "log_types/x/parser.vrl"), [("IPv4", "8.8.8.8")])
+
+    def test_vrl_escapes_do_not_hide_domains(self):
+        self.assertEqual(kinds('.x = "mx\\u{2e}acme-corp\\x2ede"\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
+    def test_json_in_vrl_literals_does_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/parser.vrl", '.x = s\'{"k": "\\u0061cmebank"}\'\n', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+    def test_private_only_fails_on_a_file_it_cannot_decode(self):
+        deep = '.y = s\'' + "[" * 100000 + "]" * 100000 + "'\n"
+        found = c.scan_private("log_types/acmebank/parser.vrl", '.x = "\\u{61}cmebank"\n' + deep, ["acmebank"])
+        self.assertEqual(sorted(f.kind for f in found), ["file cannot be decoded", "private denylist"])
+        for f in found:
+            self.assertNotIn("acmebank", f.render().lower())
+            self.assertNotIn("acmebank", f.annotation().lower())
+
+    def test_private_only_fails_on_invalid_yaml(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", 'raw_sample: "\\x61cmebank"\n  bad: [\n', ["acmebank"])
+        self.assertEqual([f.kind for f in found], ["file cannot be decoded"])
+
+    def test_unconvertible_yaml_scalars_are_findings_without_their_value(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "time: 2026-13-45\nhost: acmebank\n", ["acmebank"])
+        self.assertIn(("file is not valid YAML", "a value cannot be converted (ValueError)"),
+                      [(f.kind, f.value) for f in found])
+        found = c.scan_private("log_types/x/tests/a.yaml", "time: 2026-13-45\n", ["acmebank"])
+        self.assertEqual([f.kind for f in found], ["file cannot be decoded"])
+
+    def test_an_unexpected_error_is_a_finding_without_a_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "log_types" / "acmebank").mkdir(parents=True)
+            (root / "log_types" / "acmebank" / "a.yaml").write_text("x: 1\n")
+            with mock.patch.object(c, "tracked_files", return_value=["log_types/acmebank/a.yaml"]), \
+                    mock.patch.object(c, "scan_private", side_effect=KeyError("acmebank")):
+                found = c.run(root, POLICY, ["acmebank"], private_only=True)
+        self.assertEqual([(f.kind, f.value) for f in found], [("file cannot be checked", "KeyError")])
+        self.assertNotIn("acmebank", found[0].render().lower())
+
+    def test_multiline_vrl_literals_are_decoded(self):
+        program = '.x = "first line\n\\u{61}cmebank at \\u{38}.8.8.8 # not a comment\nmx\\u{2e}acme-corp.de"\n'
+        found = c.scan_private("log_types/x/parser.vrl", program, ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+        found = kinds(program, "log_types/x/parser.vrl")
+        self.assertIn(("IPv4", "8.8.8.8"), found)
+        self.assertIn(("domain", "mx.acme-corp.de"), found)
+
+    def test_quotes_in_vrl_comments_do_not_start_literals(self):
+        self.assertEqual(kinds('# it\'s "quoted"\n.x = "mx.acme-corp.de"\n', "log_types/x/parser.vrl"),
+                         [("domain", "mx.acme-corp.de")])
+
+    def test_json_nested_deeper_than_five_levels_is_decoded(self):
+        inner = '{"k": "' + "\\" + 'u0061cmebank"}'  # the escape is decoded only by the innermost level
+        for _ in range(8):
+            inner = json.dumps({"k": inner})
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "raw_sample: " + json.dumps(inner), ["acmebank"])
+        self.assertIn(("private denylist", True), [(f.kind, f.secret) for f in found])
+
+    def test_unreadable_file_does_not_print_a_private_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "log_types" / "acmebank" / "tests" / "a.yaml").mkdir(parents=True)  # a directory, not a file
+            policy = c.Policy(scan=["log_types/**"], networks=[], domains=[], tlds=set(), non_domain_suffixes=set(),
+                              non_domains=set(), denylist=[])
+            with mock.patch.object(c, "tracked_files", return_value=["log_types/acmebank/tests/a.yaml"]):
+                found = c.run(root, policy, ["acmebank"])
+        self.assertEqual([f.kind for f in found], ["file cannot be read"])
+        self.assertNotIn("acmebank", found[0].render().lower())
+        self.assertNotIn("acmebank", found[0].annotation().lower())
+
+    def test_escapes_do_not_hide_private_terms(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", 'raw_sample: "\\x41CMEBANK"', ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+
+class FalsePositives(unittest.TestCase):
+    def test_json_keys_are_not_domains(self):
+        self.assertEqual(kinds('raw_sample: \'{"container.id":"abc"}\''), [])
+
+    def test_json_values_are_still_scanned(self):
+        self.assertEqual(kinds('raw_sample: \'{"host":"api.acme.io"}\''),
+                         [("domain", "api.acme.io")])
+
+    def test_filenames_are_not_domains(self):
+        self.assertEqual(kinds("raw_sample: 'see README.md, install.sh, check.py and foo.tar.gz'"), [])
+
+    def test_vrl_comment_filename_is_not_a_domain(self):
+        self.assertEqual(kinds("# see SCHEMA.md\n", "log_types/x/parser.vrl"), [])
+
+    def test_falco_field_name_value_is_not_a_domain(self):
+        self.assertEqual(kinds('raw_sample: \'{"container.info":"container.info"}\''), [])
+
+    def test_ocsf_ip_suffix_is_not_a_domain(self):
+        self.assertEqual(kinds("# see src_endpoint.ip\n", "log_types/x/parser.vrl"), [])
+
+    def test_real_domains_are_still_flagged(self):
+        self.assertEqual(kinds("raw_sample: 'api.acme.io and api.acme.id'"),
+                         [("domain", "api.acme.io"), ("domain", "api.acme.id")])
+
+    def test_vendor_domain_is_still_flagged(self):
+        self.assertEqual(kinds("expected:\n  metadata.product.vendor_name: goauthentik.io\n"),
+                         [("domain", "goauthentik.io")])
+
+
+class Denylists(unittest.TestCase):
+    def test_public_denylist(self):
+        self.assertEqual(kinds("# see registry.procyde.online\n", "log_types/x/parser.vrl")[-1][0], "matches")
+
+    def test_private_denylist_hides_the_term(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "raw_sample: 'host ACMEBANK-DC1'", ["acmebank"])
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0].secret)
+        self.assertNotIn("acmebank", found[0].render().lower())
+        self.assertNotIn("acmebank", found[0].annotation().lower())
+
+    def test_private_term_in_another_finding_is_hidden(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "raw_sample: 'from Jane@ACMEBANK.com'", ["acmebank"])
+        self.assertGreaterEqual(len(found), 2)
+        for f in found:
+            self.assertTrue(f.secret)
+            self.assertNotIn("acmebank", f.render().lower())
+            self.assertNotIn("acmebank", f.annotation().lower())
+
+    def test_private_term_in_the_path_is_hidden(self):
+        found = c.scan_file(POLICY, "log_types/acmebank/tests/a.yaml", "raw_sample: 'from 8.8.8.8'", ["acmebank"])
+        self.assertEqual(len(found), 2)
+        for f in found:
+            self.assertNotIn("acmebank", f.render().lower())
+            self.assertNotIn("acmebank", f.annotation().lower())
+
+    def test_annotations_escape_file_names_and_values(self):
+        f = c.Finding("log_types/x/tests/a,b:c%\n::warning::x.yaml", 3, "domain outside reserved names", "a\nb")
+        line = f.annotation()
+        self.assertNotIn("\n", line)
+        self.assertEqual(line, "::error file=log_types/x/tests/a%2Cb%3Ac%25%0A%3A%3Awarning%3A%3Ax.yaml,line=3,"
+                               "title=Test data policy::domain outside reserved names: a%0Ab")
+
+    def test_private_only_checks_nothing_else(self):
+        found = c.scan_private("log_types/x/tests/a.yaml", "raw_sample: 'ACMEBANK at 8.8.8.8'", ["acmebank"])
+        self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
+
+
+class Exceptions(unittest.TestCase):
+    def test_exception_matches_value_and_path(self):
+        ex = c.Exception_("8.8.8.8", ["log_types/x/*"], "public resolver named by the vendor's sample")
+        self.assertTrue(ex.covers("log_types/x/tests/a.yaml", "8.8.8.8"))
+        self.assertFalse(ex.covers("log_types/y/tests/a.yaml", "8.8.8.8"))
+
+    def test_exception_without_reason_is_a_policy_error(self):
+        import re
+        import tempfile
+        # Prepends the entry, so the test holds whether the policy lists exceptions or none.
+        text = re.sub(
+            r"(?m)^exceptions:.*$",
+            "exceptions:\n  - value: 8.8.8.8\n    paths: ['log_types/*']\n    reason: ''",
+            (Path(__file__).resolve().parent / "test_data_policy.yaml").read_text(),
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml") as f:
+            f.write(text)
+            f.flush()
+            with self.assertRaises(c.PolicyError):
+                c.load_policy(Path(f.name))
+
+
+if __name__ == "__main__":
+    unittest.main()
