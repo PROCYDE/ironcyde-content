@@ -139,6 +139,15 @@ class DecodedStrings(unittest.TestCase):
         found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", sample, ["acmebank"])
         self.assertEqual([(f.kind, f.secret) for f in found], [("private denylist", True)])
 
+    def test_yaml_aliases_are_refused(self):
+        self.assertEqual([f.value for f in c.scan_file(POLICY, "log_types/x/tests/a.yaml", "a: &a [*a]\n", [])],
+                         ["YAML aliases are not allowed in content"])
+
+    def test_deeply_nested_json_is_refused_without_a_crash(self):
+        sample = "raw_sample: '" + "[" * 100000 + "]" * 100000 + "'\n"
+        self.assertEqual([f.kind for f in c.scan_file(POLICY, "log_types/x/tests/a.yaml", sample, [])],
+                         ["file is not valid YAML"])
+
     def test_unreadable_file_does_not_print_a_private_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

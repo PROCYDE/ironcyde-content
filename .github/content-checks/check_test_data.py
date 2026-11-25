@@ -250,13 +250,19 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
     if not rel.endswith((".yaml", ".yml")):
         return [], [], None
     try:
+        # Aliases could make a document recursive or expand it exponentially; content has no use for them.
+        for event in yaml.parse(text, Loader=yaml.SafeLoader):
+            if isinstance(event, yaml.AliasEvent):
+                return [], [], "YAML aliases are not allowed in content"
         data = yaml.safe_load(text)
+        values: list[str] = []
+        keys = keys_in(data)
+        for value in strings_in(data):
+            values.extend(expand_json(value, keys=keys))
     except yaml.YAMLError as err:
         return [], [], str(err).splitlines()[0]
-    values: list[str] = []
-    keys = keys_in(data)
-    for value in strings_in(data):
-        values.extend(expand_json(value, keys=keys))
+    except RecursionError:
+        return [], [], "the document is nested too deeply"
     return values, keys, None
 
 
