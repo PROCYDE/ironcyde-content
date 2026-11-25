@@ -191,6 +191,24 @@ class DecodedStrings(unittest.TestCase):
         found = c.scan_private("log_types/x/tests/a.yaml", 'raw_sample: "\\x61cmebank"\n  bad: [\n', ["acmebank"])
         self.assertEqual([f.kind for f in found], ["file cannot be decoded"])
 
+    def test_unconvertible_yaml_scalars_are_findings_without_their_value(self):
+        found = c.scan_file(POLICY, "log_types/x/tests/a.yaml", "time: 2026-13-45\nhost: acmebank\n", ["acmebank"])
+        self.assertIn(("file is not valid YAML", "a value cannot be converted (ValueError)"),
+                      [(f.kind, f.value) for f in found])
+        found = c.scan_private("log_types/x/tests/a.yaml", "time: 2026-13-45\n", ["acmebank"])
+        self.assertEqual([f.kind for f in found], ["file cannot be decoded"])
+
+    def test_an_unexpected_error_is_a_finding_without_a_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "log_types" / "acmebank").mkdir(parents=True)
+            (root / "log_types" / "acmebank" / "a.yaml").write_text("x: 1\n")
+            with mock.patch.object(c, "tracked_files", return_value=["log_types/acmebank/a.yaml"]), \
+                    mock.patch.object(c, "scan_private", side_effect=KeyError("acmebank")):
+                found = c.run(root, POLICY, ["acmebank"], private_only=True)
+        self.assertEqual([(f.kind, f.value) for f in found], [("file cannot be checked", "KeyError")])
+        self.assertNotIn("acmebank", found[0].render().lower())
+
     def test_json_nested_deeper_than_five_levels_is_decoded(self):
         inner = '{"k": "' + "\\" + 'u0061cmebank"}'  # the escape is decoded only by the innermost level
         for _ in range(8):

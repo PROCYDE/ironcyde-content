@@ -335,6 +335,10 @@ def decoded_strings(rel: str, text: str) -> tuple[list[str], list[str], str | No
         return [], [], str(err).splitlines()[0]
     except RecursionError:
         return [], [], "the document is nested too deeply"
+    except (ValueError, TypeError, OverflowError) as err:
+        # A scalar that cannot be converted, such as the date 2026-13-45. The message may quote the value, so only
+        # the kind of error is reported.
+        return [], [], f"a value cannot be converted ({type(err).__name__})"
     return values, keys, None
 
 
@@ -456,10 +460,18 @@ def run(root: Path, policy: Policy, private_terms: list[str], private_only: bool
             findings.append(Finding(rel, 1, "file cannot be read", err.strerror or type(err).__name__,
                                     secret_path=any(t in rel.lower() for t in private_terms)))
             continue
-        if private_only:
-            findings += scan_private(rel, text, private_terms)
+        try:
+            file_findings = (scan_private(rel, text, private_terms) if private_only
+                             else scan_file(policy, rel, text, private_terms))
+        except Exception as err:  # noqa: BLE001 - any failure must stay a finding, never a traceback
+            # A traceback could print a private term from the file or its path; only the kind of error is reported.
+            findings.append(Finding(rel, 1, "file cannot be checked", type(err).__name__,
+                                    secret_path=any(t in rel.lower() for t in private_terms)))
             continue
-        for f in scan_file(policy, rel, text, private_terms):
+        if private_only:
+            findings += file_findings
+            continue
+        for f in file_findings:
             excused = False
             if not f.secret:
                 for ex in policy.exceptions:
