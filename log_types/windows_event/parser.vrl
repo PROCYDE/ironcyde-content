@@ -313,6 +313,7 @@ if !is_object(raw) {
         "metadata": {
             "version": "1.9.0",
             "uid": record_uid,
+            "event_code": to_string(eid),
             "log_name": log_name,
             "log_provider": log_provider,
             "product": {

@@ -3,4 +3,5 @@ raw_sample: '{"date":1794909773.635043,"ProviderName":"Microsoft-Windows-Securit
 expected:
   activity_id: 1
   class_uid: 3002
+  metadata.event_code: '4648'
   user.name: localuser

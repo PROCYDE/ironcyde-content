@@ -6,6 +6,7 @@ expected:
   class_uid: 3002
   dst_endpoint.hostname: ctdl-wks-23
   message: An account failed to log on
+  metadata.event_code: '4625'
   metadata.product.name: Windows
   metadata.product.vendor_name: Microsoft
   severity_id: 2
