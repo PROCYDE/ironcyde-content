@@ -9,6 +9,11 @@ name: content-test
 # Pull requests are tested through pull_request_target: this workflow runs as it is on main, and the pull
 # request's files are only read as data, inside a container without network access. Pull requests from forks
 # are not tested. The image is never cached, because pull request runs can read caches.
+#
+# A second, strict run applies this repository's own bar, which is higher than what IRONCYDE asks of content in
+# general: besides valid OCSF, no OCSF warning other than a missing recommended attribute, and declared profiles
+# in every event (check_content_report.py). The checker is the copy from main, never the pull request's, and it
+# only parses the report as JSON.
 
 on:
   pull_request_target:
@@ -36,6 +41,13 @@ jobs:
     timeout-minutes: 15
     environment: ironcyde-registry
     steps:
+      # The quality checker as it is on main (pull_request_target's default ref), never the pull request's.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: trusted
+          sparse-checkout: .github/content-checks
+          persist-credentials: false
+
       # On pull_request_target the default checkout is main; read the pull request's head instead, as data only.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,3 +73,16 @@ jobs:
             --volume "$GITHUB_WORKSPACE/content:/content:ro" \
             "$IRONCYDE_API_IMAGE" content test --format github /content
 
+      # The strict run exits non-zero for missing recommended attributes, which this repository tolerates; the
+      # checker decides. An unreadable report (the run itself broke) fails the checker.
+      - name: Write the strict report
+        if: ${{ !cancelled() }}
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges --pids-limit 512 --memory 4g \
+            --volume "$GITHUB_WORKSPACE/content:/content:ro" \
+            "$IRONCYDE_API_IMAGE" content test --format json --strict /content > "$RUNNER_TEMP/report.json" || true
+
+      - name: Check the content quality bar
+        if: ${{ !cancelled() }}
+        run: python3 trusted/.github/content-checks/check_content_report.py "$RUNNER_TEMP/report.json"
