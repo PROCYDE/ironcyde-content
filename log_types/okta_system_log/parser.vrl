@@ -265,7 +265,11 @@ if !is_object(raw) {
     if class_uid == 6003 {
         # API Activity: the Okta event type is the API operation. device belongs to the host profile here, and the
         # class has no user attribute; actor.user carries the same values.
-        .metadata.profiles = ["host"]
+        if host != "" || (to_string(device_obj.id) ?? "") != "" {
+            .metadata.profiles = ["host"]
+        } else {
+            del(.device)
+        }
         .api = {
             "operation": event_type,
             "service": { "name": "okta" },

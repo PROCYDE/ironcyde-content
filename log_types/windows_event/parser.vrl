@@ -412,7 +412,7 @@ if !is_object(raw) {
         }
         .unmapped.protocol = to_string(ed.Protocol) ?? ""
     } else if class_uid == 3002 || class_uid == 3003 {
-        # Authentication / Authorize Session — OCSF 1.3 has no device on 3002/3003.
+        # Authentication / Authorize Session: device belongs to the host profile here; the computer is dst_endpoint.
         .user = {
             "name": actor_name,
             "uid": actor_uid,
