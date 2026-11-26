@@ -1,0 +1,15 @@
+---
+# An allowed session in the long key form: Traffic, Success.
+raw_sample: '{"SourceAddress":"2001:db8::12","DestinationAddress":"2001:db8::34","SourcePort":51000,"DestinationPort":443,"Protocol":"TCP","Action":"allow","Application":"ssl","Rule":"allow-web","time_generated":"2026-10-15T09:48:47Z"}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  status_id: 1
+  action_id: 1
+  disposition_id: 1
+  src_endpoint.ip: 2001:db8::12
+  dst_endpoint.port: 443
+  app_name: ssl
+  firewall_rule.name: allow-web
+  traffic: null
+  metadata.profiles: [security_control]

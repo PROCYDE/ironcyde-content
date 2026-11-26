@@ -1,0 +1,11 @@
+---
+# An alert without an alert object or addresses: no evidence, an Unknown severity, no profile.
+raw_sample: '{"event_type":"alert","timestamp":"2026-10-15T09:18:47.000Z"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 0
+  evidences: null
+  finding_info.analytic: null
+  action_id: null
+  metadata.profiles: []

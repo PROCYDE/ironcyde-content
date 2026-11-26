@@ -1,0 +1,11 @@
+---
+# A rejected packet.
+raw_sample: '{"sid":2100003,"msg":"Example policy block","priority":3,"proto":"TCP","src_ip":"203.0.113.44","dst_ip":"198.51.100.35","action":"reject"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 2
+  action_id: 2
+  disposition_id: 25
+  disposition: Rejected
+  metadata.profiles: [security_control]

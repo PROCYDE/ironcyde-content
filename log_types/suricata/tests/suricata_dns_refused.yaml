@@ -1,0 +1,10 @@
+---
+# A response code OCSF does not list stays in the source spelling; no dns.type gives activity Unknown.
+raw_sample: '{"event_type":"dns","src_ip":"198.51.100.1","dest_ip":"192.0.2.23","proto":"UDP","dns":{"rcode":"BADSIG","rrname":"www.example.com"}}'
+expected:
+  class_uid: 4003
+  type_uid: 400300
+  rcode_id: 99
+  rcode: BADSIG
+  status_id: 2
+  metadata.profiles: []

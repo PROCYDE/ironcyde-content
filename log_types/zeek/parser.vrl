@@ -1,133 +1,218 @@
-# Zeek conn.log JSON → OCSF Network Activity (class_uid 4001).
+# Zeek conn.log (JSON) -> OCSF Network Activity (4001).
 #
-# Gateway envelope: event_id, source_id, source_type, ingested_at, event=<conn JSON>
-# Supports Zeek JSON keys id.orig_h / id.resp_h (quoted) and flat orig_h / resp_h.
-# Scale: one parse_json, cheap port severity, bounded unmapped. Never class 2001.
+# Reads Zeek's dotted keys (id.orig_h, id.resp_h, id.orig_p, id.resp_p) and the flat forms orig_h/resp_h or
+# src/dst with orig_p/resp_p or sport/dport. conn_state picks the activity: REJ -> Refuse, RST* -> Reset,
+# S0 (no reply) -> Fail, everything else -> Traffic. A record without a valid address is rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
-if !is_object(raw) {
-    if ."id.orig_h" != null || .orig_h != null || .uid != null {
-        raw = .
-    }
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && (."id.orig_h" != null || .orig_h != null || .uid != null) {
+  raw = .
 }
 if !is_object(raw) {
-    abort "no_match"
+  abort "no_match"
 }
-    src_ip = to_string(raw."id.orig_h") ?? ""
-    if src_ip == "" {
-        src_ip = to_string(raw.orig_h) ?? to_string(raw.src) ?? ""
-    }
-    dst_ip = to_string(raw."id.resp_h") ?? ""
-    if dst_ip == "" {
-        dst_ip = to_string(raw.resp_h) ?? to_string(raw.dst) ?? ""
-    }
 
-    if src_ip != "" {
-        ipv4_ok = is_ipv4(src_ip)
-        ipv6_ok = is_ipv6(src_ip)
-        if !ipv4_ok && !ipv6_ok {
-            src_ip = ""
-        }
-    }
-    if dst_ip != "" {
-        ipv4_ok = is_ipv4(dst_ip)
-        ipv6_ok = is_ipv6(dst_ip)
-        if !ipv4_ok && !ipv6_ok {
-            dst_ip = ""
-        }
-    }
+src_ip = to_string(raw."id.orig_h") ?? ""
+if src_ip == "" {
+  src_ip = to_string(raw.orig_h) ?? ""
+}
+if src_ip == "" {
+  src_ip = to_string(raw.src) ?? ""
+}
+if !(is_ipv4(src_ip) || is_ipv6(src_ip)) {
+  src_ip = ""
+}
+dst_ip = to_string(raw."id.resp_h") ?? ""
+if dst_ip == "" {
+  dst_ip = to_string(raw.resp_h) ?? ""
+}
+if dst_ip == "" {
+  dst_ip = to_string(raw.dst) ?? ""
+}
+if !(is_ipv4(dst_ip) || is_ipv6(dst_ip)) {
+  dst_ip = ""
+}
+if src_ip == "" && dst_ip == "" {
+  abort "no_match"
+}
+# to_int(null) is 0, not an error, so a missing key has to be told apart from port 0 by hand.
+sport_raw = raw."id.orig_p"
+if sport_raw == null {
+  sport_raw = raw.orig_p
+}
+if sport_raw == null {
+  sport_raw = raw.sport
+}
+sport = -1
+if sport_raw != null {
+  sport = to_int(sport_raw) ?? -1
+}
+dport_raw = raw."id.resp_p"
+if dport_raw == null {
+  dport_raw = raw.resp_p
+}
+if dport_raw == null {
+  dport_raw = raw.dport
+}
+dport = -1
+if dport_raw != null {
+  dport = to_int(dport_raw) ?? -1
+}
+# A port belongs to an endpoint that has an address. ICMP "ports" are type and code, not ports, but Zeek logs
+# them in the port fields and they stay there.
+src = {"ip": src_ip}
+if src_ip != "" && sport >= 0 && sport < 65536 {
+  src.port = sport
+}
+dst = {"ip": dst_ip}
+if dst_ip != "" && dport >= 0 && dport < 65536 {
+  dst.port = dport
+}
 
-    sport = to_int(raw."id.orig_p") ?? 0
-    if sport == 0 {
-        sport = to_int(raw.orig_p) ?? to_int(raw.sport) ?? 0
-    }
-    dport = to_int(raw."id.resp_p") ?? 0
-    if dport == 0 {
-        dport = to_int(raw.resp_p) ?? to_int(raw.dport) ?? 0
-    }
+proto = downcase(to_string(raw.proto) ?? "")
+service = to_string(raw.service) ?? ""
+if service == "-" {
+  service = ""
+}
+uid = to_string(raw.uid) ?? ""
+conn_state = to_string(raw.conn_state) ?? ""
+history = to_string(raw.history) ?? ""
 
-    proto = downcase(to_string(raw.proto) ?? "tcp")
-    service = to_string(raw.service) ?? ""
-    if service == "-" {
-        service = ""
-    }
-    uid = to_string(raw.uid) ?? ""
+# ts is epoch seconds, as a number or a numeric string, or an ISO 8601 time (json-streaming logs).
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+original_time = to_string(raw.ts) ?? ""
+secs = to_float(raw.ts) ?? 0.0
+if secs > 0.0 {
+  time_ms = to_int(secs * 1000.0)
+} else {
+  parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+  if parsed_ts != null {
+    time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+  }
+}
 
-    severity_id = 2
-    if dport == 4444 || dport == 8080 || dport == 8443 || dport == 31337 {
-        severity_id = 4
-    }
+activity_id = 6
+if conn_state == "REJ" {
+  activity_id = 5
+} else if starts_with(conn_state, "RST") {
+  activity_id = 3
+} else if conn_state == "S0" {
+  activity_id = 4
+}
+# Outcome: the connection was established (and possibly closed or reset later), or it never was.
+status_id = null
+status = null
+if includes(["SF", "S1", "S2", "S3", "RSTO", "RSTR"], conn_state) {
+  status_id = 1
+  status = "Success"
+} else if includes(["S0", "REJ", "RSTOS0", "RSTRH", "SH", "SHR"], conn_state) {
+  status_id = 2
+  status = "Failure"
+}
 
-    class_uid = 4001
-    category_uid = 4
-    activity_id = 1
-    type_uid = class_uid * 100 + activity_id
+# Zeek says whether each side is in the local networks, when Site::local_nets is configured.
+direction_id = 0
+if is_boolean(raw.local_orig) && is_boolean(raw.local_resp) {
+  if raw.local_orig == true && raw.local_resp == true {
+    direction_id = 3
+  } else if raw.local_orig == true {
+    direction_id = 2
+  } else if raw.local_resp == true {
+    direction_id = 1
+  }
+}
+connection_info = {"direction_id": direction_id, "protocol_name": proto, "uid": uid, "flag_history": history}
+proto_num = get({"icmp": 1, "tcp": 6, "udp": 17, "icmp6": 58, "icmpv6": 58}, [proto]) ?? null
+if proto_num != null {
+  connection_info.protocol_num = proto_num
+}
+if is_ipv4(src_ip) || is_ipv4(dst_ip) {
+  connection_info.protocol_ver_id = 4
+} else {
+  connection_info.protocol_ver_id = 6
+}
 
-    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    ts_raw = raw.ts
-    if is_float(ts_raw) || is_integer(ts_raw) {
-        # Zeek epoch seconds (possibly fractional)
-        secs = to_float(ts_raw) ?? 0.0
-        time_ms = to_int(secs * 1000.0)
-    } else {
-        ts_str = to_string(ts_raw) ?? ""
-        if ts_str != "" {
-            parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-            if parsed_ts != null {
-                time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
-            } else {
-                # numeric string epoch
-                secs = to_float(ts_str) ?? 0.0
-                if secs > 0.0 {
-                    time_ms = to_int(secs * 1000.0)
-                }
-            }
-        }
-    }
+msg = strip_whitespace(proto + " " + src_ip + ":" + to_string(src.port) + " -> " + dst_ip + ":" + to_string(dst.port) + " " + conn_state)
 
-    msg = proto + " " + src_ip + ":" + to_string(sport) + "->" + dst_ip + ":" + to_string(dport)
-    if uid != "" {
-        msg = msg + " uid=" + uid
-    }
+. = {
+  "category_uid": 4,
+  "class_uid": 4001,
+  "type_uid": 400100 + activity_id,
+  "activity_id": activity_id,
+  "severity_id": 1,
+  "status_id": status_id,
+  "status": status,
+  "status_code": conn_state,
+  "time": time_ms,
+  "message": msg,
+  "src_endpoint": src,
+  "dst_endpoint": dst,
+  "connection_info": connection_info,
+  "app_protocol_name": service,
+  "initiator_id": 1,
+  "metadata": {
+    "version": "1.9.0",
+    "uid": uid,
+    "log_name": "conn",
+    "original_time": original_time,
+    "product": {"name": "Zeek", "vendor_name": "Zeek"},
+    "profiles": [],
+  },
+  "unmapped": {
+    "missed_bytes": raw.missed_bytes,
+    "tunnel_parents": raw.tunnel_parents,
+  },
+}
 
-    . = {
-        "category_uid": category_uid,
-        "class_uid": class_uid,
-        "class_name": "Network Activity",
-        "category_name": "Network Activity",
-        "type_uid": type_uid,
-        "activity_id": activity_id,
-        "severity_id": severity_id,
-        "status_id": 1,
-        "time": time_ms,
-        "message": msg,
-        "src_endpoint": {
-            "ip": src_ip,
-            "port": sport,
-        },
-        "dst_endpoint": {
-            "ip": dst_ip,
-            "port": dport,
-        },
-        "connection_info": {
-            "protocol_name": proto,
-            "direction_id": 1,
-        },
-        "metadata": {
-            "version": "1.9.0",
-            "uid": uid,
-            "log_name": "conn",
-            "log_provider": "Zeek",
-            "product": {
-                "name": "Zeek",
-                "vendor_name": "Zeek",
-            },
-        },
-        "unmapped": {
-            "zeek_uid": uid,
-            "service": service,
-            "proto": proto,
-        },
-    }
+# Bytes and packets per direction; the totals only when both directions are known.
+traffic = {}
+orig_bytes = -1
+if raw.orig_bytes != null {
+  orig_bytes = to_int(raw.orig_bytes) ?? -1
+}
+resp_bytes = -1
+if raw.resp_bytes != null {
+  resp_bytes = to_int(raw.resp_bytes) ?? -1
+}
+if orig_bytes >= 0 {
+  traffic.bytes_out = orig_bytes
+}
+if resp_bytes >= 0 {
+  traffic.bytes_in = resp_bytes
+}
+if orig_bytes >= 0 && resp_bytes >= 0 {
+  traffic.bytes = orig_bytes + resp_bytes
+}
+orig_pkts = -1
+if raw.orig_pkts != null {
+  orig_pkts = to_int(raw.orig_pkts) ?? -1
+}
+resp_pkts = -1
+if raw.resp_pkts != null {
+  resp_pkts = to_int(raw.resp_pkts) ?? -1
+}
+if orig_pkts >= 0 {
+  traffic.packets_out = orig_pkts
+}
+if resp_pkts >= 0 {
+  traffic.packets_in = resp_pkts
+}
+if orig_pkts >= 0 && resp_pkts >= 0 {
+  traffic.packets = orig_pkts + resp_pkts
+}
+if length(traffic) > 0 {
+  .traffic = traffic
+}
+# duration is in seconds; OCSF wants milliseconds and the connection's start and end.
+conn_seconds = -1.0
+if raw.duration != null {
+  conn_seconds = to_float(raw.duration) ?? -1.0
+}
+if conn_seconds >= 0.0 {
+  duration_ms = to_int(conn_seconds * 1000.0)
+  .duration = duration_ms
+  .start_time = time_ms
+  .end_time = time_ms + duration_ms
+}
+. = compact(., array: false)

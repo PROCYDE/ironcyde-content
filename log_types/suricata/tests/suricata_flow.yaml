@@ -1,0 +1,17 @@
+---
+# A closed flow with its byte and packet counts and its duration.
+raw_sample: '{"timestamp":"2026-10-15T09:19:00.000Z","flow_id":1000000000002,"event_type":"flow","src_ip":"192.0.2.23","src_port":40113,"dest_ip":"203.0.113.80","dest_port":443,"proto":"TCP","app_proto":"tls","flow":{"pkts_toserver":10,"pkts_toclient":8,"bytes_toserver":1200,"bytes_toclient":5400,"start":"2026-10-15T09:18:50.000Z","end":"2026-10-15T09:18:59.500Z","state":"closed","reason":"timeout"}}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  activity_id: 6
+  traffic.bytes: 6600
+  traffic.bytes_out: 1200
+  traffic.packets: 18
+  duration: 9500
+  start_time: 1792055930000
+  status_code: closed
+  app_protocol_name: tls
+  connection_info.uid: "1000000000002"
+  metadata.log_name: flow
+  metadata.profiles: []

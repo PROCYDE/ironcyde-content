@@ -1,105 +1,175 @@
-# Snort alert JSON → OCSF (gateway envelope).
+# Snort JSON alerts (alert_json) and flow records -> OCSF.
 #
-# Input: event_id, source_id, source_type, ingested_at, event=<alert JSON string>
-# Sets parse_status=ok|no_match. Never emits class_uid 2001.
-# Detection Finding (2004) keeps network tuples in unmapped; Network Activity
-# (4001) keeps src/dst/connection_info on the event.
+#   alert (default) -> Detection Finding (2004), Create: the rule is the analytic, the endpoints are evidence
+#   event_type=flow -> Network Activity (4001), Traffic
+# Reads src_ip|src_addr, dst_ip|dest_ip|dst_addr and src_port, dst_port|dest_port. An alert that names no rule
+# (no sid and no msg), or a flow without a valid address, is rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
-if !is_object(raw) {
-    if .sid != null || .msg != null {
-        raw = .
-    }
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && (.sid != null || .msg != null) {
+  raw = .
 }
-if raw == null {
+if !is_object(raw) {
   abort "no_match"
+}
+event_type = downcase(to_string(raw.event_type) ?? "")
+
+# to_string(null) is "", not an error, so alternatives are tried one by one.
+src_ip = to_string(raw.src_ip) ?? ""
+if src_ip == "" {
+  src_ip = to_string(raw.src_addr) ?? ""
+}
+if !(is_ipv4(src_ip) || is_ipv6(src_ip)) {
+  src_ip = ""
+}
+dst_ip = to_string(raw.dst_ip) ?? ""
+if dst_ip == "" {
+  dst_ip = to_string(raw.dest_ip) ?? ""
+}
+if dst_ip == "" {
+  dst_ip = to_string(raw.dst_addr) ?? ""
+}
+if !(is_ipv4(dst_ip) || is_ipv6(dst_ip)) {
+  dst_ip = ""
+}
+# A port belongs to an endpoint that has an address.
+src = {"ip": src_ip}
+src_port = to_int(raw.src_port) ?? 0
+if src_ip != "" && src_port > 0 && src_port < 65536 {
+  src.port = src_port
+}
+dst = {"ip": dst_ip}
+dst_port = to_int(raw.dst_port) ?? 0
+if dst_port == 0 {
+  dst_port = to_int(raw.dest_port) ?? 0
+}
+if dst_ip != "" && dst_port > 0 && dst_port < 65536 {
+  dst.port = dst_port
+}
+# direction_id 0 (Unknown): Snort does not say which side of a boundary the packet crosses.
+proto = downcase(to_string(raw.proto) ?? "")
+connection_info = {"direction_id": 0, "protocol_name": proto}
+proto_num = get({"icmp": 1, "tcp": 6, "udp": 17, "icmpv6": 58}, [proto]) ?? null
+if proto_num != null {
+  connection_info.protocol_num = proto_num
+}
+
+# Snort 3 logs "MM/DD-HH:MM:SS.ffffff" without a year; only a full ISO 8601 time is used as the event time.
+original_time = to_string(raw.timestamp) ?? ""
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
+
+metadata = {
+  "version": "1.9.0",
+  "product": {"name": "Snort", "vendor_name": "Cisco"},
+  "original_time": original_time,
+  "profiles": [],
+}
+
+if event_type == "flow" {
+  if src_ip == "" && dst_ip == "" {
+    abort "no_match"
+  }
+  metadata.log_name = "flow"
+  . = {
+    "category_uid": 4,
+    "class_uid": 4001,
+    "type_uid": 400106,
+    "activity_id": 6,
+    "severity_id": 1,
+    "time": time_ms,
+    "message": strip_whitespace("Snort flow " + proto + " " + src_ip + " -> " + dst_ip),
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "connection_info": connection_info,
+    "metadata": metadata,
+  }
 } else {
-  event_type = downcase(to_string(raw.event_type) ?? "alert")
-  src_ip = to_string(raw.src_ip) ?? ""
-  dst_ip = to_string(raw.dst_ip) ?? ""
-  if dst_ip == "" {
-    dst_ip = to_string(raw.dest_ip) ?? ""
-  }
-  src_port = to_int(raw.src_port) ?? 0
-  dst_port = to_int(raw.dst_port) ?? 0
-  if dst_port == 0 {
-    dst_port = to_int(raw.dest_port) ?? 0
-  }
-  proto = downcase(to_string(raw.proto) ?? "tcp")
-
-  category_uid = 2
-  class_uid = 2004
-  activity_id = 1
-  priority = to_int(raw.priority) ?? 2
-  severity_id = 3
-  if priority == 1 {
-    severity_id = 5
-  } else if priority == 2 {
-    severity_id = 4
-  } else if priority == 3 {
-    severity_id = 3
-  } else {
-    severity_id = 2
-  }
-
-  if event_type == "flow" {
-    category_uid = 4
-    class_uid = 4001
-    severity_id = 2
-  }
-
-  type_uid = class_uid * 100 + activity_id
   msg = to_string(raw.msg) ?? ""
   if msg == "" {
-    msg = to_string(raw.message) ?? "Snort alert"
+    msg = to_string(raw.message) ?? ""
   }
-  sid = to_string(raw.sid) ?? "0"
-  gid = to_string(raw.gid) ?? "1"
-
-  time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-  ts_str = to_string(raw.timestamp) ?? ""
-  parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-  if parsed_ts != null {
-    time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
+  sid = to_string(raw.sid) ?? ""
+  if sid == "" && msg == "" {
+    abort "no_match"
   }
-
+  gid = to_string(raw.gid) ?? ""
+  if gid == "" {
+    gid = "1"
+  }
+  # Snort's priority: 1 is the highest.
+  severity_id = 0
+  if raw.priority != null {
+    priority = to_int(raw.priority) ?? 0
+    severity_id = if priority == 1 { 4 } else if priority == 2 { 3 } else if priority == 3 { 2 } else if priority >= 4 { 1 } else { 0 }
+  }
+  finding_uid = "snort-" + gid + "-" + sid
+  if sid == "" {
+    finding_uid = string(%ironcyde.event_id) ?? ""
+  }
+  classification = to_string(raw.classification) ?? ""
+  if classification == "" {
+    classification = to_string(raw.class) ?? ""
+  }
+  analytic_uid = ""
+  if sid != "" {
+    analytic_uid = gid + ":" + sid
+  }
+  metadata.log_name = "alert"
   . = {
-    "category_uid": category_uid,
-    "class_uid": class_uid,
-    "type_uid": type_uid,
-    "activity_id": activity_id,
+    "category_uid": 2,
+    "class_uid": 2004,
+    "type_uid": 200401,
+    "activity_id": 1,
     "severity_id": severity_id,
+    "status_id": 1,
+    "status": "New",
+    "is_alert": true,
     "time": time_ms,
-    "message": "e2e-snort-alert sid=" + sid + " " + msg,
-    "metadata": {
-      "version": "1.9.0",
-      "product": {"name": "Snort", "vendor_name": "Cisco"},
-      "profiles": [],
-    },
-    "unmapped": {
-      "snort_sid": sid,
-      "snort_gid": gid,
-      "snort_classification": raw.classification,
-      "src_ip": src_ip,
-      "src_port": src_port,
-      "dst_ip": dst_ip,
-      "dst_port": dst_port,
-      "proto": proto,
-    },
-  }
-
-  if class_uid == 2004 {
-    .metadata.profiles = ["security_control"]
-    .finding_info = {
+    "message": strip_whitespace("Snort alert " + msg),
+    "finding_info": {
       "title": msg,
-      "uid": "snort-" + gid + "-" + sid,
-      "types": ["TTPs/Detection"],
-    }
-  } else {
-    .src_endpoint = {"ip": src_ip, "port": src_port}
-    .dst_endpoint = {"ip": dst_ip, "port": dst_port}
-    .connection_info = {"protocol_name": proto, "direction_id": 1}
+      "uid": finding_uid,
+      "analytic": {
+        "type_id": 1,
+        "type": "Rule",
+        "uid": analytic_uid,
+        "name": msg,
+        "category": classification,
+        "version": to_string(raw.rev) ?? "",
+      },
+    },
+    "metadata": metadata,
+  }
+  evidence = {}
+  if src_ip != "" {
+    evidence.src_endpoint = src
+  }
+  if dst_ip != "" {
+    evidence.dst_endpoint = dst
+  }
+  if length(evidence) > 0 {
+    evidence.connection_info = connection_info
+    .evidences = [evidence]
+  }
+  # What Snort did with the packet. action and disposition belong to the security_control profile.
+  action = downcase(to_string(raw.action) ?? "")
+  if includes(["allow", "alert", "pass", "log"], action) {
+    .action_id = 1
+    .action = "Allowed"
+    .disposition_id = 1
+    .disposition = "Allowed"
+    .metadata.profiles = ["security_control"]
+  } else if includes(["drop", "block", "reject", "sdrop"], action) {
+    .action_id = 2
+    .action = "Denied"
+    .disposition_id = if action == "reject" { 25 } else { 6 }
+    .disposition = if action == "reject" { "Rejected" } else { "Dropped" }
+    .metadata.profiles = ["security_control"]
   }
 }
+. = compact(., array: false)

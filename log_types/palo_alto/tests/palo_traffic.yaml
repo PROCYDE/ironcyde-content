@@ -1,4 +1,30 @@
 ---
+# A denied session: Refuse, with the rule, zones, session ID and byte counts.
 raw_sample: '{"type":"TRAFFIC","receive_time":"2026-10-15T09:48:46Z","serial":"000000000000000","src":"192.0.2.12","dst":"203.0.113.34","natsrc":"203.0.113.10","sport":40000,"dport":4444,"proto":"tcp","action":"deny","app":"unknown-tcp","rule":"block-suspicious-egress","from_zone":"trust","to_zone":"untrust","bytes_sent":37116,"bytes_received":214894,"session_id":1234567,"category":"malware"}'
 expected:
   class_uid: 4001
+  category_uid: 4
+  type_uid: 400105
+  activity_id: 5
+  severity_id: 1
+  status_id: 2
+  action_id: 2
+  disposition_id: 2
+  disposition: Blocked
+  time: 1792057726000
+  src_endpoint.ip: 192.0.2.12
+  src_endpoint.port: 40000
+  src_endpoint.zone: trust
+  dst_endpoint.ip: 203.0.113.34
+  dst_endpoint.port: 4444
+  dst_endpoint.zone: untrust
+  connection_info.protocol_name: tcp
+  connection_info.protocol_num: 6
+  connection_info.uid: "1234567"
+  app_name: unknown-tcp
+  firewall_rule.name: block-suspicious-egress
+  traffic.bytes: 252010
+  traffic.bytes_out: 37116
+  metadata.log_name: traffic
+  metadata.reporter.uid: "000000000000000"
+  metadata.profiles: [security_control]

@@ -1,0 +1,13 @@
+---
+# A DNS answer with its response code and records; a record without data is left out.
+raw_sample: '{"timestamp":"2026-10-15T09:18:48.100Z","event_type":"dns","src_ip":"198.51.100.1","src_port":53,"dest_ip":"192.0.2.23","dest_port":51000,"proto":"UDP","dns":{"type":"answer","id":4711,"rcode":"NOERROR","rrname":"www.example.com","rrtype":"A","answers":[{"rrname":"www.example.com","rrtype":"A","ttl":300,"rdata":"203.0.113.80"},{"rrname":"www.example.com","rrtype":"SOA"}]}}'
+expected:
+  class_uid: 4003
+  type_uid: 400302
+  activity_id: 2
+  rcode_id: 0
+  rcode: NoError
+  status_id: 1
+  answers:
+    - {rdata: 203.0.113.80, type: A, hostname: www.example.com, ttl: 300}
+  metadata.profiles: []

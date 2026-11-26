@@ -1,0 +1,10 @@
+---
+# No action and no rule: plain traffic without an outcome and without a profile.
+raw_sample: '{"src":"192.0.2.12","dst":"203.0.113.34","timestamp":"2026-10-15T09:48:48Z"}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  status_id: null
+  action_id: null
+  connection_info.direction_id: 0
+  metadata.profiles: []

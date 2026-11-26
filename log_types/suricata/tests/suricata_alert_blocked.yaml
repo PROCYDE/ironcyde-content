@@ -1,0 +1,12 @@
+---
+# A blocked alert of the highest priority, in IPS mode.
+raw_sample: '{"timestamp":"2026-10-15T09:18:47.000Z","event_type":"alert","src_ip":"2001:db8::66","src_port":4444,"dest_ip":"2001:db8::23","dest_port":445,"proto":"TCP","alert":{"action":"blocked","signature_id":2000001,"signature":"Example exploit attempt","severity":1}}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 4
+  action_id: 2
+  action: Denied
+  disposition_id: 2
+  disposition: Blocked
+  metadata.profiles: [security_control]

@@ -1,0 +1,13 @@
+---
+# A flow record is plain traffic.
+raw_sample: '{"event_type":"flow","msg":"flow","timestamp":"2026-10-14T14:39:44Z","proto":"ICMP","src_ip":"203.0.113.44","dst_ip":"198.51.100.35"}'
+expected:
+  class_uid: 4001
+  category_uid: 4
+  type_uid: 400106
+  severity_id: 1
+  src_endpoint.ip: 203.0.113.44
+  dst_endpoint.ip: 198.51.100.35
+  connection_info.protocol_num: 1
+  metadata.log_name: flow
+  metadata.profiles: []

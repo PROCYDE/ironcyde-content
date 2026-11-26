@@ -1,0 +1,11 @@
+---
+# A record without a kind is a netflow record; invalid addresses and ports are left out.
+raw_sample: '{"client_ip":"2001:db8::25","server_ip":"not-an-address","sport":70000,"dport":0}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  src_endpoint.ip: 2001:db8::25
+  src_endpoint.port: null
+  dst_endpoint: null
+  metadata.log_name: netflow
+  metadata.profiles: []

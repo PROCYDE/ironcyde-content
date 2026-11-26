@@ -1,0 +1,18 @@
+---
+# A DNS query.
+raw_sample: '{"timestamp":"2026-10-15T09:18:48.000Z","flow_id":1000000000001,"event_type":"dns","src_ip":"192.0.2.23","src_port":51000,"dest_ip":"198.51.100.1","dest_port":53,"proto":"UDP","dns":{"type":"query","id":4711,"rrname":"www.example.com","rrtype":"A"}}'
+expected:
+  class_uid: 4003
+  category_uid: 4
+  type_uid: 400301
+  activity_id: 1
+  query.hostname: www.example.com
+  query.type: A
+  transaction_id: 4711
+  src_endpoint.ip: 192.0.2.23
+  dst_endpoint.ip: 198.51.100.1
+  dst_endpoint.port: 53
+  connection_info.protocol_num: 17
+  rcode_id: null
+  metadata.log_name: dns
+  metadata.profiles: []

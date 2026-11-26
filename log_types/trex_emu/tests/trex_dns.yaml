@@ -1,4 +1,22 @@
 ---
-raw_sample: '{"kind":"dns","client_ip":"203.0.113.25","ns_server":"198.51.100.1","query":"host0.citadel.example","qtype":"SRV","rcode":"NXDOMAIN","proto":"udp","emu_namespace":0,"emu_thread":0,"trex_emu":true,"profile":"rich_clients"}'
+# A DNS lookup with its response code.
+raw_sample: '{"kind":"dns","client_ip":"203.0.113.25","client_mac":"00:00:5e:00:53:01","ns_server":"198.51.100.1","query":"host0.example.com","qtype":"SRV","rcode":"NXDOMAIN","proto":"udp","sport":53124,"dport":53,"emu_namespace":0,"emu_thread":0,"trex_emu":true,"profile":"rich_clients"}'
 expected:
   class_uid: 4003
+  category_uid: 4
+  type_uid: 400306
+  activity_id: 6
+  src_endpoint.ip: 203.0.113.25
+  src_endpoint.mac: 00:00:5e:00:53:01
+  src_endpoint.port: 53124
+  dst_endpoint.ip: 198.51.100.1
+  dst_endpoint.port: 53
+  query.hostname: host0.example.com
+  query.type: SRV
+  rcode_id: 3
+  rcode: NXDomain
+  status_id: 2
+  connection_info.protocol_name: udp
+  connection_info.protocol_num: 17
+  metadata.log_name: dns
+  metadata.profiles: []

@@ -1,6 +1,31 @@
 ---
-raw_sample: '{"ts":"1792056883.0","uid":"Ceu5D6nX3hl07Nfx2h","id.orig_h":"192.0.2.23","id.orig_p":40000,"id.resp_h":"198.51.100.78","id.resp_p":8080,"proto":"tcp","duration":91.509496,"orig_bytes":26956,"resp_bytes":339720,"conn_state":"S0","orig_pkts":183,"resp_pkts":464,"service":"http"}'
+# An attempt without a reply (S0), with Zeek's dotted keys and an epoch time as a string.
+raw_sample: '{"ts":"1792056883.0","uid":"Ceu5D6nX3hl07Nfx2h","id.orig_h":"192.0.2.23","id.orig_p":40000,"id.resp_h":"198.51.100.78","id.resp_p":8080,"proto":"tcp","duration":91.509496,"orig_bytes":26956,"resp_bytes":0,"conn_state":"S0","history":"S","orig_pkts":183,"resp_pkts":0,"service":"http","local_orig":true,"local_resp":false}'
 expected:
-  category_uid: 4
   class_uid: 4001
-  metadata.product.name: Zeek
+  category_uid: 4
+  type_uid: 400104
+  activity_id: 4
+  severity_id: 1
+  status_id: 2
+  status_code: S0
+  time: 1792056883000
+  duration: 91509
+  end_time: 1792056974509
+  src_endpoint.ip: 192.0.2.23
+  src_endpoint.port: 40000
+  dst_endpoint.ip: 198.51.100.78
+  dst_endpoint.port: 8080
+  connection_info.protocol_name: tcp
+  connection_info.protocol_num: 6
+  connection_info.protocol_ver_id: 4
+  connection_info.direction_id: 2
+  connection_info.uid: Ceu5D6nX3hl07Nfx2h
+  connection_info.flag_history: S
+  app_protocol_name: http
+  traffic.bytes_out: 26956
+  traffic.bytes: 26956
+  traffic.packets: 183
+  metadata.uid: Ceu5D6nX3hl07Nfx2h
+  metadata.log_name: conn
+  metadata.profiles: []
