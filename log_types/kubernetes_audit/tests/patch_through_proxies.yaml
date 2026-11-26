@@ -1,0 +1,11 @@
+---
+# A node patches its status through proxies: Update; the first address is the client, the rest are in between.
+raw_sample: '{"auditID":"00000000-0000-0000-0000-000000000011","stage":"ResponseComplete","requestURI":"/api/v1/nodes/web1/status","verb":"patch","user":{"username":"system:node:web1"},"sourceIPs":["192.0.2.10","198.51.100.5","not-an-ip"],"objectRef":{"resource":"nodes","name":"web1","apiVersion":"v1","subresource":"status"},"responseStatus":{"code":200},"requestReceivedTimestamp":"2026-11-16T21:49:01.000000Z"}'
+expected:
+  class_uid: 6003
+  type_uid: 600303
+  actor.user.type_id: 3
+  src_endpoint.ip: 192.0.2.10
+  src_endpoint.intermediate_ips: [198.51.100.5]
+  actor.authorizations: null
+  metadata.profiles: []

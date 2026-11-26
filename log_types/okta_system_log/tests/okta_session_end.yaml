@@ -1,0 +1,15 @@
+---
+# A sign-out by a system principal with MFA in the event type: Logoff; no client address, so no source endpoint.
+raw_sample: '{"actor":{"id":"00uEXAMPLESYSTEM0000","type":"SystemPrincipal","alternateId":"system@example.com","displayName":"Okta System"},"eventType":"user.session.end.mfa_timeout","outcome":{"result":"SUCCESS"},"published":"2026-10-15T09:46:00.000Z","severity":"DEBUG"}'
+expected:
+  class_uid: 3002
+  type_uid: 300202
+  activity_id: 2
+  status_id: 1
+  severity_id: 1
+  is_mfa: true
+  user.type_id: 3
+  src_endpoint: null
+  http_request: null
+  message: user.session.end.mfa_timeout
+  metadata.profiles: []

@@ -1,8 +1,12 @@
 raw_sample: 'Sep 29 09:59:57 web-01 sudo: pam_unix(sudo:auth): authentication failure; logname=alice uid=1000 euid=0 tty=/dev/pts/0 ruser=alice rhost=  user=alice'
 expected:
   class_uid: 3002
+  type_uid: 300201
   activity_id: 1
   status_id: 2
   actor.user.name: 'alice'
   dst_endpoint.hostname: 'web-01'
   src_endpoint.ip: null
+  metadata.profiles: []
+  is_remote: null
+  service.name: sudo

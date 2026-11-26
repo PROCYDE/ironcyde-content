@@ -1,0 +1,9 @@
+---
+# Any other factor event is activity Other, named by the event type.
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"eventType":"user.mfa.factor.update","outcome":{"result":"SUCCESS"}}'
+expected:
+  class_uid: 3007
+  type_uid: 300799
+  activity_name: user.mfa.factor.update
+  severity_id: 0
+  metadata.profiles: []

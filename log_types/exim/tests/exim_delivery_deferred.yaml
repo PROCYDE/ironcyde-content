@@ -1,0 +1,12 @@
+---
+# A deferred delivery: Send, with the status Other (Deferred).
+raw_sample: '{"message":"2026-10-15 09:56:04 1tAbCd-000001-2X == dave@example.org R=dnslookup T=remote_smtp defer (111): Connection refused","host":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400901
+  status_id: 99
+  status: Deferred
+  status_detail: Connection refused
+  email.to: [dave@example.org]
+  device.hostname: mail1
+  metadata.profiles: [host]

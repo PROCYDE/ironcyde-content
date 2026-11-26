@@ -1,0 +1,12 @@
+---
+# An API name outside the known verbs is activity Other, named by the call; a root user; no source at all.
+raw_sample: '{"userIdentity":{"type":"Root","principalId":"123456789012","arn":"arn:aws:iam::123456789012:root","accountId":"123456789012"},"eventTime":"2026-10-15T09:52:00Z","eventSource":"signin.amazonaws.com","eventName":"ConsoleLogin","sourceIPAddress":"AWS Internal"}'
+expected:
+  class_uid: 6003
+  type_uid: 600399
+  activity_name: ConsoleLogin
+  actor.user.name: root
+  actor.user.type_id: 2
+  src_endpoint.name: AWS Internal
+  cloud.region: null
+  metadata.profiles: [cloud]

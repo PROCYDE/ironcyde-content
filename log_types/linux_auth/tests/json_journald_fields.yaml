@@ -1,0 +1,15 @@
+---
+# journald export keys (MESSAGE, SYSLOG_IDENTIFIER, SYSLOG_PID) and no host name: the service alone says where the logon happened.
+raw_sample: '{"MESSAGE":"Accepted password for alice from 2001:db8::9 port 50222 ssh2","SYSLOG_IDENTIFIER":"sshd","SYSLOG_PID":"4242","time":"2026-09-29T09:00:00Z"}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  status_id: 1
+  user.name: alice
+  src_endpoint.ip: 2001:db8::9
+  src_endpoint.port: 50222
+  service.name: sshd
+  dst_endpoint: null
+  time: 1790672400000
+  metadata.original_time: "2026-09-29T09:00:00Z"
+  metadata.profiles: []

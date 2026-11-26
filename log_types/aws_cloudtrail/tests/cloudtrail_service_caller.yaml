@@ -1,0 +1,14 @@
+---
+# A call made by an AWS service: the source is a service name, not an address; Delete.
+raw_sample: '{"userIdentity":{"type":"AWSService","invokedBy":"autoscaling.amazonaws.com"},"eventTime":"2026-10-15T09:51:00Z","eventSource":"ec2.amazonaws.com","eventName":"DeleteVolume","awsRegion":"us-east-1","sourceIPAddress":"autoscaling.amazonaws.com","eventID":"00000000-0000-4000-8000-000000000005","recipientAccountId":"123456789012"}'
+expected:
+  class_uid: 6003
+  type_uid: 600304
+  actor.application.name: autoscaling.amazonaws.com
+  actor.user.name: autoscaling.amazonaws.com
+  actor.user.type_id: 4
+  src_endpoint.domain: autoscaling.amazonaws.com
+  src_endpoint.ip: null
+  api.request: null
+  cloud.account.uid: "123456789012"
+  metadata.profiles: [cloud]

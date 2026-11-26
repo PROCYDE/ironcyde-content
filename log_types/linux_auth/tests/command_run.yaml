@@ -7,3 +7,9 @@ expected:
   process.name: 'systemctl'
   process.cmd_line: '/usr/bin/systemctl restart nginx'
   device.hostname: 'web-01'
+  metadata.profiles: []
+  type_uid: 100701
+  process.working_directory: /home/alice
+  process.session.terminal: pts/0
+  process.user.name: root
+  process.parent_process: null

@@ -1,0 +1,12 @@
+---
+# A security event without an outcome and without an actor: no verdict, so no profile; the actor is a placeholder.
+raw_sample: '{"eventType":"security.internal.threat.detected","displayMessage":"Okta detected a threat"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 0
+  action_id: null
+  evidences:
+    - actor: {user: {name: unknown}}
+  metadata.uid: null
+  metadata.profiles: []

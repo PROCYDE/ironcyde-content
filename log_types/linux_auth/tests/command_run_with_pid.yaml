@@ -1,0 +1,15 @@
+---
+# A sudo line with the PID of sudo: sudo is the parent of the command and the acting process.
+raw_sample: 'Sep 29 10:00:01 web-01 sudo[4343]:    alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id'
+expected:
+  class_uid: 1007
+  type_uid: 100701
+  status_id: 1
+  status: Success
+  process.name: id
+  process.parent_process.name: sudo
+  process.parent_process.pid: 4343
+  actor.process.pid: 4343
+  actor.user.name: alice
+  device.hostname: web-01
+  metadata.profiles: []

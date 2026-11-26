@@ -1,0 +1,25 @@
+---
+# A blocked request from a suspicious address: a finding with the actor, client and request as evidence, and the request denied.
+raw_sample: '{"actor":{"id":"unknown","type":"User","alternateId":"unknown","displayName":"unknown"},"client":{"ipAddress":"203.0.113.12","userAgent":{"rawUserAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0","os":"Windows 10","browser":"CHROME"},"geographicalContext":{"country":"Germany","city":"Example City","state":"Example State","geolocation":{"lat":50.93,"lon":6.93}},"zone":"null","device":"Computer"},"displayMessage":"Request from suspicious actor","eventType":"security.threat.detected","outcome":{"result":"DENY","reason":"Password Spray"},"published":"2026-10-15T09:48:00.000Z","severity":"WARN","transaction":{"id":"EXAMPLETRANSACTION02"},"uuid":"00000000-0000-4000-8000-000000000003"}'
+expected:
+  class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 2
+  status_id: 1
+  status: New
+  status_detail: Password Spray
+  is_alert: true
+  action_id: 2
+  disposition_id: 2
+  finding_info.title: Request from suspicious actor
+  finding_info.uid: 00000000-0000-4000-8000-000000000003
+  finding_info.types: [security.threat.detected]
+  evidences:
+    - actor: {user: {name: unknown, uid: unknown, full_name: unknown, type_id: 1, type: User}}
+      src_endpoint:
+        ip: 203.0.113.12
+        location: {city: Example City, country: Germany, region: Example State, lat: 50.93, long: 6.93}
+      http_request: {user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0", uid: EXAMPLETRANSACTION02}
+  actor: null
+  metadata.profiles: [security_control]

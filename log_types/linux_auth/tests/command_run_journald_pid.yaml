@@ -1,0 +1,10 @@
+---
+# A sudo command from a journald export: SYSLOG_PID is sudo's PID.
+raw_sample: '{"MESSAGE":"alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id","SYSLOG_IDENTIFIER":"sudo","SYSLOG_PID":"4343","hostname":"web1"}'
+expected:
+  class_uid: 1007
+  type_uid: 100701
+  process.parent_process.pid: 4343
+  actor.process.name: sudo
+  device.hostname: web1
+  metadata.profiles: []

@@ -1,107 +1,181 @@
-raw = string(.message) ?? ""
-e = parse_json(raw) ?? {}
+# Kubernetes API server audit events (audit.k8s.io/v1 JSON) -> OCSF API Activity (6003).
+#
+# The activity follows the verb: create -> Create, get/list/watch -> Read, update/patch -> Update,
+# delete/deletecollection -> Delete, anything else -> Other (named by the verb). The outcome is the response code,
+# when the stage has one. An object without a verb is rejected.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+e = parse_json(string(.message) ?? "") ?? null
 if !is_object(e) {
   abort "not a JSON object"
 }
+verb = downcase(string(e.verb) ?? "")
+if verb == "" {
+  abort "not an audit event"
+}
 
-ingested = timestamp(%ironcyde.ingested_at) ?? now()
-ts_str = string(e.requestReceivedTimestamp) ?? ""
-ts = parse_timestamp(ts_str, "%+") ?? ingested
+original_time = string(e.requestReceivedTimestamp) ?? ""
+if original_time == "" {
+  original_time = string(e.stageTimestamp) ?? ""
+}
+ts = parse_timestamp(original_time, "%+") ?? ingested
 time_ms = to_unix_timestamp(ts, unit: "milliseconds")
 
-verb = downcase(string(e.verb) ?? "")
 activity_id = if verb == "create" {
   1
-} else if match(verb, r'^(get|list|watch)$') {
+} else if includes(["get", "list", "watch"], verb) {
   2
-} else if match(verb, r'^(update|patch)$') {
+} else if includes(["update", "patch"], verb) {
   3
-} else if verb == "delete" {
+} else if includes(["delete", "deletecollection"], verb) {
   4
 } else {
   99
 }
 
-code = to_int(e.responseStatus.code) ?? 0
-status_id = if code >= 200 && code < 400 { 1 } else { 2 }
+# The response exists from the ResponseStarted stage on; before that there is no outcome.
+code = 0
+if is_object(e.responseStatus) {
+  code = to_int(e.responseStatus.code) ?? 0
+}
+status_id = null
+status = null
+if code >= 100 && code < 400 {
+  status_id = 1
+  status = "Success"
+} else if code >= 400 {
+  status_id = 2
+  status = "Failure"
+}
 
-resp_msg = string(e.responseStatus.message) ?? ""
-status_detail = if resp_msg != "" { resp_msg } else { null }
-activity_name = if activity_id == 99 { verb } else { null }
+oref = if is_object(e.objectRef) { e.objectRef } else { {} }
+resources = null
+o_name = string(oref.name) ?? ""
+o_uid = string(oref.uid) ?? ""
+if o_name != "" || o_uid != "" {
+  resources = [compact({
+    "name": o_name,
+    "uid": o_uid,
+    "type": string(oref.resource) ?? "",
+    "namespace": string(oref.namespace) ?? "",
+    "version": string(oref.apiVersion) ?? "",
+    "role_id": 1,
+    "role": "Target",
+  })]
+}
 
-oref = e.objectRef
-res = null
-if is_object(oref) {
-  o_name = string(oref.name) ?? ""
-  o_uid = string(oref.uid) ?? ""
-  if o_name != "" || o_uid != "" {
-    r_name = null
-    if o_name != "" {
-      r_name = o_name
-    }
-    r_uid = null
-    if o_uid != "" {
-      r_uid = o_uid
-    }
-    res = [{ "name": r_name, "uid": r_uid, "type": string(oref.resource) ?? null, "namespace": string(oref.namespace) ?? null, "version": string(oref.apiVersion) ?? null, "role_id": 1 }]
+# The first source address is the client; the others are the proxies in between. src_endpoint is required, so an
+# event without a usable address names none.
+src = {"name": "unknown"}
+ips = []
+for_each(array(e.sourceIPs) ?? []) -> |_i, ip| {
+  ip_str = string(ip) ?? ""
+  if is_ipv4(ip_str) || is_ipv6(ip_str) {
+    ips = push(ips, ip_str)
+  }
+}
+if length(ips) > 0 {
+  src = {"ip": ips[0]}
+  if length(ips) > 1 {
+    src.intermediate_ips = slice!(ips, 1)
   }
 }
 
-sips = e.sourceIPs
-src_ip = null
-if is_array(sips) {
-  arr = array!(sips)
-  if length(arr) > 0 {
-    src_ip = string(arr[0]) ?? null
-  }
-}
-
-u = e.user
-uname = if is_object(u) { string(u.username) ?? null } else { null }
-uuid_ = if is_object(u) { string(u.uid) ?? null } else { null }
+u = if is_object(e.user) { e.user } else { {} }
+username = string(u.username) ?? ""
+user = {"name": username, "uid": string(u.uid) ?? ""}
 groups = []
-if is_object(u) && is_array(u.groups) {
-  raw_groups = array!(u.groups)
-  for_each(raw_groups) -> |idx, g| {
-    groups = append(groups, [{ "name": string(g) ?? null }])
+for_each(array(u.groups) ?? []) -> |_i, g| {
+  group = string(g) ?? ""
+  if group != "" {
+    groups = push(groups, {"name": group})
   }
 }
-
-apis = { "operation": verb, "request": { "uid": string(e.auditID) ?? null } }
-api_group_name = string(oref.apiGroup) ?? ""
-api_version = string(oref.apiVersion) ?? ""
-if api_group_name != "" {
-  apis.group = { "name": api_group_name }
+if length(groups) > 0 {
+  user.groups = groups
 }
-if api_version != "" {
-  apis.version = api_version
+if starts_with(username, "system:serviceaccount:") {
+  user.type_id = 4
+  user.type = "Service"
+} else if starts_with(username, "system:") {
+  user.type_id = 3
+  user.type = "System"
+}
+user = compact(user)
+# actor is required; an event without a user names none.
+if !exists(user.name) && !exists(user.uid) {
+  user = {"name": "unknown"}
+}
+actor = {"user": user}
+# The authorizer's decision (allow or forbid) and its reason.
+decision = string(e.annotations."authorization.k8s.io/decision") ?? ""
+if decision != "" {
+  actor.authorizations = [{"decision": decision}]
+}
+
+api = {"operation": verb, "version": string(oref.apiVersion) ?? ""}
+audit_id = string(e.auditID) ?? ""
+if audit_id != "" {
+  api.request = {"uid": audit_id}
+}
+api_group = string(oref.apiGroup) ?? ""
+if api_group != "" {
+  api.group = {"name": api_group}
+}
+resp_msg = ""
+if is_object(e.responseStatus) {
+  resp_msg = string(e.responseStatus.message) ?? ""
+}
+if code > 0 {
+  api.response = {"code": code, "message": resp_msg}
+}
+
+request_uri = string(e.requestURI) ?? ""
+http_request = {"user_agent": string(e.userAgent) ?? ""}
+if request_uri != "" {
+  uri_parts = split(request_uri, "?", 2)
+  http_request.url = {"path": uri_parts[0], "query_string": uri_parts[1]}
 }
 
 . = {
   "class_uid": 6003,
   "category_uid": 6,
   "activity_id": activity_id,
-  "activity_name": activity_name,
   "type_uid": 600300 + activity_id,
   "time": time_ms,
   "severity_id": 1,
   "status_id": status_id,
-  "status_code": string(code) ?? null,
-  "status_detail": status_detail,
-  "message": "Kubernetes audit: " + verb + " " + (string(e.requestURI) ?? ""),
-  "metadata": { "product": { "name": "kubernetes_audit", "vendor_name": "Kubernetes" }, "version": "1.9.0" },
-  "actor": { "user": { "name": uname, "uid": uuid_, "groups": groups } },
-  "api": apis,
-  "src_endpoint": { "ip": src_ip },
-  "resources": res,
+  "status": status,
+  "status_detail": resp_msg,
+  "message": strip_whitespace("Kubernetes audit: " + verb + " " + request_uri),
+  "metadata": {
+    "product": {"name": "Kubernetes", "vendor_name": "Kubernetes"},
+    "version": "1.9.0",
+    "uid": audit_id,
+    "log_name": "audit",
+    "log_level": string(e.level) ?? "",
+    "original_time": original_time,
+    "profiles": [],
+  },
+  "actor": actor,
+  "api": api,
+  "src_endpoint": src,
+  "http_request": http_request,
+  "resources": resources,
   "unmapped": {
-    "auditID": e.auditID,
     "stage": e.stage,
-    "level": e.level,
-    "userAgent": e.userAgent,
     "stageTimestamp": e.stageTimestamp,
-    "requestURI": e.requestURI,
     "annotations": e.annotations,
-    "sourceIPs": sips
-  }
+    "impersonatedUser": e.impersonatedUser,
+    "user_extra": u.extra,
+  },
 }
+# Activity Other is named by the verb.
+if activity_id == 99 {
+  .activity_name = verb
+}
+if code > 0 {
+  .status_code = to_string(code)
+  .http_response = {"code": code}
+}
+. = compact(., array: false)

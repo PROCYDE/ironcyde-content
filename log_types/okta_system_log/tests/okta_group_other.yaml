@@ -1,0 +1,12 @@
+---
+# A group event without targets: activity Other, and the required group is a placeholder.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"eventType":"group.application_assignment.skip","outcome":{"result":"SKIPPED"}}'
+expected:
+  class_uid: 3006
+  type_uid: 300699
+  activity_name: group.application_assignment.skip
+  status_id: 99
+  status: SKIPPED
+  group.name: unknown
+  users: null
+  metadata.profiles: []

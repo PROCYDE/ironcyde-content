@@ -1,176 +1,227 @@
-# AWS CloudTrail JSON → OCSF API Activity (class_uid 6003).
+# AWS CloudTrail records (JSON) -> OCSF API Activity (6003), with the cloud profile.
 #
-# Input is a gateway Kafka envelope:
-#   event_id, source_id, source_type, ingested_at, event=<CloudTrail JSON string>
-# Offline/tests may also pass CloudTrail fields already flattened on the root.
-#
-# Identity rules: never use an assumed-role session ARN suffix as actor.user.name (cardinality bomb).
-# Never emits deprecated security_finding 2001.
+# The activity follows the API name: Describe/List/Get/Lookup (or readOnly) -> Read, Create/Put/Run/Start/Attach
+# -> Create, Update/Modify/Set/Send -> Update, Delete/Stop/Remove/Detach -> Delete, anything else -> Other.
+# The actor is the stable identity (user name, else the role or user segment of the ARN, else the account), never
+# an assumed-role session name. A record without an event name is rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
-if !is_object(raw) {
-    if .eventName != null || .eventSource != null {
-        raw = .
-    }
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && (.eventName != null || .eventSource != null) {
+  raw = .
 }
 if !is_object(raw) {
-    abort "no_match"
+  abort "no_match"
 }
-    ui = if is_object(raw.userIdentity) { raw.userIdentity } else { {} }
+event_name = to_string(raw.eventName) ?? ""
+if event_name == "" {
+  abort "no_match"
+}
 
-    # Stable actor name: userName > role/user segment of ARN > accountId. Never session suffix.
-    caller = to_string(ui.userName) ?? ""
-    arn_str = to_string(ui.arn) ?? ""
-    if caller == "" && arn_str != "" {
-        arn_parts = split(arn_str, "/")
-        if length(arn_parts) >= 2 {
-            caller = to_string(arn_parts[1])
-        } else {
-            colon_parts = split(arn_str, ":")
-            if length(colon_parts) >= 6 {
-                caller = to_string(colon_parts[5])
-            }
-        }
+ui = if is_object(raw.userIdentity) { raw.userIdentity } else { {} }
+identity_type = to_string(ui.type) ?? ""
+arn = to_string(ui.arn) ?? ""
+account_uid = to_string(ui.accountId) ?? ""
+caller = to_string(ui.userName) ?? ""
+if caller == "" && arn != "" {
+  # "arn:aws:sts::<account>:assumed-role/<role>/<session>" -> <role>; "arn:aws:iam::<account>:root" -> root
+  arn_parts = split(arn, "/")
+  if length(arn_parts) >= 2 {
+    caller = to_string(arn_parts[1])
+  } else {
+    colon_parts = split(arn, ":")
+    if length(colon_parts) >= 6 {
+      caller = to_string(colon_parts[5])
     }
-    if caller == "" {
-        caller = to_string(ui.accountId) ?? ""
-    }
+  }
+}
+invoked_by = to_string(ui.invokedBy) ?? ""
+if caller == "" {
+  caller = invoked_by
+}
+if caller == "" {
+  caller = account_uid
+}
+user = {
+  "name": caller,
+  "uid": to_string(ui.principalId) ?? "",
+  "uid_alt": arn,
+}
+access_key = to_string(ui.accessKeyId) ?? ""
+if access_key != "" {
+  user.programmatic_credentials = [{"uid": access_key, "type": "Access Key"}]
+}
+# user.type_id: what CloudTrail says the identity is; types OCSF does not list are Other, in CloudTrail's words.
+if identity_type == "IAMUser" || identity_type == "IdentityCenterUser" {
+  user.type_id = 1
+  user.type = "User"
+} else if identity_type == "Root" {
+  user.type_id = 2
+  user.type = "Admin"
+} else if identity_type == "AWSService" {
+  user.type_id = 4
+  user.type = "Service"
+} else if identity_type != "" {
+  user.type_id = 99
+  user.type = identity_type
+}
+if account_uid != "" {
+  user.account = {"uid": account_uid, "type_id": 10, "type": "AWS Account"}
+}
+user = compact(user)
+# The AWS service that made the call on the identity's behalf.
+actor = {}
+if invoked_by != "" {
+  actor.application = {"name": invoked_by}
+}
+if exists(user.name) || exists(user.uid) {
+  actor.user = user
+}
+# An assumed role's session: who issued it and whether MFA was used.
+if is_object(ui.sessionContext) {
+  session = {"issuer": to_string(ui.sessionContext.sessionIssuer.arn) ?? ""}
+  mfa = downcase(to_string(ui.sessionContext.attributes.mfaAuthenticated) ?? "")
+  if mfa == "true" {
+    session.is_mfa = true
+  } else if mfa == "false" {
+    session.is_mfa = false
+  }
+  created = parse_timestamp(to_string(ui.sessionContext.attributes.creationDate) ?? "", format: "%+") ?? null
+  if created != null {
+    session.created_time = to_unix_timestamp!(created, unit: "milliseconds")
+  }
+  session = compact(session)
+  if length(session) > 0 {
+    actor.session = session
+  }
+}
+actor = compact(actor)
+# actor is required; a record without any identity names none.
+if length(actor) == 0 {
+  actor = {"user": {"name": "unknown"}}
+}
 
-    # eventSource "s3.amazonaws.com" → service "s3"
-    event_source = to_string(raw.eventSource) ?? ""
-    svc = ""
-    src_parts = split(event_source, ".")
-    if length(src_parts) > 0 {
-        svc = to_string(src_parts[0])
-    }
+event_source = to_string(raw.eventSource) ?? ""
+error_code = to_string(raw.errorCode) ?? ""
+status_id = 1
+status = "Success"
+severity_id = 1
+if error_code != "" {
+  status_id = 2
+  status = "Failure"
+  severity_id = 2
+}
 
-    error_code = to_string(raw.errorCode) ?? ""
-    status_id = 1
-    severity_id = 1
-    if error_code != "" {
-        status_id = 2
-        severity_id = 2
-    }
+event_name_l = downcase(event_name)
+activity_id = 99
+if raw.readOnly == true || starts_with(event_name_l, "describe") || starts_with(event_name_l, "list") || starts_with(event_name_l, "get") || starts_with(event_name_l, "lookup") {
+  activity_id = 2
+} else if starts_with(event_name_l, "create") || starts_with(event_name_l, "put") || starts_with(event_name_l, "run") || starts_with(event_name_l, "start") || starts_with(event_name_l, "attach") {
+  activity_id = 1
+} else if starts_with(event_name_l, "update") || starts_with(event_name_l, "modify") || starts_with(event_name_l, "set") || starts_with(event_name_l, "send") {
+  activity_id = 3
+} else if starts_with(event_name_l, "delete") || starts_with(event_name_l, "stop") || starts_with(event_name_l, "remove") || starts_with(event_name_l, "detach") {
+  activity_id = 4
+}
 
-    read_only = false
-    if is_boolean(raw.readOnly) {
-        read_only = raw.readOnly == true
-    }
+original_time = to_string(raw.eventTime) ?? ""
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
 
-    event_name = to_string(raw.eventName) ?? ""
-    event_name_l = downcase(event_name)
-    activity_id = 99
-    if read_only || starts_with(event_name_l, "describe") || starts_with(event_name_l, "list") || starts_with(event_name_l, "get") || starts_with(event_name_l, "lookup") {
-        activity_id = 2
-    } else if starts_with(event_name_l, "create") || starts_with(event_name_l, "put") || starts_with(event_name_l, "run") || starts_with(event_name_l, "start") || starts_with(event_name_l, "attach") {
-        activity_id = 1
-    } else if starts_with(event_name_l, "update") || starts_with(event_name_l, "modify") || starts_with(event_name_l, "set") || starts_with(event_name_l, "send") {
-        activity_id = 3
-    } else if starts_with(event_name_l, "delete") || starts_with(event_name_l, "stop") || starts_with(event_name_l, "remove") || starts_with(event_name_l, "detach") {
-        activity_id = 4
-    }
+# sourceIPAddress is an address, or the DNS name of the AWS service that made the call ("ec2.amazonaws.com",
+# "AWS Internal"). src_endpoint is required, so a record without either names none.
+source = to_string(raw.sourceIPAddress) ?? ""
+src = {"name": "unknown"}
+if is_ipv4(source) || is_ipv6(source) {
+  src = {"ip": source}
+} else if contains(source, ".") && !contains(source, " ") {
+  src = {"domain": source}
+} else if source != "" {
+  src = {"name": source}
+}
 
-    # High-signal Stratus / destructive APIs → elevate severity when successful too.
-    if contains(event_name_l, "stoplogging") || contains(event_name_l, "deletetrail") || contains(event_name_l, "createuser") || contains(event_name_l, "attachuserpolicy") {
-        if severity_id < 4 {
-            severity_id = 4
-        }
-    }
+api = {
+  "operation": event_name,
+  "version": to_string(raw.eventVersion) ?? "",
+  "service": {"name": event_source},
+}
+request_uid = to_string(raw.requestID) ?? ""
+if request_uid != "" {
+  api.request = {"uid": request_uid}
+  if is_object(raw.requestParameters) {
+    api.request.data = raw.requestParameters
+  }
+}
+if error_code != "" {
+  api.response = {"error": error_code, "error_message": to_string(raw.errorMessage) ?? ""}
+}
+if is_object(raw.responseElements) {
+  api.response.data = raw.responseElements
+}
 
-    class_uid = 6003
-    category_uid = 6
-    type_uid = class_uid * 100 + activity_id
+resources = []
+for_each(array(raw.resources) ?? []) -> |_i, r| {
+  resource_uid = to_string(r.ARN) ?? ""
+  if resource_uid != "" {
+    resources = push(resources, compact({"uid": resource_uid, "type": to_string(r.type) ?? ""}))
+  }
+}
 
-    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    ts_str = to_string(raw.eventTime) ?? ""
-    if ts_str != "" {
-        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-        if parsed_ts != null {
-            time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
-        }
-    }
+cloud_account = to_string(raw.recipientAccountId) ?? ""
+if cloud_account == "" {
+  cloud_account = account_uid
+}
+cloud = {"provider": "AWS", "region": to_string(raw.awsRegion) ?? ""}
+if cloud_account != "" {
+  cloud.account = {"uid": cloud_account, "type_id": 10, "type": "AWS Account"}
+}
 
-    src_ip = to_string(raw.sourceIPAddress) ?? ""
-    # Polymorphic: DNS hostnames / "AWS Internal" are not IPs — leave empty for promote.
-    if src_ip != "" {
-        ipv4_ok = is_ipv4(src_ip)
-        ipv6_ok = is_ipv6(src_ip)
-        if !ipv4_ok && !ipv6_ok {
-            src_ip = ""
-        }
-    }
+msg = event_source + " " + event_name
+if error_code != "" {
+  msg = msg + " (" + error_code + ")"
+}
 
-    msg = event_name
-    if svc != "" && event_name != "" {
-        msg = svc + ":" + event_name
-    }
-    if error_code != "" {
-        msg = msg + " (" + error_code + ")"
-    }
-
-    account_uid = to_string(raw.recipientAccountId) ?? ""
-    if account_uid == "" {
-        account_uid = to_string(ui.accountId) ?? ""
-    }
-
-    . = {
-        "category_uid": category_uid,
-        "class_uid": class_uid,
-        "class_name": "API Activity",
-        "category_name": "Application Activity",
-        "type_uid": type_uid,
-        "activity_id": activity_id,
-        "severity_id": severity_id,
-        "status_id": status_id,
-        "time": time_ms,
-        "message": msg,
-        "api": {
-            "operation": event_name,
-            "service": {
-                "name": svc,
-            },
-        },
-        "actor": {
-            "user": {
-                "name": caller,
-                "uid": to_string(ui.principalId) ?? "",
-            },
-        },
-        "src_endpoint": {
-            "ip": src_ip,
-        },
-        "metadata": {
-            "version": "1.9.0",
-            "uid": to_string(raw.eventID) ?? "",
-            "log_name": "CloudTrail",
-            "log_provider": "AWS CloudTrail",
-            "correlation_uid": to_string(raw.requestID) ?? "",
-            "product": {
-                "name": "AWS CloudTrail",
-                "vendor_name": "Amazon",
-            },
-        },
-        "unmapped": {
-            "event_source": event_source,
-            "event_type": to_string(raw.eventType) ?? "",
-            "error_code": error_code,
-            "error_message": to_string(raw.errorMessage) ?? "",
-            "user_agent": to_string(raw.userAgent) ?? "",
-            "user_arn": arn_str,
-            "read_only": to_string(raw.readOnly) ?? "",
-            "source_ip_raw": to_string(raw.sourceIPAddress) ?? "",
-            "aws_region": to_string(raw.awsRegion) ?? "",
-            "aws_account_uid": account_uid,
-            "cloud_provider": "AWS",
-            "caller_type": to_string(ui.type) ?? "",
-        },
-    }
-
-    ua = to_string(raw.userAgent) ?? ""
-    if ua != "" {
-        .http_request = {
-            "user_agent": ua,
-        }
-    }
+. = {
+  "category_uid": 6,
+  "class_uid": 6003,
+  "type_uid": 600300 + activity_id,
+  "activity_id": activity_id,
+  "severity_id": severity_id,
+  "status_id": status_id,
+  "status": status,
+  "status_code": error_code,
+  "status_detail": to_string(raw.errorMessage) ?? "",
+  "time": time_ms,
+  "message": strip_whitespace(msg),
+  "api": api,
+  "actor": actor,
+  "src_endpoint": src,
+  "cloud": cloud,
+  "http_request": {"user_agent": to_string(raw.userAgent) ?? ""},
+  "metadata": {
+    "version": "1.9.0",
+    "uid": to_string(raw.eventID) ?? "",
+    "event_code": to_string(raw.eventType) ?? "",
+    "log_name": "CloudTrail",
+    "original_time": original_time,
+    "product": {"name": "AWS CloudTrail", "vendor_name": "Amazon"},
+    "profiles": ["cloud"],
+  },
+  "unmapped": {
+    "event_category": to_string(raw.eventCategory) ?? "",
+    "management_event": raw.managementEvent,
+    "read_only": raw.readOnly,
+    "tls_details": raw.tlsDetails,
+  },
+}
+# Activity Other is named by the API call.
+if activity_id == 99 {
+  .activity_name = event_name
+}
+if length(resources) > 0 {
+  .resources = resources
+}
+. = compact(., array: false)

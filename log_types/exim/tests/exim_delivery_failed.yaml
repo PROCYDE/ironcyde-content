@@ -1,0 +1,11 @@
+---
+# A failed delivery: Send, Failure, with the reason.
+raw_sample: '{"message":"2026-10-15 09:56:03 1tAbCd-000001-2X ** carol@example.org R=dnslookup T=remote_smtp H=mx.example.org [203.0.113.25]: SMTP error from remote mail server after RCPT TO: 550 no such user","hostname":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400901
+  status_id: 2
+  severity_id: 2
+  status_detail: "SMTP error from remote mail server after RCPT TO: 550 no such user"
+  email.to: [carol@example.org]
+  metadata.profiles: [host]

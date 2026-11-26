@@ -15,6 +15,8 @@ host = ""
 user = ""
 src_ip = ""
 event_time = null
+original_time = ""
+pid = 0
 
 fields = parse_json(text) ?? null
 if is_object(fields) {
@@ -23,7 +25,13 @@ if is_object(fields) {
   host = string(fields.hostname) ?? string(fields.host) ?? ""
   user = string(fields.user) ?? ""
   src_ip = string(fields.src_ip) ?? ""
-  event_time = parse_timestamp(string(fields.timestamp) ?? string(fields.time) ?? "", format: "%+") ?? null
+  original_time = string(fields.timestamp) ?? string(fields.time) ?? ""
+  event_time = parse_timestamp(original_time, format: "%+") ?? null
+  # to_int(null) is 0, not an error, so the journald key is tried when the first gives nothing.
+  pid = to_int(fields.pid) ?? 0
+  if pid == 0 {
+    pid = to_int(fields.SYSLOG_PID) ?? 0
+  }
 } else {
   line = parse_linux_authorization(text) ?? null
   if is_object(line) {
@@ -31,6 +39,10 @@ if is_object(fields) {
     program = downcase(string(line.appname) ?? "")
     host = string(line.hostname) ?? ""
     event_time = timestamp(line.timestamp) ?? null
+    pid = to_int(line.procid) ?? 0
+    # The syslog header's own time, "Jun 14 15:16:01" or an RFC 3339 time, is the line's first field or three.
+    stamp = parse_regex(text, r'^(?P<t>[A-Z][a-z]{2} [ \d]\d \d{2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}T\S+)') ?? {}
+    original_time = string(stamp.t) ?? ""
     # Syslog timestamps carry no year. Take the year of ingestion, which a replay keeps, not the current one; a line
     # more than a day ahead of ingestion is from the year before, like a December line ingested in January.
     if is_timestamp(event_time) {
@@ -44,9 +56,6 @@ if is_object(fields) {
   }
 }
 
-if host == "" {
-  host = "unknown"
-}
 time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
 if is_timestamp(event_time) {
   time_ms = to_unix_timestamp(timestamp!(event_time), unit: "milliseconds")
@@ -100,10 +109,18 @@ if is_object(sudo_run) {
   # record, so the event's own ID serves, and satisfies the process object's pid/uid/cpid constraint.
   process_uid = string(%ironcyde.event_id) ?? ""
   status_id = 1
+  status = "Success"
   severity_id = 1
   if reason != "" {
     status_id = 2
+    status = "Failure"
     severity_id = 3
+  }
+  # type_id 0 (Unknown): the log does not say what kind of device the host is. device is required, so a line
+  # without a host name names none.
+  device = {"hostname": host, "type_id": 0}
+  if host == "" {
+    device = {"name": "unknown", "type_id": 0}
   }
   . = {
     "category_uid": 1,
@@ -111,28 +128,38 @@ if is_object(sudo_run) {
     "type_uid": 100701,
     "activity_id": 1,
     "status_id": status_id,
+    "status": status,
     "severity_id": severity_id,
     "time": time_ms,
     "message": msg,
     "actor": {"user": {"name": string!(run.user)}},
-    # type_id 0 (Unknown): the log does not say what kind of device the host is.
-    "device": {"hostname": host, "type_id": 0},
+    "device": device,
     "process": {
       "uid": process_uid,
       "cmd_line": cmd,
       "name": executable_name,
       "file": {"path": executable, "name": executable_name, "type_id": 1},
       "user": {"name": string!(run.runas)},
+      "working_directory": run.pwd,
+      "session": {"terminal": run.tty},
     },
     "metadata": {
       "product": {"name": "sudo", "vendor_name": "linux"},
       "version": "1.9.0",
+      "log_name": "auth",
+      "original_time": original_time,
+      "profiles": [],
     },
-    "unmapped": {"program": program, "tty": run.tty, "pwd": run.pwd},
   }
   if reason != "" {
     .status_detail = reason
   }
+  # sudo itself is the parent of the command it runs, when the line carries sudo's PID.
+  if pid > 0 {
+    .process.parent_process = {"name": "sudo", "pid": pid}
+    .actor.process = {"name": "sudo", "pid": pid}
+  }
+  . = compact(., array: false)
 } else if !auth_program || activity_id == 0 || contains(msg_l, "input_userauth_request") || starts_with(msg_l, "disconnect") {
   abort "not an authentication outcome or a sudo command"
 } else {
@@ -149,17 +176,20 @@ if is_object(sudo_run) {
   caps = {}
   if src_ip == "" && match(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:Failed|Accepted) (?:publickey|hostbased) for .* ssh2: \S+-CERT \S+ ID ') {
     if !match(trimmed, r'from [0-9a-fA-F:.]+(?:%[\w.-]+)? port \d+.* from [0-9a-fA-F:.]+(?:%[\w.-]+)? port \d+') {
-      caps = parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:Failed|Accepted) \S+ for(?: invalid user)? (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)? port \d+ ssh2: \S+-CERT \S+ ID ') ?? {}
+      caps = parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:Failed|Accepted) \S+ for(?: invalid user)? (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)? port (?P<port>\d+) ssh2: \S+-CERT \S+ ID ') ?? {}
     }
   } else if src_ip == "" {
-    caps = parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:(?:Invalid|Illegal) user|Failed \S+ for(?: invalid user)?|Accepted \S+ for|(?:error: )?maximum authentication attempts exceeded for(?: invalid user)?) (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)? port \d+(?: ssh[12](?:: .*)?| s(?:sh?)?)?(?: \[preauth\])?\s*\]?$') ??
+    caps = parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:(?:Invalid|Illegal) user|Failed \S+ for(?: invalid user)?|Accepted \S+ for|(?:error: )?maximum authentication attempts exceeded for(?: invalid user)?) (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)? port (?P<port>\d+)(?: ssh[12](?:: .*)?| s(?:sh?)?)?(?: \[preauth\])?\s*\]?$') ??
       parse_regex(trimmed, r'^(?:message repeated \d+ times: \[\s*)?(?:\S+\.c:\S+\(\):\d+ \([^)]*\): )?(?:(?:Invalid|Illegal) user|(?:error: )?PAM: Authentication failure for(?: illegal user)?) (?P<user>.*) from (?P<ip>[0-9a-fA-F:.]+)(?:%[\w.-]+)?\s*\]?$') ?? {}
   }
   if user == "" {
     user = string(caps.user) ?? ""
   }
+  # The port is the one that follows the address the line was read at; an address from elsewhere has none.
+  src_port = 0
   if src_ip == "" {
     src_ip = string(caps.ip) ?? ""
+    src_port = to_int(string(caps.port) ?? "") ?? 0
   }
   if user == "" {
     caps = parse_regex(msg, r'(?i)(?:invalid|illegal) user (?P<user>[A-Za-z0-9._@-]+)') ??
@@ -183,8 +213,10 @@ if is_object(sudo_run) {
 
   # Failed logons are low-signal one by one; correlation raises the severity of a burst.
   severity_id = 1
+  status = "Success"
   if status_id == 2 {
     severity_id = 2
+    status = "Failure"
   }
   . = {
     "category_uid": 3,
@@ -192,19 +224,32 @@ if is_object(sudo_run) {
     "type_uid": 300200 + activity_id,
     "activity_id": activity_id,
     "status_id": status_id,
+    "status": status,
     "severity_id": severity_id,
     "time": time_ms,
     "message": msg,
     "user": {"name": user},
     "actor": {"user": {"name": user}},
+    # The program that authenticated the user is the service; the host it runs on is the destination.
+    "service": {"name": program},
     "dst_endpoint": {"hostname": host},
     "metadata": {
       "product": {"name": program, "vendor_name": "linux"},
       "version": "1.9.0",
+      "log_name": "auth",
+      "original_time": original_time,
+      "profiles": [],
     },
-    "unmapped": {"program": program},
   }
   if src_ip != "" {
     .src_endpoint = {"ip": src_ip}
+    if src_port > 0 && src_port < 65536 {
+      .src_endpoint.port = src_port
+    }
   }
+  # sshd authenticates logons that arrive over the network; the other programs do not say.
+  if starts_with(program, "sshd") {
+    .is_remote = true
+  }
+  . = compact(., array: false)
 }

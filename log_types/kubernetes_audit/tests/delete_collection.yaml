@@ -1,0 +1,9 @@
+---
+# Deleting a collection is a Delete; without an object name there is no resource.
+raw_sample: '{"auditID":"00000000-0000-0000-0000-000000000012","verb":"deletecollection","user":{"username":"bob"},"sourceIPs":["192.0.2.11"],"objectRef":{"resource":"pods","namespace":"default","apiVersion":"v1"},"responseStatus":{"code":200},"stageTimestamp":"2026-11-16T21:49:02.000000Z"}'
+expected:
+  class_uid: 6003
+  type_uid: 600304
+  resources: null
+  time: 1794865742000
+  metadata.profiles: []

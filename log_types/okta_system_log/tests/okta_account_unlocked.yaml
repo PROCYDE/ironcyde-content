@@ -1,0 +1,10 @@
+---
+# user.account.unlock: User Management, Unlock, for the target user.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"eventType":"user.account.unlock","outcome":{"result":"SUCCESS"},"severity":"INFO","target":[{"id":"00uEXAMPLEUSER000002","type":"User","alternateId":"bob@example.com","displayName":"Bob Example"}]}'
+expected:
+  class_uid: 3007
+  type_uid: 300707
+  activity_id: 7
+  user.name: bob@example.com
+  actor.user.name: admin@example.com
+  metadata.profiles: []

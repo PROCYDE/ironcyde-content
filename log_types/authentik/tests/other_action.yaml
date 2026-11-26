@@ -1,0 +1,11 @@
+---
+# Any other action is activity Other, named by the action; an invalid client address is left out.
+raw_sample: '{"action": "impersonation_started", "app": "authentik.core.views.impersonate", "created": "2026-11-16T22:01:00+00:00", "user_email": "admin@example.com", "client_ip": "unknown"}'
+expected:
+  class_uid: 3002
+  type_uid: 300299
+  activity_id: 99
+  activity_name: impersonation_started
+  src_endpoint: null
+  http_request: null
+  metadata.profiles: []

@@ -1,6 +1,0 @@
-raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"client":{"ipAddress":"198.51.100.7"},"displayMessage":"Rate limit warning","eventType":"system.org.rate_limit.warning","outcome":{"result":"SUCCESS"},"published":"2026-10-15T10:05:00.000Z","severity":"WARN","uuid":"00000000-0000-4000-8000-000000000003"}'
-expected:
-  class_uid: 6003
-  api.operation: system.org.rate_limit.warning
-  actor.user.name: Alice Example
-  metadata.profiles: null

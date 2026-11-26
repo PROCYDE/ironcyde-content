@@ -1,0 +1,15 @@
+---
+# Enrolling an MFA factor is an account change, not an authentication: Enable MFA Factors for the target user.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"client":{"ipAddress":"203.0.113.12"},"displayMessage":"Enroll new factor for user","eventType":"user.mfa.factor.activate","outcome":{"result":"SUCCESS"},"published":"2026-10-15T09:47:00.000Z","severity":"INFO","target":[{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"}]}'
+expected:
+  class_uid: 3007
+  category_uid: 3
+  type_uid: 300712
+  activity_id: 12
+  status_id: 1
+  user.name: alice@example.com
+  user.uid: 00uEXAMPLEUSER000001
+  user.full_name: Alice Example
+  actor.user.name: admin@example.com
+  src_endpoint.ip: 203.0.113.12
+  metadata.profiles: []

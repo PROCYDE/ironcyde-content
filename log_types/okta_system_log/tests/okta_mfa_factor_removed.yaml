@@ -1,0 +1,8 @@
+---
+# Removing an MFA factor: Disable MFA Factors.
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"eventType":"user.mfa.factor.deactivate","outcome":{"result":"SUCCESS"},"severity":"INFO"}'
+expected:
+  class_uid: 3007
+  type_uid: 300713
+  user.name: alice@example.com
+  metadata.profiles: []

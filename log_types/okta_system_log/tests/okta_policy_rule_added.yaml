@@ -1,0 +1,11 @@
+---
+# policy.rule.add: API Activity; without a client address the required source endpoint is a placeholder.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"eventType":"policy.rule.add","outcome":{"result":"SUCCESS"},"severity":"INFO"}'
+expected:
+  class_uid: 6003
+  type_uid: 600301
+  status_id: 1
+  api.operation: policy.rule.add
+  src_endpoint.name: unknown
+  resources: null
+  metadata.profiles: []

@@ -1,0 +1,13 @@
+---
+# group.lifecycle.delete: Group Management for the target group, with the target user.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"eventType":"group.lifecycle.delete","outcome":{"result":"SUCCESS"},"severity":"INFO","target":[{"id":"00uEXAMPLEUSER000002","type":"User","alternateId":"bob@example.com","displayName":"Bob Example"},{"id":"00gEXAMPLEGROUP00001","type":"UserGroup","alternateId":"unknown","displayName":"Admins"}]}'
+expected:
+  class_uid: 3006
+  category_uid: 3
+  type_uid: 300605
+  group.name: Admins
+  group.uid: 00gEXAMPLEGROUP00001
+  users:
+    - {name: bob@example.com, uid: 00uEXAMPLEUSER000002, full_name: Bob Example, email_addr: bob@example.com}
+  actor.user.name: admin@example.com
+  metadata.profiles: []

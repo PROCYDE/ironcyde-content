@@ -1,0 +1,11 @@
+---
+# A rejected sender (MAIL command): the address is the sender, not a recipient.
+raw_sample: '{"message":"2026-10-15 09:56:05 H=(mx) [203.0.113.166] rejected MAIL <spam@example.net>: sender verify failed","hostname":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400999
+  command: MAIL
+  email.from: spam@example.net
+  email.to: null
+  status_detail: sender verify failed
+  metadata.profiles: [host]

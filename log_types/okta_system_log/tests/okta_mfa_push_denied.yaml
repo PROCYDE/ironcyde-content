@@ -1,0 +1,9 @@
+---
+# A user denies an MFA push: an authentication with MFA that failed.
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"eventType":"user.mfa.okta_verify.deny_push","outcome":{"result":"FAILURE"},"severity":"INFO"}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  status_id: 2
+  is_mfa: true
+  metadata.profiles: []

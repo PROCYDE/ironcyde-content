@@ -1,0 +1,17 @@
+---
+# A failed login: Logon, Failure; the user object names the account, and the login used MFA devices.
+raw_sample: '{"action": "login_failed", "app": "authentik.events.signals", "created": "2026-11-16T22:00:00+00:00", "user": {"pk": 7, "username": "alice", "email": "alice@example.com"}, "client_ip": "203.0.113.9", "context": {"geo": {"lat": 51, "long": 7, "country": "DE"}, "stage": {"name": "default-authentication-password"}, "auth_method_args": {"mfa_devices": [{"pk": 1}]}}}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  status_id: 2
+  status: Failure
+  severity_id: 3
+  is_mfa: true
+  user.name: alice
+  user.uid: "7"
+  user.email_addr: alice@example.com
+  src_endpoint.ip: 203.0.113.9
+  metadata.profiles: []
+  src_endpoint.location.country: DE
+  src_endpoint.location.lat: 51.0

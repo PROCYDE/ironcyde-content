@@ -1,0 +1,22 @@
+---
+# A denied read by an assumed role: the actor is the role, not the session name; the session has MFA.
+raw_sample: '{"userIdentity":{"type":"AssumedRole","principalId":"AROAEXAMPLEROLE00000:session-1","arn":"arn:aws:sts::123456789012:assumed-role/ExampleRole/session-1","accountId":"123456789012","sessionContext":{"sessionIssuer":{"type":"Role","arn":"arn:aws:iam::123456789012:role/ExampleRole","userName":"ExampleRole"},"attributes":{"creationDate":"2026-10-15T09:00:00Z","mfaAuthenticated":"true"}}},"eventTime":"2026-10-15T09:50:00Z","eventSource":"s3.amazonaws.com","eventName":"GetObject","awsRegion":"eu-central-1","sourceIPAddress":"2001:db8::78","errorCode":"AccessDenied","errorMessage":"Access Denied","requestID":"EXAMPLEREQUESTID0001","eventID":"00000000-0000-4000-8000-000000000004","readOnly":true}'
+expected:
+  class_uid: 6003
+  type_uid: 600302
+  activity_id: 2
+  severity_id: 2
+  status_id: 2
+  status_code: AccessDenied
+  status_detail: Access Denied
+  api.response.error: AccessDenied
+  api.response.error_message: Access Denied
+  actor.user.name: ExampleRole
+  actor.user.type_id: 99
+  actor.user.type: AssumedRole
+  actor.session.issuer: arn:aws:iam::123456789012:role/ExampleRole
+  actor.session.is_mfa: true
+  actor.session.created_time: 1792054800000
+  src_endpoint.ip: 2001:db8::78
+  http_request: null
+  metadata.profiles: [cloud]

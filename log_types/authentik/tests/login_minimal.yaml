@@ -1,0 +1,10 @@
+---
+# Only an action: the required user is a placeholder and the time is the ingest time.
+raw_sample: '{"action": "login"}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  user.name: unknown
+  service.name: authentik
+  metadata.original_time: null
+  metadata.profiles: []

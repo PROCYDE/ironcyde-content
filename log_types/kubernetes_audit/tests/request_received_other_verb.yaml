@@ -1,0 +1,13 @@
+---
+# A verb outside the standard ones at the RequestReceived stage: activity Other, no outcome yet, and the placeholders the required actor and source need.
+raw_sample: '{"auditID":"00000000-0000-0000-0000-000000000013","stage":"RequestReceived","verb":"Impersonate","requestURI":"/api/v1/users/alice"}'
+expected:
+  class_uid: 6003
+  type_uid: 600399
+  activity_name: impersonate
+  status_id: null
+  status_code: null
+  http_response: null
+  actor.user.name: unknown
+  src_endpoint.name: unknown
+  metadata.profiles: []

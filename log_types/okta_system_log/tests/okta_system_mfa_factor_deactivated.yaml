@@ -1,0 +1,10 @@
+---
+# An admin turns a factor type off for the organization: API Activity, not an authentication. Deactivating deletes nothing, so the activity is Other.
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"client":{"ipAddress":"203.0.113.12"},"eventType":"system.mfa.factor.deactivate","outcome":{"result":"SUCCESS"},"severity":"INFO"}'
+expected:
+  class_uid: 6003
+  type_uid: 600399
+  activity_name: system.mfa.factor.deactivate
+  src_endpoint.ip: 203.0.113.12
+  is_mfa: null
+  metadata.profiles: []
