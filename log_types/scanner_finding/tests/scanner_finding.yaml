@@ -1,4 +1,30 @@
 ---
-raw_sample: '{"schema":"ironcyde.scanner_finding.v1","tool":"nuclei","tool_version":"3.3.2","finding_id":"sf-f19da263103b1945","title":"nuclei matched cloud-metadata SSRF template","severity":"high","category":"web","technique_ids":["T1595.002"],"target":{"host":"ctdl-wks-23","ip":"192.0.2.23","url":"https://portal.citadel.example/login","port":443},"observed_at":"2026-10-15T09:28:51Z","src_ip":"198.51.100.121","run_id":"synth","lab":{"mode":"authorized-assessment","authorized":true,"target_scope":"citadel.example RFC1918","blast":false},"confidence":80,"status":"open","tags":["generic","T1595.002"]}'
+# A web finding with a sub-technique, the target as resource and evidence, and the scanner as product.
+raw_sample: '{"schema":"ironcyde.scanner_finding.v1","tool":"nuclei","tool_version":"3.3.2","finding_id":"sf-0000000000000001","title":"nuclei matched cloud-metadata SSRF template","severity":"high","category":"web","technique_ids":["T1595.002"],"target":{"host":"web1","ip":"192.0.2.23","url":"https://portal.example.com:8443/login","port":8443},"observed_at":"2026-10-15T09:28:51Z","src_ip":"198.51.100.121","run_id":"run-0001","lab":{"mode":"authorized-assessment","authorized":true},"confidence":80,"status":"open","tags":["generic"]}'
 expected:
   class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 4
+  status_id: 1
+  time: 1792056531000
+  confidence_score: 80
+  finding_info.title: nuclei matched cloud-metadata SSRF template
+  finding_info.uid: sf-0000000000000001
+  finding_info.types: [web]
+  finding_info.attacks:
+    - technique: {uid: T1595}
+      sub_technique: {uid: T1595.002}
+  finding_info.tags:
+    - {name: tag, value: generic}
+  resources:
+    - {name: web1, hostname: web1, ip: 192.0.2.23, role_id: 1, role: Target}
+  evidences:
+    - dst_endpoint: {ip: 192.0.2.23, hostname: web1, port: 8443}
+      src_endpoint: {ip: 198.51.100.121}
+      url: {url_string: "https://portal.example.com:8443/login", scheme: https, hostname: portal.example.com, path: /login, port: 8443}
+  metadata.uid: sf-0000000000000001
+  metadata.correlation_uid: run-0001
+  metadata.product.name: nuclei
+  metadata.product.version: 3.3.2
+  metadata.profiles: []

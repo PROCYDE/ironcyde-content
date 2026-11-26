@@ -1,162 +1,289 @@
-# Falco runtime-security alerts → OCSF (Vector parser remap).
+# Falco alerts (JSON output) -> OCSF.
 #
-# Input is a gateway Kafka envelope:
-#   event_id, source_id, source_type, ingested_at, event=<Falco JSON string>
-# Offline/tests may also pass Falco fields already flattened on the root.
-#
-# Sets parse_status=ok so the events_ocsf filter admits the row; lineage is
-# preserved for events_ocsf_final.vrl. Never emits deprecated security_finding 2001.
-# category_uid always tracks class_uid/1000. Class-illegal attributes go to unmapped.
+# Falco names what happened only in the rule, so the class follows keywords in the rule name:
+#   exec, process, shell, spawn, ptrace, terminal            -> Process Activity (1007)
+#   connect, bind, listen, outbound, inbound, dns            -> Network Activity (4001), host profile
+#   write, read, open, mkdir, modify, file, sensitive        -> File System Activity (1001)
+#   privilege, policy, compliance, drift                     -> Detection Finding (2004)
+#   anything else                                            -> File System Activity when the alert names a file
+#                                                               (fd.name), else Detection Finding
+# The node is the device; the container (container profile) and the process come from output_fields. ATT&CK
+# technique IDs among the tags go to attacks. An object without a rule is rejected.
 
-# Prefer the gateway raw payload; fall back to flattened Falco fields on `.`.
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && .rule != null {
+  raw = .
+}
 if !is_object(raw) {
-    if .rule != null {
-        raw = .
-    }
+  abort "no_match"
 }
-if raw == null {
-    abort "no_match"
+rule = to_string(raw.rule) ?? ""
+if rule == "" {
+  abort "no_match"
+}
+rule_l = downcase(rule)
+of = if is_object(raw.output_fields) { raw.output_fields } else { {} }
+
+priority = downcase(to_string(raw.priority) ?? "")
+severity_id = to_int(get({"emergency": 5, "alert": 5, "critical": 4, "error": 3, "warning": 2, "notice": 1, "informational": 1, "info": 1, "debug": 1}, [priority]) ?? 0) ?? 0
+
+original_time = to_string(raw.time) ?? ""
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
+
+fd_name = to_string(of."fd.name") ?? ""
+evt_type = downcase(to_string(of."evt.type") ?? "")
+class_uid = 2004
+if contains(rule_l, "exec") || contains(rule_l, "process") || contains(rule_l, "shell") || contains(rule_l, "spawn") || contains(rule_l, "ptrace") || contains(rule_l, "terminal") {
+  class_uid = 1007
+} else if contains(rule_l, "connect") || contains(rule_l, "bind") || contains(rule_l, "listen") || contains(rule_l, "outbound") || contains(rule_l, "inbound") || contains(rule_l, "dns") {
+  class_uid = 4001
+} else if contains(rule_l, "write") || contains(rule_l, "read") || contains(rule_l, "open") || contains(rule_l, "mkdir") || contains(rule_l, "modify") || contains(rule_l, "file") || contains(rule_l, "sensitive") {
+  class_uid = 1001
+} else if contains(rule_l, "privilege") || contains(rule_l, "policy") || contains(rule_l, "compliance") || contains(rule_l, "drift") {
+  class_uid = 2004
+} else if fd_name != "" {
+  class_uid = 1001
+}
+
+# The container the event happened in (container profile). An image needs its ID; the repository alone stays
+# in unmapped.
+container = {
+  "uid": to_string(of."container.id") ?? "",
+  "name": to_string(of."container.name") ?? "",
+  "pod_uuid": to_string(of."k8s.pod.uid") ?? "",
+}
+if container.uid == "host" {
+  container = {}
+}
+container = compact(container)
+has_container = exists(container.uid) || exists(container.name)
+if has_container {
+  image_uid = to_string(of."container.image.id") ?? ""
+  if image_uid != "" {
+    container.image = compact({"uid": image_uid, "name": to_string(of."container.image.repository") ?? ""})
+    image_tag = to_string(of."container.image.tag") ?? ""
+    if image_tag != "" {
+      container.image.labels = [image_tag]
+    }
+  }
+  if exists(of."k8s.pod.name") {
+    container.orchestrator = "Kubernetes"
+  }
+}
+
+user = compact({"name": to_string(of."user.name") ?? "", "uid": to_string(of."user.uid") ?? ""})
+has_user = exists(user.name) || exists(user.uid)
+
+# The process. OCSF needs a process identifier: the PID, else this event's own ID.
+proc_name = to_string(of."proc.name") ?? ""
+proc_cmd = to_string(of."proc.cmdline") ?? ""
+exe_path = to_string(of."proc.exepath") ?? ""
+process = {"name": proc_name, "cmd_line": proc_cmd}
+pid = to_int(of."proc.pid") ?? 0
+if pid > 0 {
+  process.pid = pid
 } else {
-    priority = downcase(to_string(raw.priority) ?? "")
-    severity_id = if priority == "emergency" || priority == "alert" {
-        5
-    } else if priority == "critical" {
-        4
-    } else if priority == "error" {
-        3
-    } else if priority == "warning" {
-        2
-    } else {
-        1
-    }
-
-    rule = to_string(raw.rule) ?? ""
-    rule_lower = downcase(rule)
-    output_fields = if is_object(raw.output_fields) { raw.output_fields } else { {} }
-
-    # Default File Activity; heuristics override class (and category follows class).
-    class_uid = 1001
-    activity_id = 1
-
-    if contains(rule_lower, "exec") || contains(rule_lower, "process") || contains(rule_lower, "shell") || contains(rule_lower, "spawn") || contains(rule_lower, "ptrace") || contains(rule_lower, "terminal") {
-        class_uid = 1007
-        activity_id = 1
-    } else if contains(rule_lower, "connect") || contains(rule_lower, "bind") || contains(rule_lower, "listen") || contains(rule_lower, "outbound") || contains(rule_lower, "inbound") || contains(rule_lower, "dns") {
-        class_uid = 4001
-        activity_id = 1
-    } else if contains(rule_lower, "write") || contains(rule_lower, "read") || contains(rule_lower, "open") || contains(rule_lower, "mkdir") || contains(rule_lower, "modify") || contains(rule_lower, "file") || contains(rule_lower, "sensitive") {
-        class_uid = 1001
-        activity_id = 1
-    } else if contains(rule_lower, "privilege") || contains(rule_lower, "policy") || contains(rule_lower, "compliance") || contains(rule_lower, "drift") {
-        class_uid = 2004
-        activity_id = 1
-    }
-
-    category_uid = 1
-    if class_uid == 2004 {
-        category_uid = 2
-    } else if class_uid == 4001 {
-        category_uid = 4
-    } else if class_uid == 3002 || class_uid == 3003 {
-        category_uid = 3
-    }
-    type_uid = class_uid * 100 + activity_id
-
-    actor_user = to_string(output_fields.user.name) ?? ""
-    if actor_user == "" {
-        actor_user = to_string(output_fields."k8s.pod.serviceaccount") ?? ""
-    }
-
-    device_hostname = to_string(output_fields."k8s.pod.name") ?? ""
-    if device_hostname == "" {
-        device_hostname = to_string(output_fields."container.name") ?? ""
-    }
-
-    src_ip = to_string(output_fields."fd.sip") ?? ""
-    if src_ip == "" {
-        src_ip = to_string(output_fields."fd.cip") ?? ""
-    }
-
-    dst_ip = to_string(output_fields."fd.dip") ?? ""
-    if dst_ip == "" {
-        dst_ip = to_string(output_fields."fd.rip") ?? ""
-    }
-
-    process_name = to_string(output_fields."proc.name") ?? ""
-    process_cmdline = to_string(output_fields."proc.cmdline") ?? ""
-
-    falco_time = raw.time
-    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    ts_str = to_string(falco_time) ?? ""
-    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-    if parsed_ts != null {
-        time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
-    }
-
-    profiles = []
-    if class_uid == 2004 {
-        profiles = ["security_control"]
-    }
-
-    unmapped = {
-        "falco_rule": rule,
-        "falco_priority": to_string(raw.priority) ?? "",
-        "container_id": to_string(output_fields."container.id") ?? "",
-        "container_name": to_string(output_fields."container.name") ?? "",
-        "k8s_ns_name": to_string(output_fields."k8s.ns.name") ?? "",
-        "k8s_pod_name": to_string(output_fields."k8s.pod.name") ?? "",
-        "proc_cmdline": process_cmdline,
-        "evt_type": to_string(output_fields."evt.type") ?? "",
-        "fd_name": to_string(output_fields."fd.name") ?? "",
-        "src_ip": src_ip,
-        "dst_ip": dst_ip,
-        "process_name": process_name,
-    }
-
-    . = {
-        "category_uid": category_uid,
-        "class_uid": class_uid,
-        "type_uid": type_uid,
-        "activity_id": activity_id,
-        "severity_id": severity_id,
-        "time": time_ms,
-        "message": to_string(raw.output) ?? rule,
-        "metadata": {
-            "product": {
-                "name": "Falco",
-                "vendor_name": "Sysdig",
-            },
-            "version": "1.9.0",
-            "profiles": profiles,
-        },
-        "unmapped": unmapped,
-    }
-
-    if class_uid == 2004 {
-        .finding_info = {
-            "title": rule,
-            "uid": "falco-" + rule,
-            "types": ["TTPs/Detection"],
-        }
-    } else if class_uid == 4001 {
-        .src_endpoint = { "ip": src_ip, "hostname": device_hostname }
-        .dst_endpoint = { "ip": dst_ip }
-        .unmapped.device_hostname = device_hostname
-    } else if class_uid == 1007 {
-        .actor = { "user": { "name": actor_user } }
-        .device = { "hostname": device_hostname, "type_id": 99, "type": "Other" }
-        .process = { "name": process_name, "cmd_line": process_cmdline, "uid": process_name }
-    } else {
-        # File Activity 1001
-        fname = to_string(output_fields."fd.name") ?? ""
-        if fname == "" {
-            fname = "unknown"
-        }
-        .actor = { "user": { "name": actor_user } }
-        .device = { "hostname": device_hostname, "type_id": 99, "type": "Other" }
-        .file = { "name": fname, "path": fname, "type_id": 1, "uid": fname }
-    }
+  process.uid = string(%ironcyde.event_id) ?? ""
 }
+if exe_path != "" {
+  process.file = {"path": exe_path, "name": string(split(exe_path, "/")[-1]) ?? exe_path, "type_id": 1}
+}
+if has_user {
+  process.user = user
+}
+parent_name = to_string(of."proc.pname") ?? ""
+ppid = to_int(of."proc.ppid") ?? 0
+if ppid > 0 {
+  process.parent_process = compact({"name": parent_name, "pid": ppid})
+}
+if has_container {
+  process.container = container
+}
+process = compact(process)
+has_process = proc_name != "" || proc_cmd != "" || pid > 0
+
+# The node is the device. Without a host name, the pod or container names it.
+node = to_string(raw.hostname) ?? ""
+pod = to_string(of."k8s.pod.name") ?? ""
+# type_id 0 (Unknown): Falco does not say what kind of device the node is.
+device = {"type_id": 0}
+if node != "" {
+  device.hostname = node
+} else if pod != "" {
+  device.name = pod
+} else if exists(container.name) {
+  device.name = container.name
+} else {
+  device.name = "unknown"
+}
+
+# ATT&CK technique IDs among the tags ("T1059", "T1059.004").
+attacks = []
+labels = []
+for_each(array(raw.tags) ?? []) -> |_i, t| {
+  tag = to_string(t) ?? ""
+  if tag != "" {
+    labels = push(labels, tag)
+  }
+  if match(tag, r'^T\d{4}\.\d{3}$') {
+    attacks = push(attacks, {"technique": {"uid": string!(split(tag, ".", 2)[0])}, "sub_technique": {"uid": tag}})
+  } else if match(tag, r'^T\d{4}$') {
+    attacks = push(attacks, {"technique": {"uid": tag}})
+  }
+}
+
+profiles = []
+activity_id = 0
+. = {
+  "severity_id": severity_id,
+  "time": time_ms,
+  "message": to_string(raw.output) ?? rule,
+  "metadata": {
+    "product": {"name": "Falco", "vendor_name": "Sysdig"},
+    "version": "1.9.0",
+    "log_name": to_string(raw.source) ?? "",
+    "event_code": rule,
+    "original_time": original_time,
+  },
+  "unmapped": {
+    "falco_priority": to_string(raw.priority) ?? "",
+    "evt_type": evt_type,
+    "k8s_ns_name": to_string(of."k8s.ns.name") ?? "",
+    "k8s_pod_name": pod,
+    "container_image": to_string(of."container.image.repository") ?? "",
+    "proc_tty": of."proc.tty",
+  },
+}
+if length(labels) > 0 {
+  .metadata.labels = labels
+}
+if exists(container.image) {
+  del(.unmapped.container_image)
+}
+
+if class_uid == 2004 {
+  activity_id = 1
+  .status_id = 1
+  .status = "New"
+  .is_alert = true
+  .finding_info = {
+    "title": rule,
+    "uid": string(%ironcyde.event_id) ?? "",
+    "analytic": {"type_id": 1, "type": "Rule", "name": rule},
+  }
+  if length(attacks) > 0 {
+    .finding_info.attacks = attacks
+  }
+  .device = device
+  evidence = {}
+  if has_process {
+    # evidences has its own container attribute; the process keeps none here.
+    evidence.process = process
+    del(evidence.process.container)
+  } else if has_user {
+    evidence.user = user
+  }
+  if has_container {
+    evidence.container = container
+  }
+  if fd_name != "" && starts_with(fd_name, "/") {
+    evidence.file = {"path": fd_name, "name": string(split(fd_name, "/")[-1]) ?? fd_name, "type_id": 0}
+  }
+  if length(evidence) > 0 {
+    .evidences = [evidence]
+  }
+} else {
+  # The actor is the process that did it; without one, its user; an alert that names neither names none.
+  actor = {"user": {"name": "unknown"}}
+  if has_process && class_uid != 1007 {
+    actor = {"process": process}
+    if has_user {
+      actor.user = user
+    }
+  } else if has_user {
+    actor = {"user": user}
+  }
+  .actor = actor
+  .device = device
+  if length(attacks) > 0 {
+    # attacks belongs to the security_control profile.
+    .attacks = attacks
+    profiles = push(profiles, "security_control")
+  }
+  if class_uid == 1007 {
+    # Falco's process rules watch spawned processes; a ptrace rule watches one process opening another.
+    activity_id = if evt_type == "ptrace" { 3 } else { 1 }
+    .process = process
+  } else if class_uid == 1001 {
+    activity_id = to_int(get({"open": 14, "openat": 14, "openat2": 14, "creat": 1, "mkdir": 1, "mkdirat": 1, "read": 2, "pread": 2, "readv": 2, "write": 3, "pwrite": 3, "writev": 3, "unlink": 4, "unlinkat": 4, "rmdir": 4, "rename": 5, "renameat": 5, "renameat2": 5, "chmod": 6, "fchmod": 6, "fchmodat": 6, "chown": 6, "fchown": 6, "fchownat": 6}, [evt_type]) ?? 0) ?? 0
+    # file is required; an alert that names none (the rule only sounded like a file rule) names none.
+    file_path = fd_name
+    if file_path == "" {
+      file_path = "unknown"
+    }
+    # type_id 0 (Unknown): Falco does not say whether the name is a file or a directory.
+    .file = {"name": string(split(file_path, "/")[-1]) ?? file_path, "type_id": 0}
+    if starts_with(file_path, "/") {
+      .file.path = file_path
+    }
+    if .file.name == "" {
+      .file.name = file_path
+    }
+  } else {
+    # Network Activity: connect and accept open a connection, listen and bind wait for one; the client and
+    # server tuple is as Falco resolved it. device and actor belong to the host profile.
+    activity_id = if includes(["connect", "accept", "accept4"], evt_type) { 1 } else if includes(["listen", "bind"], evt_type) { 7 } else { 6 }
+    profiles = push(profiles, "host")
+    client_ip = to_string(of."fd.cip") ?? ""
+    if !(is_ipv4(client_ip) || is_ipv6(client_ip)) {
+      client_ip = ""
+    }
+    server_ip = to_string(of."fd.sip") ?? ""
+    if !(is_ipv4(server_ip) || is_ipv6(server_ip)) {
+      server_ip = ""
+    }
+    src = {"ip": client_ip}
+    cport = to_int(of."fd.cport") ?? 0
+    if client_ip != "" && cport > 0 && cport < 65536 {
+      src.port = cport
+    }
+    dst = {"ip": server_ip}
+    sport = to_int(of."fd.sport") ?? 0
+    if server_ip != "" && sport > 0 && sport < 65536 {
+      dst.port = sport
+    }
+    # Network Activity needs an endpoint; without an address the node is the only one known.
+    if client_ip == "" && server_ip == "" {
+      src = {"name": "unknown"}
+      if node != "" {
+        src = {"hostname": node}
+      }
+    }
+    .src_endpoint = src
+    .dst_endpoint = dst
+    l4proto = downcase(to_string(of."fd.l4proto") ?? "")
+    if l4proto != "" {
+      # direction_id 0 (Unknown): Falco does not say which side of a boundary the connection crosses.
+      .connection_info = {"direction_id": 0, "protocol_name": l4proto}
+      proto_num = get({"icmp": 1, "tcp": 6, "udp": 17}, [l4proto]) ?? null
+      if proto_num != null {
+        .connection_info.protocol_num = proto_num
+      }
+    }
+  }
+}
+# The process's container belongs to the container profile.
+if exists(.actor.process.container) || exists(.process.container) {
+  profiles = push(profiles, "container")
+}
+.metadata.profiles = profiles
+.category_uid = to_int(floor(class_uid / 1000))
+.class_uid = class_uid
+.activity_id = activity_id
+.type_uid = class_uid * 100 + activity_id
+. = compact(., array: false)

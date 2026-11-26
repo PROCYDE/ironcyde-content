@@ -1,0 +1,13 @@
+---
+# Only a title: no device, no evidence, an Unknown severity and no profile.
+raw_sample: '{"Title":"Test alert","Timestamp":"not a time"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 0
+  finding_info.title: Test alert
+  device: null
+  evidences: null
+  disposition_id: null
+  metadata.uid: null
+  metadata.profiles: []

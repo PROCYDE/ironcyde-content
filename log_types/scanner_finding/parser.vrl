@@ -1,148 +1,181 @@
-# IRONCYDE scanner/recon finding envelope → OCSF Detection Finding (2004).
+# IRONCYDE scanner findings (schema ironcyde.scanner_finding.v1, JSON) -> OCSF Detection Finding (2004), Create.
 #
-# Input is a gateway Kafka envelope:
-#   event_id, source_id, source_type, ingested_at, event=<JSON string>
-# Schema: ironcyde.scanner_finding.v1.
-# Offline/tests may also pass finding fields already flattened on the root.
-#
-# One shared remap for nuclei/nmap/trivy/gitleaks/… — tool identity lives in
-# the payload, not as 20 invented parsers. Never emits deprecated class 2001.
-# Fail-closed: missing schema or tool → parse_status=no_match.
+# One parser for every scanner (nuclei, nmap, trivy, gitleaks, ...): the tool is the product. The scanned target
+# goes to resources and evidences, ATT&CK technique IDs to finding_info.attacks, CVE IDs to vulnerabilities.
+# Rejected unless the schema matches and the finding names its tool and has a title.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
-if !is_object(raw) {
-    if .schema != null || .tool != null {
-        raw = .
-    }
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && (.schema != null || .tool != null) {
+  raw = .
 }
 if !is_object(raw) {
-    abort "no_match"
+  abort "no_match"
 }
-    schema = to_string(raw.schema) ?? ""
-    tool = downcase(to_string(raw.tool) ?? "")
-    title = to_string(raw.title) ?? ""
+tool = downcase(to_string(raw.tool) ?? "")
+title = to_string(raw.title) ?? ""
+if (to_string(raw.schema) ?? "") != "ironcyde.scanner_finding.v1" || tool == "" || title == "" {
+  abort "no_match"
+}
 
-    if schema != "ironcyde.scanner_finding.v1" || tool == "" || title == "" {
-        abort "no_match"
-    } else {
-        severity_raw = downcase(to_string(raw.severity) ?? "medium")
-        severity_id = 3
-        if severity_raw == "info" || severity_raw == "informational" {
-            severity_id = 1
-        } else if severity_raw == "low" {
-            severity_id = 2
-        } else if severity_raw == "medium" {
-            severity_id = 3
-        } else if severity_raw == "high" {
-            severity_id = 4
-        } else if severity_raw == "critical" {
-            severity_id = 5
-        }
+severity_id = to_int(get({"info": 1, "informational": 1, "low": 2, "medium": 3, "high": 4, "critical": 5}, [downcase(to_string(raw.severity) ?? "")]) ?? 0) ?? 0
 
-        category_uid = 2
-        class_uid = 2004
-        activity_id = 1
-        type_uid = class_uid * 100 + activity_id
+# A finding is New unless the scanner says otherwise; a state OCSF does not list is kept in its own words.
+state = downcase(to_string(raw.status) ?? "")
+status_id = 1
+status = "New"
+if includes(["in_progress", "in progress", "triaged"], state) {
+  status_id = 2
+  status = "In Progress"
+} else if includes(["suppressed", "ignored", "accepted"], state) {
+  status_id = 3
+  status = "Suppressed"
+} else if includes(["resolved", "closed", "fixed"], state) {
+  status_id = 4
+  status = "Resolved"
+} else if state != "" && state != "open" && state != "new" {
+  status_id = 99
+  status = state
+}
 
-        target = if is_object(raw.target) { raw.target } else { {} }
-        host = to_string(target.host) ?? ""
-        if host == "" {
-            host = to_string(target.hostname) ?? ""
-        }
-        url = to_string(target.url) ?? ""
-        dst_ip = to_string(target.ip) ?? ""
-        if dst_ip != "" {
-            ok4 = is_ipv4(dst_ip)
-            ok6 = is_ipv6(dst_ip)
-            if !ok4 && !ok6 { dst_ip = "" }
-        }
-        src_ip = to_string(raw.src_ip) ?? ""
-        if src_ip != "" {
-            ok4s = is_ipv4(src_ip)
-            ok6s = is_ipv6(src_ip)
-            if !ok4s && !ok6s { src_ip = "" }
-        }
+target = if is_object(raw.target) { raw.target } else { {} }
+host = to_string(target.host) ?? ""
+if host == "" {
+  host = to_string(target.hostname) ?? ""
+}
+url_string = to_string(target.url) ?? ""
+dst_ip = to_string(target.ip) ?? ""
+if !(is_ipv4(dst_ip) || is_ipv6(dst_ip)) {
+  dst_ip = ""
+}
+src_ip = to_string(raw.src_ip) ?? ""
+if !(is_ipv4(src_ip) || is_ipv6(src_ip)) {
+  src_ip = ""
+}
+port = to_int(target.port) ?? 0
 
-        finding_id = to_string(raw.finding_id) ?? ""
-        if finding_id == "" {
-            finding_id = to_string(raw.uid) ?? ""
-        }
-        category = to_string(raw.category) ?? ""
-        run_id = to_string(raw.run_id) ?? ""
+original_time = to_string(raw.observed_at) ?? ""
+if original_time == "" {
+  original_time = to_string(raw.timestamp) ?? ""
+}
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
 
-        time_ms = 0
-        ts_str = to_string(raw.observed_at) ?? ""
-        if ts_str == "" {
-            ts_str = to_string(raw.timestamp) ?? ""
-        }
-        if ts_str != "" {
-            parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-            if parsed_ts != null {
-                time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
-            }
-        }
-        if time_ms == 0 {
-            time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-        }
+finding_id = to_string(raw.finding_id) ?? ""
+if finding_id == "" {
+  finding_id = to_string(raw.uid) ?? ""
+}
+finding_uid = finding_id
+if finding_uid == "" {
+  finding_uid = string(%ironcyde.event_id) ?? ""
+}
 
-        msg = "scanner/" + tool + " " + title
-        if url != "" {
-            msg = msg + " url=" + url
-        } else if host != "" {
-            msg = msg + " host=" + host
-        }
+# ATT&CK: "T1595.002" is a sub-technique of "T1595".
+attacks = []
+for_each(array(raw.technique_ids) ?? []) -> |_i, t| {
+  technique_uid = to_string(t) ?? ""
+  if contains(technique_uid, ".") {
+    attacks = push(attacks, {"technique": {"uid": string!(split(technique_uid, ".", 2)[0])}, "sub_technique": {"uid": technique_uid}})
+  } else if technique_uid != "" {
+    attacks = push(attacks, {"technique": {"uid": technique_uid}})
+  }
+}
+vulnerabilities = []
+for_each(array(raw.cve) ?? []) -> |_i, c| {
+  cve_uid = to_string(c) ?? ""
+  if cve_uid != "" {
+    vulnerabilities = push(vulnerabilities, {"cve": {"uid": cve_uid}})
+  }
+}
+tags = []
+for_each(array(raw.tags) ?? []) -> |_i, t| {
+  tag = to_string(t) ?? ""
+  if tag != "" {
+    tags = push(tags, {"name": "tag", "value": tag})
+  }
+}
 
-        tech = []
-        if is_array(raw.technique_ids) {
-            tech = raw.technique_ids
-        }
-        cves = []
-        if is_array(raw.cve) {
-            cves = raw.cve
-        }
+# The scanned target: a resource (by host name, else address, else URL) and, as evidence, the endpoints and URL.
+resource_name = host
+if resource_name == "" {
+  resource_name = dst_ip
+}
+if resource_name == "" {
+  resource_name = url_string
+}
+evidence = {}
+if dst_ip != "" || host != "" {
+  evidence.dst_endpoint = {"ip": dst_ip, "hostname": host}
+  if port > 0 && port < 65536 {
+    evidence.dst_endpoint.port = port
+  }
+}
+if src_ip != "" {
+  evidence.src_endpoint = {"ip": src_ip}
+}
+if url_string != "" {
+  url = {"url_string": url_string}
+  parts = parse_url(url_string) ?? {}
+  url.scheme = parts.scheme
+  url.hostname = parts.host
+  url.path = parts.path
+  url.port = parts.port
+  evidence.url = url
+}
 
-        lab = if is_object(raw.lab) { raw.lab } else { {} }
-        lab_mode = to_string(lab.mode) ?? "fixture"
+msg = "Scanner " + tool + ": " + title
+category = to_string(raw.category) ?? ""
+lab = if is_object(raw.lab) { raw.lab } else { {} }
 
-        . = {
-            "category_uid": category_uid,
-            "class_uid": class_uid,
-            "class_name": "Detection Finding",
-            "category_name": "Findings",
-            "type_uid": type_uid,
-            "activity_id": activity_id,
-            "severity_id": severity_id,
-            "status_id": 1,
-            "time": time_ms,
-            "message": msg,
-            "finding_info": {
-                "title": title,
-                "uid": finding_id,
-                "types": ["Vulnerability/Scanner"],
-            },
-            "metadata": {
-                "version": "1.9.0",
-                "uid": finding_id,
-                "log_name": "ScannerFinding",
-                "log_provider": "IRONCYDE Scanner Lab",
-                "product": { "name": tool, "vendor_name": "IRONCYDE Lab Fixture" },
-                "profiles": ["security_control"],
-            },
-            "unmapped": {
-                "scanner_tool": tool,
-                "scanner_category": category,
-                "scanner_run_id": run_id,
-                "scanner_lab_mode": lab_mode,
-                "severity": severity_raw,
-                "device_hostname": host,
-                "process_name": tool,
-                "dst_ip": dst_ip,
-                "src_ip": src_ip,
-                "target_url": url,
-                "technique_ids": tech,
-                "cve": cves,
-            },
-        }
-    }
+. = {
+  "category_uid": 2,
+  "class_uid": 2004,
+  "type_uid": 200401,
+  "activity_id": 1,
+  "severity_id": severity_id,
+  "status_id": status_id,
+  "status": status,
+  "time": time_ms,
+  "message": msg,
+  "finding_info": {"title": title, "uid": finding_uid},
+  "metadata": {
+    "version": "1.9.0",
+    "uid": finding_id,
+    "log_name": "scanner_finding",
+    "original_time": original_time,
+    "correlation_uid": to_string(raw.run_id) ?? "",
+    "product": {"name": tool, "version": to_string(raw.tool_version) ?? ""},
+    "profiles": [],
+  },
+  "unmapped": {
+    "lab": lab,
+  },
+}
+if category != "" {
+  .finding_info.types = [category]
+}
+if length(attacks) > 0 {
+  .finding_info.attacks = attacks
+}
+if length(tags) > 0 {
+  .finding_info.tags = tags
+}
+if length(vulnerabilities) > 0 {
+  .vulnerabilities = vulnerabilities
+}
+if resource_name != "" {
+  .resources = [{"name": resource_name, "hostname": host, "ip": dst_ip, "role_id": 1, "role": "Target"}]
+}
+if length(evidence) > 0 {
+  .evidences = [evidence]
+}
+if raw.confidence != null {
+  score = to_int(raw.confidence) ?? -1
+  if score >= 0 && score <= 100 {
+    .confidence_score = score
+  }
+}
+. = compact(., array: false)

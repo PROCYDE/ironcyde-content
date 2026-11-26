@@ -1,4 +1,41 @@
 ---
-raw_sample: '{"event_simpleName":"DetectionSummaryEvent","cid":"00000000000000000000000000000000","aid":"11111111111111111111111111111111","DetectName":"Credential Theft via LSASS Access","DetectDescription":"A process opened a handle to LSASS consistent with credential theft.","DetectionId":"ldt:00000000000000000000000000000000:10000001","SeverityName":"High","Severity":5,"Tactic":"Credential Access","Technique":"LSASS Memory","TechniqueId":"T1003.001","ComputerName":"CTDL-WKS-12","UserName":"SYSTEM","FileName":"procdump64.exe","FilePath":"\\Device\\HarddiskVolume2\\Users\\Public","CommandLine":"procdump64.exe -accepteula -ma lsass.exe C:\\Windows\\Temp\\l.dmp","SHA256HashData":"be8661d1f47f4c6c33d74f5793a71dcfa7a63e66e2c2d91f94924e8456f34bcb","LocalIP":"192.0.2.12","RemoteAddress":"","PatternDispositionDescription":"Prevention, process killed.","FalconHostLink":"https://falcon.eu-1.crowdstrike.com/activity/detections/detail/00000000000000000000000000000000","timestamp":"1792058688"}'
+# A prevented detection with a sub-technique, the process, its hash and the host.
+raw_sample: '{"event_simpleName":"DetectionSummaryEvent","cid":"00000000000000000000000000000000","aid":"11111111111111111111111111111111","DetectName":"Credential Theft via LSASS Access","DetectDescription":"A process opened a handle to LSASS consistent with credential theft.","DetectionId":"ldt:00000000000000000000000000000000:10000001","SeverityName":"High","Severity":4,"Tactic":"Credential Access","Technique":"LSASS Memory","TechniqueId":"T1003.001","ComputerName":"WEB1","MachineDomain":"example.test","UserName":"alice","FileName":"procdump64.exe","FilePath":"\\Device\\HarddiskVolume2\\Users\\Public","CommandLine":"procdump64.exe -accepteula -ma lsass.exe C:\\Windows\\Temp\\l.dmp","ProcessId":"100000000001","SHA256HashData":"0000000000000000000000000000000000000000000000000000000000000001","LocalIP":"192.0.2.12","RemoteAddress":"203.0.113.50","PatternDispositionDescription":"Prevention, process killed.","FalconHostLink":"https://falcon.example.com/activity/detections/detail/00000000000000000000000000000000","timestamp":"1792058688"}'
 expected:
   class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 4
+  status_id: 1
+  is_alert: true
+  action_id: 2
+  disposition_id: 99
+  disposition: Prevention, process killed.
+  time: 1792058688000
+  finding_info.title: Credential Theft via LSASS Access
+  finding_info.uid: ldt:00000000000000000000000000000000:10000001
+  finding_info.src_url: https://falcon.example.com/activity/detections/detail/00000000000000000000000000000000
+  finding_info.attacks:
+    - tactic: {name: Credential Access}
+      technique: {uid: T1003}
+      sub_technique: {uid: T1003.001, name: LSASS Memory}
+  device.hostname: WEB1
+  device.ip: 192.0.2.12
+  device.uid: "11111111111111111111111111111111"
+  device.domain: example.test
+  evidences:
+    - process:
+        name: procdump64.exe
+        cmd_line: procdump64.exe -accepteula -ma lsass.exe C:\Windows\Temp\l.dmp
+        uid: "100000000001"
+        user: {name: alice}
+        file:
+          name: procdump64.exe
+          type_id: 1
+          path: \Device\HarddiskVolume2\Users\Public\procdump64.exe
+          hashes:
+            - {algorithm_id: 3, algorithm: SHA-256, value: "0000000000000000000000000000000000000000000000000000000000000001"}
+      dst_endpoint: {ip: 203.0.113.50}
+  metadata.uid: ldt:00000000000000000000000000000000:10000001
+  metadata.tenant_uid: "00000000000000000000000000000000"
+  metadata.profiles: [security_control]

@@ -1,0 +1,16 @@
+---
+# A failed step for a sub-technique, with only the fields a minimal link carries.
+raw_sample: '{"host":"web2","command":"rundll32.exe inject.dll","status":1,"ability":{"name":"DLL Injection","technique_id":"T1055.001","technique_name":"Process Injection: Dynamic-link Library Injection","tactic":"defense-evasion"},"paw":"ghijkl"}'
+expected:
+  class_uid: 1007
+  type_uid: 100701
+  status_id: 2
+  status: Failure
+  exit_code: 1
+  actor.user.name: unknown
+  device.hostname: web2
+  attacks:
+    - tactic: {name: defense-evasion}
+      technique: {uid: T1055, name: Process Injection}
+      sub_technique: {uid: T1055.001, name: Dynamic-link Library Injection}
+  metadata.profiles: [security_control]

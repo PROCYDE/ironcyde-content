@@ -1,0 +1,13 @@
+---
+# A link that has not reported a status has no outcome, and the flat technique_id form is accepted.
+raw_sample: '{"host":"web1","username":"alice","command":"hostname","technique_id":"T1082","paw":"abcdef","finish":"2026-10-15T09:21:00Z"}'
+expected:
+  class_uid: 1007
+  type_uid: 100701
+  status_id: null
+  exit_code: null
+  time: 1792056060000
+  process.cmd_line: hostname
+  attacks:
+    - technique: {uid: T1082}
+  metadata.profiles: [security_control]

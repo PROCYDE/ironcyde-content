@@ -1,0 +1,11 @@
+---
+# A rule name without a known keyword that names a file: File System Activity with an Unknown activity.
+raw_sample: '{"output":"Unexpected access","priority":"Emergency","rule":"Custom anomaly","output_fields":{"evt.type":"ioctl","fd.name":"/etc/passwd","proc.name":"cat","proc.pid":77},"hostname":"node1"}'
+expected:
+  class_uid: 1001
+  type_uid: 100100
+  severity_id: 5
+  file.path: /etc/passwd
+  file.name: passwd
+  actor.process.name: cat
+  metadata.profiles: []

@@ -1,0 +1,11 @@
+---
+# A finding that is being worked on.
+raw_sample: '{"schema":"ironcyde.scanner_finding.v1","tool":"nmap","title":"Open telnet port","severity":"medium","target":{"host":"web2","port":23},"status":"in_progress"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 3
+  status_id: 2
+  evidences:
+    - dst_endpoint: {hostname: web2, port: 23}
+  metadata.profiles: []

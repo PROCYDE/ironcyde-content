@@ -1,147 +1,171 @@
-# Atomic Red Team simulated technique artifacts → OCSF (gateway envelope).
+# Atomic Red Team test executions (JSON records of a simulated technique) -> OCSF.
 #
-# Raw event fields (JSON string in .event):
-#   technique_uid, technique_name, tactic_uid, tactic_name,
-#   process, cmd_line, host, user, atomic_test, class_uid, category_uid,
-#   activity_id, severity_id
-#
-# Sets parse_status=ok|no_match. ATT&CK technique lives in unmapped (and
-# finding_info for Detection Finding). Never emits class_uid 2001.
+# Raw fields: technique_uid, technique_name, tactic_uid, tactic_name, process, cmd_line, host, user, atomic_test,
+# class_uid, activity_id, severity_id, timestamp. The record's class_uid picks the class:
+#   2004 (and the deprecated 2001) -> Detection Finding: the process and user are evidence
+#   3002                           -> Authentication on the host
+#   4001                           -> Network Activity from the host (host profile)
+#   anything else                  -> Process Activity (1007): every record describes a process that ran
+# The ATT&CK mapping goes to attacks (security_control profile), or to finding_info.attacks in a finding.
+# A record without a technique is rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && .technique_uid != null {
+  raw = .
+}
 if !is_object(raw) {
-    if .technique_uid != null {
-        raw = .
-    }
-}
-if raw == null || (to_string(raw.technique_uid) ?? "") == "" {
   abort "no_match"
+}
+technique_uid = to_string(raw.technique_uid) ?? ""
+if technique_uid == "" {
+  abort "no_match"
+}
+
+class_uid = to_int(raw.class_uid) ?? 0
+if class_uid == 2001 {
+  class_uid = 2004
+} else if !includes([2004, 3002, 4001], class_uid) {
+  class_uid = 1007
+}
+# The record's activity when the class defines it, else the class's first activity (Launch, Create, Logon, Open).
+activity_id = to_int(raw.activity_id) ?? 0
+max_activity = to_int(get({"1007": 5, "2004": 3, "3002": 7, "4001": 7}, [to_string(class_uid)]) ?? 1) ?? 1
+if activity_id < 1 || activity_id > max_activity {
+  activity_id = 1
+}
+severity_id = to_int(raw.severity_id) ?? 0
+if severity_id < 1 || severity_id > 6 {
+  severity_id = 0
+}
+
+technique_name = to_string(raw.technique_name) ?? ""
+atomic_test = to_string(raw.atomic_test) ?? ""
+host = to_string(raw.host) ?? ""
+user = to_string(raw.user) ?? ""
+cmd_line = to_string(raw.cmd_line) ?? ""
+process_path = to_string(raw.process) ?? ""
+
+original_time = to_string(raw.timestamp) ?? ""
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
+
+# ATT&CK: "T1055.001" is a sub-technique of "T1055"; its name is "<technique>: <sub-technique>".
+attack = {"tactic": {"uid": to_string(raw.tactic_uid) ?? "", "name": to_string(raw.tactic_name) ?? ""}}
+if contains(technique_uid, ".") {
+  name_parts = split(technique_name, ": ", 2)
+  attack.technique = {"uid": string!(split(technique_uid, ".", 2)[0]), "name": name_parts[0]}
+  attack.sub_technique = {"uid": technique_uid, "name": name_parts[1]}
 } else {
-  class_uid = to_int(raw.class_uid) ?? 1007
-  activity_id = to_int(raw.activity_id) ?? 1
-  severity_id = to_int(raw.severity_id) ?? 3
-  if activity_id == 0 {
-    activity_id = 1
-  }
-  if severity_id == 0 {
-    severity_id = 3
-  }
-  if class_uid == 2001 {
-    class_uid = 2004
-  }
-  # category always derived from class — ignore stale raw.category_uid drift
-  category_uid = 1
-  if class_uid == 2004 {
-    category_uid = 2
-  } else if class_uid == 4001 {
-    category_uid = 4
-  } else if class_uid == 3002 || class_uid == 3003 {
-    category_uid = 3
-  }
-  type_uid = class_uid * 100 + activity_id
+  attack.technique = {"uid": technique_uid, "name": technique_name}
+}
+attack = compact(attack)
 
-  technique_uid = to_string(raw.technique_uid) ?? ""
-  technique_name = to_string(raw.technique_name) ?? ""
-  tactic_uid = to_string(raw.tactic_uid) ?? ""
-  tactic_name = to_string(raw.tactic_name) ?? ""
-  process_name = to_string(raw.process) ?? ""
-  if process_name == "" {
-    process_name = "unknown"
-  }
-  cmd_line = to_string(raw.cmd_line) ?? ""
-  host = to_string(raw.host) ?? ""
-  if host == "" {
-    host = "atomic-host"
-  }
-  user = to_string(raw.user) ?? ""
-  if user == "" {
-    user = "unknown"
-  }
-  atomic_test = to_string(raw.atomic_test) ?? ""
-
-  attack = {
-    "technique": {"uid": technique_uid, "name": technique_name},
-    "tactic": {"uid": tactic_uid, "name": tactic_name},
-  }
-
-  message = "e2e-atomic-" + technique_uid + " " + technique_name + " [" + atomic_test + "]"
-
-  . = {
-    "category_uid": category_uid,
-    "class_uid": class_uid,
-    "type_uid": type_uid,
-    "activity_id": activity_id,
-    "severity_id": severity_id,
-    "time": to_unix_timestamp(now(), unit: "milliseconds"),
-    "message": message,
-    "metadata": {
-      "version": "1.9.0",
-      "product": {"name": "Atomic Red Team", "vendor_name": "Red Canary"},
-      "profiles": [],
-    },
-    "unmapped": {
-      "attacks": [attack],
-      "atomic_test": atomic_test,
-      "technique_uid": technique_uid,
-      "technique_name": technique_name,
-      "tactic_uid": tactic_uid,
-      "tactic_name": tactic_name,
-    },
-  }
-
-  if class_uid == 2004 {
-    .metadata.profiles = ["security_control"]
-    .finding_info = {
-      "title": technique_name,
-      "uid": "atomic-" + technique_uid,
-      "types": ["TTPs/Detection"],
-    }
-  } else if class_uid == 3002 {
-    .user = {"name": user}
-    .actor = {"user": {"name": user}}
-    .dst_endpoint = {"hostname": host}
-    .unmapped.device_hostname = host
-  } else {
-    # Process Activity (default). Catalogue often stores bare exe names; Sigma
-    # Image maps to process.file.path and matches '%\\foo.exe', so expand bare
-    # names to a System32-style path while keeping basename in process.name.
-    process_path = process_name
-    process_basename = process_name
-    if contains(process_name, "\\") {
-      path_parts = split(process_name, "\\")
-      process_basename = to_string(path_parts[-1])
-    } else if contains(process_name, "/") {
-      path_parts = split(process_name, "/")
-      process_basename = to_string(path_parts[-1])
-    } else if process_name != "" && process_name != "unknown" {
-      if process_name == "powershell.exe" || process_name == "pwsh.exe" {
-        process_path = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\" + process_name
-      } else {
-        process_path = "C:\\Windows\\System32\\" + process_name
-      }
-    }
-    process = {
-      "name": process_basename,
-      "cmd_line": cmd_line,
-      "file": {"path": process_path, "name": process_basename, "type_id": 1},
-      "uid": process_basename,
-    }
-    .actor = {"user": {"name": user}}
-    .device = {"hostname": host, "type_id": 99, "type": "Other"}
-    if class_uid == 4001 {
-      # Network Activity has no process attribute: the process that connects is the actor's, from the test host.
-      .actor.process = process
-      .src_endpoint = {"hostname": host}
-    } else {
-      .process = process
-    }
-    # actor and device are core in System Activity (1xxx), Windows registry classes (201xxx) and the few classes
-    # below; in every other OCSF 1.9.0 class at least one of them belongs to the host profile.
-    system_class = (class_uid >= 1000 && class_uid < 2000) || (class_uid >= 201000 && class_uid < 202000)
-    if !system_class && !includes([2006, 5001, 5002, 5019, 5020], class_uid) {
-      .metadata.profiles = ["host"]
-    }
+# The process: a path gives the file's path and name; a bare name is only a name. OCSF needs a process identifier
+# and the record has none, so this event's own ID stands in.
+process_name = process_path
+if contains(process_path, "\\") {
+  process_name = string(split(process_path, "\\")[-1]) ?? process_path
+} else if contains(process_path, "/") {
+  process_name = string(split(process_path, "/")[-1]) ?? process_path
+}
+process = {"name": process_name, "cmd_line": cmd_line, "uid": string(%ironcyde.event_id) ?? ""}
+if process_name != "" {
+  process.file = {"name": process_name, "type_id": 1}
+  if process_name != process_path {
+    process.file.path = process_path
   }
 }
+if user != "" {
+  process.user = {"name": user}
+}
+has_process = process_name != "" || cmd_line != ""
+
+# Required identities are placeholders when the record names none.
+user_name = user
+if user_name == "" {
+  user_name = "unknown"
+}
+# type_id 0 (Unknown): the record does not say what kind of device the host is.
+device = {"type_id": 0}
+if host != "" {
+  device.hostname = host
+} else {
+  device.name = "unknown"
+}
+
+message = strip_whitespace("Atomic Red Team " + technique_uid + " " + technique_name)
+if atomic_test != "" {
+  message = message + " [" + atomic_test + "]"
+}
+
+. = {
+  "category_uid": to_int(floor(class_uid / 1000)),
+  "class_uid": class_uid,
+  "type_uid": class_uid * 100 + activity_id,
+  "activity_id": activity_id,
+  "severity_id": severity_id,
+  "time": time_ms,
+  "message": message,
+  "metadata": {
+    "version": "1.9.0",
+    "product": {"name": "Atomic Red Team", "vendor_name": "Red Canary"},
+    "event_code": atomic_test,
+    "original_time": original_time,
+    "profiles": ["security_control"],
+  },
+}
+
+if class_uid == 2004 {
+  .metadata.profiles = []
+  .status_id = 1
+  .status = "New"
+  .finding_info = {
+    "title": technique_name,
+    "uid": string(%ironcyde.event_id) ?? "",
+    "attacks": [attack],
+  }
+  if host != "" {
+    .device = device
+  }
+  if has_process {
+    .evidences = [{"process": process}]
+  } else if user != "" {
+    .evidences = [{"user": {"name": user}}]
+  }
+} else if class_uid == 3002 {
+  # attacks belongs to the security_control profile. The host is where the logon happened.
+  .attacks = [attack]
+  .user = {"name": user_name}
+  if host != "" {
+    .dst_endpoint = {"hostname": host}
+  } else {
+    .dst_endpoint = {"name": "unknown"}
+  }
+  if has_process {
+    .logon_process = process
+  }
+} else if class_uid == 4001 {
+  # device and actor belong to the host profile in Network Activity: the process connects from the test host.
+  .metadata.profiles = ["security_control", "host"]
+  .attacks = [attack]
+  .device = device
+  .actor = {"user": {"name": user_name}}
+  if has_process {
+    .actor.process = process
+  }
+  if host != "" {
+    .src_endpoint = {"hostname": host}
+  } else {
+    .src_endpoint = {"name": "unknown"}
+  }
+} else {
+  .attacks = [attack]
+  .device = device
+  .actor = {"user": {"name": user_name}}
+  .process = process
+}
+. = compact(., array: false)

@@ -1,0 +1,21 @@
+---
+# A policy rule: Detection Finding with the rule as analytic, the process, container and file as evidence, and the techniques in finding_info.
+raw_sample: '{"output":"Privileged container started (user=root image=nginx)","priority":"Alert","rule":"Launch Privileged Container","time":"2026-10-15T09:17:03Z","output_fields":{"proc.name":"runc","proc.pid":900,"user.name":"root","container.id":"0123456789ad","container.name":"priv","fd.name":"/etc/shadow"},"hostname":"node1","tags":["T1610"]}'
+expected:
+  class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 5
+  status_id: 1
+  is_alert: true
+  finding_info.title: Launch Privileged Container
+  finding_info.analytic.name: Launch Privileged Container
+  finding_info.analytic.type_id: 1
+  finding_info.attacks:
+    - technique: {uid: T1610}
+  device.hostname: node1
+  evidences:
+    - process: {name: runc, pid: 900, user: {name: root}}
+      container: {uid: 0123456789ad, name: priv}
+      file: {path: /etc/shadow, name: shadow, type_id: 0}
+  metadata.profiles: []

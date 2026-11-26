@@ -1,0 +1,10 @@
+---
+# A network rule for an event that neither opens nor listens: Traffic; with no address and no host name the endpoint is a placeholder.
+raw_sample: '{"output":"Inbound traffic to container","priority":"Debug","rule":"Unexpected inbound traffic","output_fields":{"evt.type":"recvfrom","container.name":"web"}}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  src_endpoint.name: unknown
+  device.name: web
+  actor.user.name: unknown
+  metadata.profiles: [host]

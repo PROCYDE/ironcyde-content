@@ -1,0 +1,10 @@
+---
+# A file rule whose alert names no file: the required file is a placeholder.
+raw_sample: '{"output":"Sensitive mount detected","priority":"Warning","rule":"Sensitive mount by container","output_fields":{"evt.type":"mkdir"},"hostname":"node1"}'
+expected:
+  class_uid: 1001
+  type_uid: 100101
+  file.name: unknown
+  file.path: null
+  actor.user.name: unknown
+  metadata.profiles: []

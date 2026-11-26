@@ -1,5 +1,24 @@
 ---
-raw_sample: '{"technique_uid":"T1055.001","technique_name":"Process Injection: DLL Injection (CreateRemoteThread)","tactic_uid":"TA0005","tactic_name":"Defense Evasion","process":"C:\\Windows\\System32\\rundll32.exe","cmd_line":"rundll32.exe C:\\Users\\Public\\inject.dll,CreateRemoteThread target=explorer.exe","host":"CTDL-WKS-12","user":"ssmith","atomic_test":"T1055.001-1","class_uid":1007,"category_uid":1,"activity_id":1,"severity_id":4,"timestamp":"2026-10-15T09:38:47Z"}'
+# A process technique with a sub-technique and a full process path: Process Activity, Launch.
+raw_sample: '{"technique_uid":"T1055.001","technique_name":"Process Injection: Dynamic-link Library Injection","tactic_uid":"TA0005","tactic_name":"Defense Evasion","process":"C:\\Windows\\System32\\rundll32.exe","cmd_line":"rundll32.exe C:\\Users\\Public\\inject.dll,Start","host":"WEB1","user":"alice","atomic_test":"T1055.001-1","class_uid":1007,"category_uid":1,"activity_id":1,"severity_id":4,"timestamp":"2026-10-15T09:38:47Z"}'
 expected:
   class_uid: 1007
-  metadata.profiles: []
+  category_uid: 1
+  type_uid: 100701
+  activity_id: 1
+  severity_id: 4
+  time: 1792057127000
+  actor.user.name: alice
+  device.hostname: WEB1
+  device.type_id: 0
+  process.name: rundll32.exe
+  process.cmd_line: rundll32.exe C:\Users\Public\inject.dll,Start
+  process.file.name: rundll32.exe
+  process.file.path: C:\Windows\System32\rundll32.exe
+  process.user.name: alice
+  attacks:
+    - tactic: {uid: TA0005, name: Defense Evasion}
+      technique: {uid: T1055, name: Process Injection}
+      sub_technique: {uid: T1055.001, name: Dynamic-link Library Injection}
+  metadata.event_code: T1055.001-1
+  metadata.profiles: [security_control]

@@ -1,0 +1,16 @@
+---
+# A class the parser does not shape (File System Activity) becomes Process Activity; a bare process name has no path, an activity outside the class is replaced, and required identities are placeholders.
+raw_sample: '{"technique_uid":"T1070.004","technique_name":"Indicator Removal: File Deletion","process":"rm","cmd_line":"rm -rf /tmp/example","class_uid":1001,"activity_id":9,"severity_id":0}'
+expected:
+  class_uid: 1007
+  category_uid: 1
+  type_uid: 100701
+  severity_id: 0
+  process.name: rm
+  process.file.name: rm
+  process.file.path: null
+  process.user: null
+  actor.user.name: unknown
+  device.name: unknown
+  device.hostname: null
+  metadata.profiles: [security_control]

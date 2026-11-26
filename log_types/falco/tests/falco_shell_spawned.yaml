@@ -1,0 +1,18 @@
+---
+# A process rule on the host itself (no container): Process Activity, Launch, with the user as actor.
+raw_sample: '{"output":"A shell was spawned (user=bob shell=bash)","priority":"Notice","rule":"Terminal shell in host","time":"2026-10-15T09:17:00Z","output_fields":{"evt.type":"execve","proc.name":"bash","proc.cmdline":"bash -i","proc.pid":5151,"user.name":"bob","container.id":"host"},"hostname":"node1","source":"syscall"}'
+expected:
+  class_uid: 1007
+  category_uid: 1
+  type_uid: 100701
+  activity_id: 1
+  severity_id: 1
+  process.name: bash
+  process.pid: 5151
+  process.cmd_line: bash -i
+  process.user.name: bob
+  process.container: null
+  actor.user.name: bob
+  device.hostname: node1
+  attacks: null
+  metadata.profiles: []

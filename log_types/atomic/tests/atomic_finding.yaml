@@ -1,0 +1,17 @@
+---
+# A finding (the deprecated class 2001 becomes 2004): the technique is in finding_info, the process is evidence.
+raw_sample: '{"technique_uid":"T1003.001","technique_name":"OS Credential Dumping: LSASS Memory","tactic_uid":"TA0006","tactic_name":"Credential Access","process":"procdump.exe","cmd_line":"procdump.exe -ma lsass.exe","host":"web1","user":"alice","class_uid":2001,"severity_id":5}'
+expected:
+  class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 5
+  status_id: 1
+  finding_info.title: "OS Credential Dumping: LSASS Memory"
+  finding_info.attacks:
+    - tactic: {uid: TA0006, name: Credential Access}
+      technique: {uid: T1003, name: OS Credential Dumping}
+      sub_technique: {uid: T1003.001, name: LSASS Memory}
+  device.hostname: web1
+  attacks: null
+  metadata.profiles: []

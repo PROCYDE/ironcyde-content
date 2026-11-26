@@ -1,71 +1,134 @@
-# Caldera ability/step JSON → OCSF (gateway envelope).
+# MITRE Caldera operation links (one executed ability step, JSON) -> OCSF Process Activity (1007), Launch.
 #
-# Raw event (one chain step): host, username, command, ability{technique_id,...}
-# Sets parse_status=ok|no_match. Populates attacks[]. Never emits class_uid 2001.
+# Raw fields: host, username|user, command, pid, status, paw, link_id|id, agent_reported_time|finish,
+# executor{name}, ability{ability_id, name, technique_id, technique_name, tactic, tactic_id}.
+# The ATT&CK mapping goes to attacks (security_control profile). Events without a technique are rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && (.ability != null || .command != null) {
+  raw = .
+}
 if !is_object(raw) {
-    if .ability != null || .command != null {
-        raw = .
-    }
+  abort "no_match"
 }
-ability = {}
-technique_uid = ""
-if raw != null && is_object(raw.ability) {
-  ability = raw.ability
-  technique_uid = to_string(ability.technique_id) ?? ""
-}
-if raw != null && technique_uid == "" {
+ability = if is_object(raw.ability) { raw.ability } else { {} }
+technique_uid = to_string(ability.technique_id) ?? ""
+if technique_uid == "" {
   technique_uid = to_string(raw.technique_id) ?? ""
 }
-
-if raw == null || technique_uid == "" {
+if technique_uid == "" {
   abort "no_match"
+}
+
+technique_name = to_string(ability.technique_name) ?? ""
+ability_name = to_string(ability.name) ?? ""
+user = to_string(raw.username) ?? ""
+if user == "" {
+  user = to_string(raw.user) ?? ""
+}
+command = to_string(raw.command) ?? ""
+
+# Agent time first; the server's finish time and the ingest time are fallbacks.
+original_time = to_string(raw.agent_reported_time) ?? ""
+if original_time == "" {
+  original_time = to_string(raw.finish) ?? ""
+}
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
+
+# ATT&CK: "T1055.001" is a sub-technique of "T1055"; Caldera names it "<technique>: <sub-technique>".
+attack = {"tactic": {"uid": to_string(ability.tactic_id) ?? "", "name": to_string(ability.tactic) ?? ""}}
+if contains(technique_uid, ".") {
+  name_parts = split(technique_name, ": ", 2)
+  attack.technique = {"uid": string!(split(technique_uid, ".", 2)[0]), "name": name_parts[0]}
+  attack.sub_technique = {"uid": technique_uid, "name": name_parts[1]}
 } else {
-  technique_name = to_string(ability.technique_name) ?? ""
-  tactic_name = to_string(ability.tactic) ?? ""
-  tactic_uid = to_string(ability.tactic_id) ?? ""
-  host = to_string(raw.host) ?? ""
-  user = to_string(raw.username) ?? ""
-  if user == "" {
-    user = to_string(raw.user) ?? ""
-  }
-  command = to_string(raw.command) ?? ""
-  ability_name = to_string(ability.name) ?? "caldera-ability"
+  attack.technique = {"uid": technique_uid, "name": technique_name}
+}
 
-  class_uid = 1007
-  category_uid = 1
-  activity_id = 1
-  severity_id = 3
-  type_uid = class_uid * 100 + activity_id
-
-  attack = {
-    "technique": {"uid": technique_uid, "name": technique_name},
-    "tactic": {"uid": tactic_uid, "name": tactic_name},
-  }
-
-  . = {
-    "category_uid": category_uid,
-    "class_uid": class_uid,
-    "type_uid": type_uid,
-    "activity_id": activity_id,
-    "severity_id": severity_id,
-    "time": to_unix_timestamp(now(), unit: "milliseconds"),
-    "message": "e2e-caldera-" + technique_uid + " " + ability_name,
-    "actor": {"user": {"name": user}},
-    "device": {"hostname": host, "type_id": 1},
-    "process": {"name": "sh", "cmd_line": command, "uid": to_string(raw.paw) ?? "0"},
-    "metadata": {
-      "version": "1.9.0",
-      "product": {"name": "MITRE Caldera", "vendor_name": "MITRE"},
-      "profiles": [],
-    },
-    "unmapped": {
-      "attacks": [attack],
-      "caldera_ability": ability_name,
-      "technique_uid": technique_uid,
-    },
+# Caldera's link status is the command's exit status: 0 succeeded, anything else did not. Links that have not run
+# yet (negative states) or carry no status have no outcome. to_int(null) is 0, so a missing status is checked first.
+status_id = null
+status = null
+exit_code = null
+link_status = -1
+if raw.status != null {
+  link_status = to_int(raw.status) ?? -1
+}
+if link_status >= 0 {
+  exit_code = link_status
+  if link_status == 0 {
+    status_id = 1
+    status = "Success"
+  } else {
+    status_id = 2
+    status = "Failure"
   }
 }
+
+# The link identifies this execution; the event's own ID stands in when the link carries none (process needs one
+# of pid/uid).
+link_uid = to_string(raw.link_id) ?? ""
+if link_uid == "" {
+  link_uid = to_string(raw.id) ?? ""
+}
+process_uid = link_uid
+if process_uid == "" {
+  process_uid = string(%ironcyde.event_id) ?? ""
+}
+pid = to_int(raw.pid) ?? 0
+executor = to_string(raw.executor.name) ?? ""
+
+message = "Caldera ability " + technique_uid
+if ability_name != "" {
+  message = message + " " + ability_name
+}
+paw = to_string(raw.paw) ?? ""
+
+. = {
+  "category_uid": 1,
+  "class_uid": 1007,
+  "type_uid": 100701,
+  "activity_id": 1,
+  # An executed step is activity, not an alert: Informational.
+  "severity_id": 1,
+  "status_id": status_id,
+  "status": status,
+  "exit_code": exit_code,
+  "time": time_ms,
+  "message": message,
+  "actor": {"user": {"name": user}},
+  # type_id 0 (Unknown): the link does not say what kind of device the agent runs on.
+  "device": {"hostname": to_string(raw.host) ?? "", "type_id": 0},
+  "process": {"name": executor, "cmd_line": command, "uid": process_uid, "user": {"name": user}},
+  "attacks": [attack],
+  "metadata": {
+    "version": "1.9.0",
+    "product": {"name": "MITRE Caldera", "vendor_name": "MITRE"},
+    "log_name": "operation link",
+    "uid": link_uid,
+    "original_time": original_time,
+    "profiles": ["security_control"],
+  },
+  "unmapped": {
+    "ability_id": to_string(ability.ability_id) ?? "",
+    "ability_name": ability_name,
+    "paw": paw,
+  },
+}
+if pid > 0 {
+  .process.pid = pid
+}
+if paw != "" {
+  .device.agent_list = [{"uid": paw, "name": "Caldera agent"}]
+}
+# A link without a user or host still needs an actor and a device identity.
+if user == "" {
+  .actor.user.name = "unknown"
+  del(.process.user)
+}
+. = compact(., array: false)
