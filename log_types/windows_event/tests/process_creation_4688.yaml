@@ -1,0 +1,24 @@
+---
+# A new process with hexadecimal IDs: Launch, with the creator as parent and actor, and the new process's own account.
+raw_sample: '{"EventID":4688,"Computer":"WEB1","event_data":{"SubjectUserSid":"S-1-5-21-1111111111-2222222222-3333333333-1001","SubjectUserName":"Alice","SubjectDomainName":"EXAMPLE","NewProcessId":"0x1f4c","NewProcessName":"C:\\Windows\\System32\\cmd.exe","TokenElevationType":"%%1936","ProcessId":"0x1a4","CommandLine":"cmd.exe /c whoami","TargetUserSid":"S-1-0-0","TargetUserName":"svc-task","TargetDomainName":"EXAMPLE","ParentProcessName":"C:\\Windows\\explorer.exe","MandatoryLabel":"S-1-16-12288"},"TimeCreated":"2026-10-15T09:25:00Z","EventRecordID":4712}'
+expected:
+  class_uid: 1007
+  category_uid: 1
+  type_uid: 100701
+  activity_id: 1
+  process.name: cmd.exe
+  process.pid: 8012
+  process.cmd_line: cmd.exe /c whoami
+  process.file.path: C:\Windows\System32\cmd.exe
+  process.file.name: cmd.exe
+  process.user.name: svc-task
+  process.parent_process.name: explorer.exe
+  process.parent_process.pid: 420
+  process.parent_process.file.path: C:\Windows\explorer.exe
+  actor.user.name: alice
+  actor.user.domain: example
+  actor.process.name: explorer.exe
+  device.hostname: web1
+  metadata.event_code: '4688'
+  metadata.uid: '4712'
+  metadata.profiles: []

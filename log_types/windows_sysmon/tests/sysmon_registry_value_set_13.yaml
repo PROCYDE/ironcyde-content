@@ -1,0 +1,14 @@
+---
+# RegistryEvent 13, SetValue with a string: Registry Value Activity, Set, with the string data.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":13,"event_data":{"UtcTime":"2026-10-15 09:47:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\regedit.exe","User":"EXAMPLE\\alice","EventType":"SetValue","TargetObject":"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\Updater","Details":"C:\\Users\\Public\\updater.exe"}}'
+expected:
+  class_uid: 201002
+  category_uid: 1
+  type_uid: 20100202
+  activity_id: 2
+  reg_value.path: 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+  reg_value.name: Updater
+  reg_value.reg_string_data: 'C:\Users\Public\updater.exe'
+  reg_value.type_id: null
+  actor.process.name: regedit.exe
+  metadata.profiles: []

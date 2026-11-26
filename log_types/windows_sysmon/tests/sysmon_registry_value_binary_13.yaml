@@ -1,0 +1,13 @@
+---
+# SetValue with binary data (Sysmon logs no bytes) on a target without a key path.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":13,"event_data":{"UtcTime":"2026-10-15 09:47:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\regedit.exe","User":"EXAMPLE\\alice","EventType":"SetValue","TargetObject":"Blob","Details":"Binary Data"}}'
+expected:
+  class_uid: 201002
+  type_uid: 20100202
+  reg_value.path: Blob
+  reg_value.name: Blob
+  reg_value.is_default: null
+  reg_value.type_id: 1
+  reg_value.type: REG_BINARY
+  reg_value.reg_string_data: null
+  metadata.profiles: []

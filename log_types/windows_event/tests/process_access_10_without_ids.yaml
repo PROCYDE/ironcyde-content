@@ -1,0 +1,11 @@
+---
+# A ProcessAccess record with an unqualified user and no process IDs: the user alone is the actor.
+raw_sample: '{"EventID":10,"Computer":"WEB1","event_data":{"SourceImage":"C:\\Tools\\procdump.exe","TargetImage":"C:\\Windows\\System32\\lsass.exe","SourceUser":"alice"}}'
+expected:
+  class_uid: 1007
+  type_uid: 100703
+  actor.user.name: alice
+  actor.process: null
+  process.parent_process: null
+  requested_permissions: null
+  metadata.profiles: []

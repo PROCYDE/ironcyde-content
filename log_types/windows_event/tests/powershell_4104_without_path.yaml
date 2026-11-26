@@ -1,0 +1,12 @@
+---
+# A script block typed at the prompt (no path) by an unqualified user, without script text: the message stands in for the content.
+raw_sample: '{"EventID":4104,"Computer":"WEB1","UserID":"Alice","message":"Creating Scriptblock text (1 of 1):","event_data":{"MessageNumber":"1","MessageTotal":"1","ScriptBlockId":"{22222222-2222-2222-2222-222222222222}"}}'
+expected:
+  class_uid: 1009
+  type_uid: 100901
+  actor.user.name: alice
+  script.uid: '{22222222-2222-2222-2222-222222222222}'
+  script.name: null
+  script.file: null
+  script.script_content.value: 'Creating Scriptblock text (1 of 1):'
+  metadata.profiles: []

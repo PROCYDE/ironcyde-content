@@ -1,0 +1,7 @@
+---
+# RegistryEvent 12 with a value event type the parser does not know: Registry Value Activity with an Unknown activity.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":12,"event_data":{"UtcTime":"2026-10-15 09:47:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\regedit.exe","User":"EXAMPLE\\alice","EventType":"RenameValue","TargetObject":"HKLM\\SOFTWARE\\Example\\Setting"}}'
+expected:
+  class_uid: 201002
+  type_uid: 20100200
+  metadata.profiles: []

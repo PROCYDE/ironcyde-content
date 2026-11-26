@@ -1,0 +1,12 @@
+---
+# ProcessTerminate with a rule name that carries a technique (no sub-technique) and a user without a domain.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":5,"event_data":{"RuleName":"technique_id=T1489,technique_name=Service Stop","UtcTime":"2026-10-15 09:41:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\System32\\net.exe","User":"alice"}}'
+expected:
+  class_uid: 1007
+  type_uid: 100702
+  process.name: net.exe
+  actor.user.name: alice
+  actor.user.domain: null
+  attacks:
+    - technique: {uid: T1489, name: Service Stop}
+  metadata.profiles: [security_control]

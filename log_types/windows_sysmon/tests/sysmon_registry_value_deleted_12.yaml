@@ -1,0 +1,11 @@
+---
+# RegistryEvent 12, DeleteValue: a value, so Registry Value Activity, Delete.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":12,"event_data":{"UtcTime":"2026-10-15 09:47:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\regedit.exe","User":"EXAMPLE\\alice","EventType":"DeleteValue","TargetObject":"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\Updater"}}'
+expected:
+  class_uid: 201002
+  category_uid: 1
+  type_uid: 20100204
+  activity_id: 4
+  reg_value.path: 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+  reg_value.name: Updater
+  metadata.profiles: []

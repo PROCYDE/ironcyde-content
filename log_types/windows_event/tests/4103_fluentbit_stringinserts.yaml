@@ -1,13 +1,20 @@
 ---
 raw_sample: '{"date":1794911704.997902,"ProviderName":"Microsoft-Windows-PowerShell","ProviderGuid":"{A0C1853B-5C40-4B15-8766-3CF1C58F985A}","EventID":4103,"Version":1,"Level":4,"Task":106,"Opcode":0,"Keywords":"0x0","TimeCreated":"2026-11-17 05:35:03 -0500","EventRecordID":12345,"Channel":"Microsoft-Windows-PowerShell/Operational","Computer":"DC01.corp.example.test","UserID":"CORP\\domainuser","Message":"CommandInvocation(Get-ChildItem): \"Get-ChildItem\"","StringInserts":["Context: Severity = Informational","","CommandInvocation(Get-ChildItem): \"Get-ChildItem\""],"range_id":"TEST"}'
 expected:
-  activity_id: 1
-  actor.user.name: domainuser
   class_uid: 1009
+  category_uid: 1
+  type_uid: 100901
+  activity_id: 1
+  time: 1794911703000
+  actor.user.name: domainuser
+  actor.user.domain: corp
   device.hostname: dc01.corp.example.test
+  script.type_id: 2
+  script.name: Get-ChildItem
+  script.script_content.value: 'CommandInvocation(Get-ChildItem): "Get-ChildItem"'
   metadata.event_code: '4103'
   metadata.log_name: Microsoft-Windows-PowerShell/Operational
   metadata.log_provider: Microsoft-Windows-PowerShell
   metadata.uid: '12345'
-  script.name: Get-ChildItem
-  script.script_content.value: 'CommandInvocation(Get-ChildItem): "Get-ChildItem"'
+  metadata.original_time: 2026-11-17 05:35:03 -0500
+  metadata.profiles: []

@@ -1,7 +1,14 @@
 ---
 raw_sample: '{"date":1794909773.635043,"ProviderName":"Microsoft-Windows-Security-Auditing","ProviderGuid":"{54849625-5478-4994-A5BA-3E3B0328C30D}","Qualifiers":"","EventID":4648,"Version":0,"Level":0,"Task":12544,"Opcode":0,"Keywords":"0x8020000000000000","TimeCreated":"2026-11-17 05:02:49 -0500","EventRecordID":157612,"ActivityID":"{00000000-0000-0000-0000-000000000001}","RelatedActivityID":"","ProcessID":644,"ThreadID":8148,"Channel":"Security","Computer":"DC01.corp.example.test","UserID":"","Message":"A logon was attempted using explicit credentials.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-20\r\n\tAccount Name:\t\tDC01$\r\n\tAccount Domain:\t\tcorp\r\n\tLogon ID:\t\t0x3E4\r\n\tLogon GUID:\t\t{00000000-0000-0000-0000-000000000000}\r\n\r\nAccount Whose Credentials Were Used:\r\n\tAccount Name:\t\tlocaluser\r\n\tAccount Domain:\t\tcorp\r\n\tLogon GUID:\t\t{11111111-1111-1111-1111-111111111111}\r\n\r\nTarget Server:\r\n\tTarget Server Name:\tlocalhost\r\n\tAdditional Information:\tlocalhost\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0xbcc\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nNetwork Information:\r\n\tNetwork Address:\t-\r\n\tPort:\t\t\t-\r\n\r\nThis event is generated when a process attempts to log on an account by explicitly specifying that account\u2019s credentials.  This most commonly occurs in batch-type configurations such as scheduled tasks, or when using the RUNAS command.","StringInserts":["S-1-5-20","DC01$","corp","0x3e4","{00000000-0000-0000-0000-000000000000}","localuser","corp","{11111111-1111-1111-1111-111111111111}","localhost","localhost","0xbcc","C:\\Windows\\System32\\svchost.exe","-","-"],"range_id":"TEST"}'
 expected:
-  activity_id: 1
   class_uid: 3002
-  metadata.event_code: '4648'
+  type_uid: 300201
+  activity_id: 1
+  status_id: null
   user.name: localuser
+  actor.user.name: dc01$
+  src_endpoint.hostname: dc01.corp.example.test
+  dst_endpoint.hostname: dc01.corp.example.test
+  logon_type_id: null
+  metadata.event_code: '4648'
+  metadata.profiles: [host]

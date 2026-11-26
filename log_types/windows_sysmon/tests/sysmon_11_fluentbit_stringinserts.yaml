@@ -1,7 +1,15 @@
 ---
 raw_sample: '{"date":1794911704.997902,"ProviderName":"Microsoft-Windows-Sysmon","ProviderGuid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Qualifiers":"","EventID":11,"Version":2,"Level":4,"Task":11,"Opcode":0,"Keywords":"0x8000000000000000","TimeCreated":"2026-11-17 05:35:03 -0500","EventRecordID":71084,"ActivityID":"","RelatedActivityID":"","ProcessID":5832,"ThreadID":5700,"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"FS01.corp.example.test","UserID":"NT AUTHORITY\\SYSTEM","Message":"File created:\r\nRuleName: -\r\nUtcTime: 2026-11-17 10:35:03.069\r\nProcessGuid: {c0d53e6b-a107-6afa-8d00-000000000900}\r\nProcessId: 5072\r\nImage: C:\\Windows\\Explorer.EXE\r\nTargetFilename: C:\\Users\\domainuser\\AppData\\Roaming\\Microsoft\\Windows\\Themes\\TranscodedWallpaper\r\nCreationUtcTime: 2026-11-16 06:22:34.734\r\nUser: corp\\domainuser","StringInserts":["-","2026-11-17 10:35:03.069","{C0D53E6B-A107-6AFA-8D00-000000000900}",5072,"C:\\Windows\\Explorer.EXE","C:\\Users\\domainuser\\AppData\\Roaming\\Microsoft\\Windows\\Themes\\TranscodedWallpaper","2026-11-16 06:22:34.734","corp\\domainuser"],"range_id":"TEST"}'
 expected:
-  activity_id: 1
-  actor.user.name: domainuser
   class_uid: 1001
-  file.path: C:\Users\domainuser\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper
+  category_uid: 1
+  type_uid: 100101
+  activity_id: 1
+  file.path: 'C:\Users\domainuser\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper'
+  file.name: TranscodedWallpaper
+  file.created_time: 1794810154734
+  actor.process.name: Explorer.EXE
+  actor.user.name: domainuser
+  actor.user.domain: corp
+  time: 1794911703069
+  metadata.profiles: []

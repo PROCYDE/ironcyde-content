@@ -1,495 +1,475 @@
-# Windows Security Event Log JSON → OCSF.
+# Windows event log records (JSON) -> OCSF.
 #
-# Gateway envelope: event=<winevt JSON> with event_id / EventID, event_data / EventData,
-# computer / Computer. Uses a cheap Event-ID switch for the common event IDs.
-# Never emits class_uid 2001.
-# Class-shaped attributes only: Auth keeps user+dst_endpoint; Process keeps
-# process+device.type_id and drops Auth-only fields.
+# Reads EventID with event_data|EventData (named values) or Fluent Bit winevtlog's positional StringInserts.
+#   4624, 4625, 4648, 4776 -> Authentication (3002): Logon;  4634 -> Logoff
+#   4768 -> Authentication: Authentication Ticket;  4769 -> Service Ticket Request
+#   4672 -> Authorize Session (3003): Assign Privileges
+#   4688 -> Process Activity (1007): Launch
+#   10 with SourceImage (Sysmon ProcessAccess sent as a Windows event) -> Process Activity: Open
+#   5156 -> Network Activity (4001): Open
+#   4103, 4104 -> Script Activity (1009): Execute
+# Fail closed: any other event ID is rejected, so unknown events never become fake authentications.
+# The computer that logged the event is the device (host profile where the class asks for it). Host, domain and
+# account names are lowercased, as Windows treats them case-insensitively.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
 text = string(.message) ?? ""
 raw = parse_json(text) ?? null
 if !is_object(raw) {
-    if .EventID != null || .event_data != null || .EventData != null || .channel != null {
-        raw = .
-    }
+if .EventID != null || .event_data != null || .EventData != null || .channel != null {
+    raw = .
+}
 }
 if !is_object(raw) {
-    abort "no_match"
+abort "no_match"
 }
-    ed = {}
-    if is_object(raw.event_data) {
-        ed = raw.event_data
-    } else if is_object(raw.EventData) {
-        ed = raw.EventData
-    }
+ed = {}
+if is_object(raw.event_data) {
+    ed = raw.event_data
+} else if is_object(raw.EventData) {
+    ed = raw.EventData
+}
 
-    eid = to_int(raw.EventID) ?? 0
-    if eid == 0 {
-        eid = to_int(raw.EventId) ?? 0
-    }
-    wevt = to_int(raw.event_id) ?? 0
-    if eid == 0 && wevt > 0 && wevt < 100000 {
-        eid = wevt
-    }
+eid = to_int(raw.EventID) ?? 0
+if eid == 0 {
+    eid = to_int(raw.EventId) ?? 0
+}
+wevt = to_int(raw.event_id) ?? 0
+if eid == 0 && wevt > 0 && wevt < 100000 {
+    eid = wevt
+}
 
-    # Fluent Bit winevtlog sends the event data as a positional list (StringInserts) without names.
-    # Name the values by the event template's field order, so the rest of the parser works unchanged.
-    if ed == {} && is_array(raw.StringInserts) {
-        field_names = get({"4624": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "LogonType", "LogonProcessName", "AuthenticationPackageName", "WorkstationName", "LogonGuid", "TransmittedServices", "LmPackageName", "KeyLength", "ProcessId", "ProcessName", "IpAddress", "IpPort", "ImpersonationLevel", "RestrictedAdminMode", "TargetOutboundUserName", "TargetOutboundDomainName", "VirtualAccount", "TargetLinkedLogonId", "ElevatedToken", "RemoteCredentialGuard"], "4625": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "TargetUserSid", "TargetUserName", "TargetDomainName", "Status", "FailureReason", "SubStatus", "LogonType", "LogonProcessName", "AuthenticationPackageName", "WorkstationName", "TransmittedServices", "LmPackageName", "KeyLength", "ProcessId", "ProcessName", "IpAddress", "IpPort"], "4634": ["TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "LogonType"], "4648": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "LogonGuid", "TargetUserName", "TargetDomainName", "TargetLogonGuid", "TargetServerName", "TargetInfo", "ProcessId", "ProcessName", "IpAddress", "IpPort"], "4672": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "PrivilegeList"], "4688": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "NewProcessId", "NewProcessName", "TokenElevationType", "ProcessId", "CommandLine", "TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "ParentProcessName", "MandatoryLabel"], "4768": ["TargetUserName", "TargetDomainName", "TargetSid", "ServiceName", "ServiceSid", "TicketOptions", "Status", "TicketEncryptionType", "PreAuthType", "IpAddress", "IpPort", "CertIssuerName", "CertSerialNumber", "CertThumbprint"], "4769": ["TargetUserName", "TargetDomainName", "ServiceName", "ServiceSid", "TicketOptions", "TicketEncryptionType", "IpAddress", "IpPort", "Status", "LogonGuid", "TransmittedServices"], "4776": ["PackageName", "TargetUserName", "Workstation", "Status"], "5156": ["ProcessID", "Application", "Direction", "SourceAddress", "SourcePort", "DestAddress", "DestPort", "Protocol", "FilterRTID", "LayerName", "LayerRTID", "RemoteUserID", "RemoteMachineID"], "4103": ["ContextInfo", "UserData", "Payload"], "4104": ["MessageNumber", "MessageTotal", "ScriptBlockText", "ScriptBlockId", "Path"]}, [to_string(eid)]) ?? []
-        inserts = array(raw.StringInserts) ?? []
-        for_each(array(field_names) ?? []) -> |i, n| {
-            v = get(inserts, [i]) ?? null
-            if v != null && v != "" && v != "-" {
-                ed = set(ed, [string(n) ?? ""], v) ?? ed
-            }
+# Fluent Bit winevtlog sends the event data as a positional list (StringInserts) without names.
+# Name the values by the event template's field order, so the rest of the parser works unchanged.
+if ed == {} && is_array(raw.StringInserts) {
+    field_names = get({"4624": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "LogonType", "LogonProcessName", "AuthenticationPackageName", "WorkstationName", "LogonGuid", "TransmittedServices", "LmPackageName", "KeyLength", "ProcessId", "ProcessName", "IpAddress", "IpPort", "ImpersonationLevel", "RestrictedAdminMode", "TargetOutboundUserName", "TargetOutboundDomainName", "VirtualAccount", "TargetLinkedLogonId", "ElevatedToken", "RemoteCredentialGuard"], "4625": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "TargetUserSid", "TargetUserName", "TargetDomainName", "Status", "FailureReason", "SubStatus", "LogonType", "LogonProcessName", "AuthenticationPackageName", "WorkstationName", "TransmittedServices", "LmPackageName", "KeyLength", "ProcessId", "ProcessName", "IpAddress", "IpPort"], "4634": ["TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "LogonType"], "4648": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "LogonGuid", "TargetUserName", "TargetDomainName", "TargetLogonGuid", "TargetServerName", "TargetInfo", "ProcessId", "ProcessName", "IpAddress", "IpPort"], "4672": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "PrivilegeList"], "4688": ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "NewProcessId", "NewProcessName", "TokenElevationType", "ProcessId", "CommandLine", "TargetUserSid", "TargetUserName", "TargetDomainName", "TargetLogonId", "ParentProcessName", "MandatoryLabel"], "4768": ["TargetUserName", "TargetDomainName", "TargetSid", "ServiceName", "ServiceSid", "TicketOptions", "Status", "TicketEncryptionType", "PreAuthType", "IpAddress", "IpPort", "CertIssuerName", "CertSerialNumber", "CertThumbprint"], "4769": ["TargetUserName", "TargetDomainName", "ServiceName", "ServiceSid", "TicketOptions", "TicketEncryptionType", "IpAddress", "IpPort", "Status", "LogonGuid", "TransmittedServices"], "4776": ["PackageName", "TargetUserName", "Workstation", "Status"], "5156": ["ProcessID", "Application", "Direction", "SourceAddress", "SourcePort", "DestAddress", "DestPort", "Protocol", "FilterRTID", "LayerName", "LayerRTID", "RemoteUserID", "RemoteMachineID"], "4103": ["ContextInfo", "UserData", "Payload"], "4104": ["MessageNumber", "MessageTotal", "ScriptBlockText", "ScriptBlockId", "Path"]}, [to_string(eid)]) ?? []
+    inserts = array(raw.StringInserts) ?? []
+    for_each(array(field_names) ?? []) -> |i, n| {
+        v = get(inserts, [i]) ?? null
+        if v != null && v != "" && v != "-" {
+            ed = set(ed, [string(n) ?? ""], v) ?? ed
         }
     }
+}
 
-    computer = downcase(to_string(raw.computer) ?? "")
-    if computer == "" {
-        computer = downcase(to_string(raw.Computer) ?? "")
-    }
-    if computer == "" {
-        computer = downcase(to_string(raw.host) ?? "")
-    }
-    if computer == "" {
-        computer = "windows-host"
-    }
+computer = downcase(to_string(raw.computer) ?? "")
+if computer == "" {
+  computer = downcase(to_string(raw.Computer) ?? "")
+}
+if computer == "" {
+  computer = downcase(to_string(raw.host) ?? "")
+}
 
-    msg = to_string(raw.Message) ?? ""
-    if msg == "" {
-        msg = to_string(raw.message) ?? ""
-    }
-    if contains(msg, "\r\n") {
-        msg = string!(split(msg, "\r\n", 2)[0])
-    } else if contains(msg, "\n") {
-        msg = string!(split(msg, "\n", 2)[0])
-    }
-    if msg == "" {
-        msg = "windows event " + to_string(eid)
-    }
+known = includes([4688, 4672, 4624, 4625, 4634, 4768, 4769, 5156, 4103, 4104, 4776, 4648], eid)
+if eid == 10 && (to_string(ed.SourceImage) ?? "") != "" {
+  known = true
+}
+if !known {
+  abort "no_match"
+}
 
-    record_uid = to_string(raw.record_id) ?? ""
-    if record_uid == "" {
-        record_uid = to_string(raw.EventRecordID) ?? ""
-    }
-    if record_uid == "" {
-        record_uid = to_string(eid)
-    }
-    log_name = to_string(raw.channel) ?? ""
-    if log_name == "" {
-        log_name = to_string(raw.Channel) ?? ""
-    }
-    if log_name == "" {
-        if eid == 4103 || eid == 4104 {
-            log_name = "Microsoft-Windows-PowerShell/Operational"
-        } else {
-            log_name = "Security"
-        }
-    }
-    log_provider = to_string(raw.provider_name) ?? ""
-    if log_provider == "" {
-        log_provider = to_string(raw.ProviderName) ?? ""
-    }
-    if log_provider == "" {
-        if eid == 4103 || eid == 4104 {
-            log_provider = "Microsoft-Windows-PowerShell"
-        } else {
-            log_provider = "Microsoft-Windows-Security-Auditing"
-        }
-    }
+msg = to_string(raw.Message) ?? ""
+if msg == "" {
+  msg = to_string(raw.message) ?? ""
+}
+if contains(msg, "\r\n") {
+  msg = string!(split(msg, "\r\n", 2)[0])
+} else if contains(msg, "\n") {
+  msg = string!(split(msg, "\n", 2)[0])
+}
+if msg == "" {
+  msg = "Windows event " + to_string(eid)
+}
 
-    time_ms = 0
-    ts_str = to_string(raw.timestamp) ?? ""
-    if ts_str == "" {
-        ts_str = to_string(raw.TimeCreated) ?? ""
-    }
-    if ts_str != "" {
-        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-        if parsed_ts != null {
-            time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
-        }
-    }
-    if time_ms == 0 {
-        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    }
+record_uid = to_string(raw.record_id) ?? ""
+if record_uid == "" {
+  record_uid = to_string(raw.EventRecordID) ?? ""
+}
+if record_uid == "" {
+  record_uid = to_string(raw.RecordNumber) ?? ""
+}
+powershell = eid == 4103 || eid == 4104
+log_name = to_string(raw.channel) ?? ""
+if log_name == "" {
+  log_name = to_string(raw.Channel) ?? ""
+}
+if log_name == "" {
+  log_name = if powershell { "Microsoft-Windows-PowerShell/Operational" } else if eid == 10 { "Microsoft-Windows-Sysmon/Operational" } else { "Security" }
+}
+log_provider = to_string(raw.provider_name) ?? ""
+if log_provider == "" {
+  log_provider = to_string(raw.ProviderName) ?? ""
+}
+if log_provider == "" {
+  log_provider = if powershell { "Microsoft-Windows-PowerShell" } else if eid == 10 { "Microsoft-Windows-Sysmon" } else { "Microsoft-Windows-Security-Auditing" }
+}
 
-    # Fail closed: only allowlisted Security EventIDs promote. Unknown / CBS
-    # (EventID 0) / Application text must not become fake Authentication.
-    # Also promote Kerberos (4768/4769), WFP connect (5156), and Sysmon-shaped
-    # ProcessAccess (10 + SourceImage) when mis-tagged as windows_event.
-    known = false
-    if eid == 4688 || eid == 4672 || eid == 4624 || eid == 4625 || eid == 4634 || eid == 4768 || eid == 4769 || eid == 5156 || eid == 4103 || eid == 4104 || eid == 4776 || eid == 4648 {
-        known = true
+# ISO 8601, or Fluent Bit's "2026-11-17 05:02:49 -0500".
+original_time = to_string(raw.timestamp) ?? ""
+if original_time == "" {
+  original_time = to_string(raw.TimeCreated) ?? ""
+}
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? parse_timestamp(original_time, format: "%Y-%m-%d %H:%M:%S %z") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
+
+# Windows writes "-" for an empty value. Names are lowercased; SIDs and IDs are not.
+subject = {"name": downcase(to_string(ed.SubjectUserName) ?? ""), "uid": to_string(ed.SubjectUserSid) ?? "", "domain": downcase(to_string(ed.SubjectDomainName) ?? "")}
+target = {"name": downcase(to_string(ed.TargetUserName) ?? ""), "uid": to_string(ed.TargetUserSid) ?? "", "domain": downcase(to_string(ed.TargetDomainName) ?? "")}
+if target.uid == "" {
+  target.uid = to_string(ed.TargetSid) ?? ""
+}
+if subject.name == "-" {
+  subject = {}
+}
+if target.name == "-" {
+  target = {}
+}
+subject = compact(filter(subject) -> |_k, v| { v != "-" })
+target = compact(filter(target) -> |_k, v| { v != "-" })
+has_subject = exists(subject.name) || exists(subject.uid)
+has_target = exists(target.name) || exists(target.uid)
+
+# type_id 0 (Unknown): the event does not say whether the computer is a server or a workstation. Classes that
+# require a device get a placeholder when the record names no computer.
+device = {"hostname": computer, "type_id": 0}
+if computer == "" {
+  device = {"name": "unknown", "type_id": 0}
+}
+
+metadata = {
+  "version": "1.9.0",
+  "uid": record_uid,
+  "event_code": to_string(eid),
+  "log_name": log_name,
+  "log_provider": log_provider,
+  "original_time": original_time,
+  "product": {"name": "Windows", "vendor_name": "Microsoft"},
+  "profiles": [],
+}
+
+class_uid = 3002
+activity_id = 1
+. = {"severity_id": 1, "time": time_ms, "message": msg, "metadata": metadata}
+
+if eid == 4688 || eid == 10 {
+  class_uid = 1007
+  # 4688: NewProcessName/NewProcessId is the process, ProcessId/ParentProcessName its creator.
+  # 10 (ProcessAccess): TargetImage is the process that was opened, SourceImage the one that opened it.
+  process_path = to_string(ed.NewProcessName) ?? ""
+  process_pid_raw = to_string(ed.NewProcessId) ?? ""
+  parent_path = to_string(ed.ParentProcessName) ?? ""
+  parent_pid_raw = to_string(ed.ProcessId) ?? ""
+  if eid == 10 {
+    activity_id = 3
+    process_path = to_string(ed.TargetImage) ?? ""
+    process_pid_raw = to_string(ed.TargetProcessId) ?? ""
+    parent_path = to_string(ed.SourceImage) ?? ""
+    parent_pid_raw = to_string(ed.SourceProcessId) ?? ""
+  }
+  # IDs are hexadecimal ("0x1a4") in Security events and decimal in Sysmon; parse_int reads the prefix.
+  process_pid = parse_int(process_pid_raw) ?? 0
+  parent_pid = parse_int(parent_pid_raw) ?? 0
+  process = {"cmd_line": to_string(ed.CommandLine) ?? ""}
+  if process_path != "" {
+    process_name = string(split(process_path, "\\")[-1]) ?? process_path
+    process.name = process_name
+    process.file = {"name": process_name, "type_id": 1}
+    if contains(process_path, "\\") {
+      process.file.path = process_path
     }
-    if eid == 10 {
-        src_img = to_string(ed.SourceImage) ?? ""
-        if src_img != "" {
-            known = true
-        }
+  }
+  # OCSF needs a process identifier: the PID, else this event's own ID.
+  if process_pid > 0 {
+    process.pid = process_pid
+  } else {
+    process.uid = string(%ironcyde.event_id) ?? ""
+  }
+  # 4688 names the new process's account as target when it differs from the creator's.
+  if eid == 4688 && has_target {
+    process.user = target
+  }
+  parent = {}
+  if parent_path != "" {
+    parent_name = string(split(parent_path, "\\")[-1]) ?? parent_path
+    parent = {"name": parent_name, "file": {"name": parent_name, "type_id": 1}}
+    if contains(parent_path, "\\") {
+      parent.file.path = parent_path
     }
-    if !known {
-        abort "no_match"
-    } else {
-    category_uid = 3
-    class_uid = 3002
-    class_name = "Authentication"
-    category_name = "Identity & Access Management"
-    activity_id = 99
-    severity_id = 1
-    status_id = 1
-    actor_name = ""
-    actor_uid = ""
-    actor_domain = ""
-    process_name = ""
-    process_cmd = ""
-    process_pid = 0
-    parent_name = ""
+  }
+  if parent_pid > 0 {
+    parent.pid = parent_pid
+  }
+  # A parent process needs its PID; without one only its name is known, and that stays with the actor.
+  actor = {}
+  if parent_pid > 0 {
+    process.parent_process = parent
+    actor.process = parent
+  }
+  if eid == 10 {
+    source_user = downcase(to_string(ed.SourceUser) ?? "")
+    if contains(source_user, "\\") {
+      user_parts = split(source_user, "\\", 2)
+      actor.user = {"name": user_parts[1], "domain": user_parts[0]}
+    } else if source_user != "" {
+      actor.user = {"name": source_user}
+    }
+    access = parse_int(to_string(ed.GrantedAccess) ?? "") ?? 0
+    if access > 0 {
+      .requested_permissions = access
+    }
+  } else if has_subject {
+    actor.user = subject
+  }
+  # actor is required; an event that names neither a creator process nor an account names none.
+  if length(actor) == 0 {
+    actor = {"user": {"name": "unknown"}}
+  }
+  .actor = actor
+  .device = device
+  .process = process
+  orphan_parent = parent_path
+  if parent_pid > 0 {
+    orphan_parent = ""
+  }
+  .unmapped = {
+    "parent_process_name": orphan_parent,
+    "token_elevation_type": to_string(ed.TokenElevationType) ?? "",
+    "mandatory_label": to_string(ed.MandatoryLabel) ?? "",
+  }
+} else if eid == 5156 {
+  class_uid = 4001
+  # device and actor belong to the host profile in Network Activity; the connecting process is the actor's.
+  .metadata.profiles = ["host"]
+  src_ip = to_string(ed.SourceAddress) ?? ""
+  if !(is_ipv4(src_ip) || is_ipv6(src_ip)) {
     src_ip = ""
-    src_port = 0
-    src_host = ""
+  }
+  dst_ip = to_string(ed.DestAddress) ?? ""
+  if !(is_ipv4(dst_ip) || is_ipv6(dst_ip)) {
     dst_ip = ""
-    dst_port = 0
+  }
+  if src_ip == "" && dst_ip == "" {
+    abort "no_match"
+  }
+  src = {"ip": src_ip}
+  src_port = to_int(ed.SourcePort) ?? 0
+  if src_ip != "" && src_port > 0 && src_port < 65536 {
+    src.port = src_port
+  }
+  dst = {"ip": dst_ip}
+  dst_port = to_int(ed.DestPort) ?? 0
+  if dst_ip != "" && dst_port > 0 && dst_port < 65536 {
+    dst.port = dst_port
+  }
+  .src_endpoint = src
+  .dst_endpoint = dst
+  # Direction is a message ID: %%14592 inbound, %%14593 outbound. Protocol is the IP protocol number.
+  direction = to_string(ed.Direction) ?? ""
+  direction_id = if direction == "%%14592" { 1 } else if direction == "%%14593" { 2 } else { 0 }
+  connection_info = {"direction_id": direction_id}
+  if ed.Protocol != null {
+    proto_num = to_int(ed.Protocol) ?? -1
+    if proto_num >= 0 {
+      connection_info.protocol_num = proto_num
+      connection_info.protocol_name = get({"1": "icmp", "6": "tcp", "17": "udp", "58": "ipv6-icmp"}, [to_string(proto_num)]) ?? null
+    }
+  }
+  .connection_info = connection_info
+  .device = device
+  application = to_string(ed.Application) ?? ""
+  process_pid = to_int(ed.ProcessID) ?? 0
+  if process_pid == 0 {
+    process_pid = to_int(ed.ProcessId) ?? 0
+  }
+  if application != "" && process_pid > 0 {
+    application_name = string(split(application, "\\")[-1]) ?? application
+    .actor = {"process": {"name": application_name, "pid": process_pid, "file": {"name": application_name, "type_id": 1}}}
+    if contains(application, "\\") {
+      .actor.process.file.path = application
+    }
+  } else {
+    .unmapped = {"application": application}
+  }
+} else if powershell {
+  class_uid = 1009
+  # 4103 (module logging) carries the invocation in Payload, 4104 (script block logging) the script block text.
+  content = to_string(ed.ScriptBlockText) ?? ""
+  if content == "" {
+    content = to_string(ed.Payload) ?? ""
+  }
+  if content == "" {
+    content = msg
+  }
+  script = {"type_id": 2, "type": "PowerShell", "script_content": {"value": content}, "uid": to_string(ed.ScriptBlockId) ?? ""}
+  script_path = to_string(ed.Path) ?? ""
+  if script_path != "" {
+    script_name = string(split(script_path, "\\")[-1]) ?? script_path
+    script.name = script_name
+    script.file = {"name": script_name, "path": script_path, "type_id": 1}
+  } else if eid == 4103 {
+    invocation = parse_regex(content, r'(?m)^CommandInvocation\((?P<name>[^)]+)\)') ?? {}
+    script.name = string(invocation.name) ?? null
+  }
+  .script = script
+  .device = device
+  # The record's UserID is the account PowerShell ran as: a SID, or DOMAIN\name. actor is required.
+  user_id = to_string(raw.UserID) ?? ""
+  actor_user = {"name": "unknown"}
+  if starts_with(user_id, "S-1-") {
+    actor_user = {"uid": user_id}
+  } else if contains(user_id, "\\") {
+    user_parts = split(downcase(user_id), "\\", 2)
+    actor_user = {"name": user_parts[1], "domain": user_parts[0]}
+  } else if user_id != "" {
+    actor_user = {"name": downcase(user_id)}
+  }
+  .actor = {"user": actor_user}
+  .unmapped = {
+    "message_number": to_string(ed.MessageNumber) ?? "",
+    "message_total": to_string(ed.MessageTotal) ?? "",
+    "context_info": to_string(ed.ContextInfo) ?? "",
+  }
+} else {
+  # Authentication and Authorize Session. device belongs to the host profile in both.
+  if computer != "" {
+    .device = device
+    .metadata.profiles = ["host"]
+  }
+  # user is required; an event that names no account names none.
+  user = {"name": "unknown"}
+  if eid == 4672 {
+    class_uid = 3003
+    # Special privileges assigned to a new logon: the subject is the account, and the session is its logon.
+    if has_subject {
+      user = subject
+    }
+    privileges = []
+    for_each(split(to_string(ed.PrivilegeList) ?? "", r'\s+')) -> |_i, privilege| {
+      if privilege != "" && privilege != "-" {
+        privileges = push(privileges, privilege)
+      }
+    }
+    # Authorize Session needs the privileges; a 4672 without them has nothing to say.
+    if length(privileges) == 0 {
+      abort "no_match"
+    }
+    .privileges = privileges
+    .session = {"uid": to_string(ed.SubjectLogonId) ?? ""}
+  } else {
+    if has_target {
+      user = target
+    }
+    if has_subject {
+      .actor = {"user": subject}
+    }
+    if eid == 4634 {
+      activity_id = 2
+    } else if eid == 4768 {
+      activity_id = 3
+    } else if eid == 4769 {
+      activity_id = 4
+    }
+    # Where the logon came from: address, port and workstation name. "-" and "::1"-style empties are left out.
+    src_ip = to_string(ed.IpAddress) ?? ""
+    if starts_with(src_ip, "::ffff:") {
+      src_ip = replace(src_ip, "::ffff:", "", count: 1)
+    }
+    if !(is_ipv4(src_ip) || is_ipv6(src_ip)) {
+      src_ip = ""
+    }
+    src = {"ip": src_ip, "hostname": downcase(to_string(ed.WorkstationName) ?? "")}
+    if src.hostname == "" {
+      src.hostname = downcase(to_string(ed.Workstation) ?? "")
+    }
+    src_port = to_int(ed.IpPort) ?? 0
+    if src_ip != "" && src_port > 0 && src_port < 65536 {
+      src.port = src_port
+    }
+    # Where the logon went: this computer, or for explicit credentials (4648) the target server.
     dst_host = computer
-
-    if eid == 4688 {
-        category_uid = 1
-        category_name = "System Activity"
-        class_uid = 1007
-        class_name = "Process Activity"
-        activity_id = 1
-        npn = to_string(ed.NewProcessName) ?? ""
-        process_cmd = to_string(ed.CommandLine) ?? ""
-        process_pid = to_int(ed.NewProcessId) ?? 0
-        process_name = npn
-        if process_name == "" {
-            process_name = "unknown"
-        }
-        ppn = to_string(ed.ParentProcessName) ?? ""
-        parent_name = ppn
-        actor_name = downcase(to_string(ed.SubjectUserName) ?? "")
-        actor_uid = to_string(ed.SubjectUserSid) ?? ""
-        actor_domain = downcase(to_string(ed.SubjectDomainName) ?? "")
-    } else if eid == 4672 {
-        class_uid = 3003
-        class_name = "Authorize Session"
-        activity_id = 1
-        actor_name = downcase(to_string(ed.SubjectUserName) ?? "")
-        actor_uid = to_string(ed.SubjectUserSid) ?? ""
-        actor_domain = downcase(to_string(ed.SubjectDomainName) ?? "")
-    } else if eid == 4624 {
-        activity_id = 1
-        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
-        actor_uid = to_string(ed.TargetUserSid) ?? ""
-        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
-        src_ip = to_string(ed.IpAddress) ?? ""
-        src_port = to_int(ed.IpPort) ?? 0
-        src_host = downcase(to_string(ed.WorkstationName) ?? "")
-    } else if eid == 4625 {
-        activity_id = 1
-        status_id = 2
-        severity_id = 2
-        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
-        actor_uid = to_string(ed.TargetUserSid) ?? ""
-        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
-        src_ip = to_string(ed.IpAddress) ?? ""
-        src_port = to_int(ed.IpPort) ?? 0
-        src_host = downcase(to_string(ed.WorkstationName) ?? "")
-    } else if eid == 4648 {
-        # Explicit credentials: a process on this computer used TargetUserName's credentials towards TargetServerName.
-        activity_id = 1
-        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
-        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
-        src_ip = to_string(ed.IpAddress) ?? ""
-        src_port = to_int(ed.IpPort) ?? 0
-        src_host = computer
-        target = downcase(to_string(ed.TargetServerName) ?? "")
-        if target != "" && target != "localhost" && target != "-" {
-            dst_host = target
-        }
-    } else if eid == 4634 {
-        activity_id = 2
-        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
-        actor_uid = to_string(ed.TargetUserSid) ?? ""
-        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
-    } else if eid == 4768 || eid == 4769 {
-        activity_id = 1
-        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
-        actor_uid = to_string(ed.TargetSid) ?? to_string(ed.TargetUserSid) ?? ""
-        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
-        src_ip = to_string(ed.IpAddress) ?? ""
-        src_port = to_int(ed.IpPort) ?? 0
-        status_raw = downcase(to_string(ed.Status) ?? "0x0")
-        if status_raw != "" && status_raw != "0x0" && status_raw != "0" {
-            status_id = 2
-            severity_id = 2
-        }
-    } else if eid == 5156 {
-        category_uid = 4
-        category_name = "Network Activity"
-        class_uid = 4001
-        class_name = "Network Activity"
-        activity_id = 1
-        src_ip = to_string(ed.SourceAddress) ?? ""
-        src_port = to_int(ed.SourcePort) ?? 0
-        dst_ip = to_string(ed.DestAddress) ?? ""
-        dst_port = to_int(ed.DestPort) ?? 0
-        process_name = to_string(ed.Application) ?? "unknown"
-        process_pid = to_int(ed.ProcessID) ?? to_int(ed.ProcessId) ?? 0
-        actor_name = "unknown"
-    } else if eid == 10 {
-        category_uid = 1
-        category_name = "System Activity"
-        class_uid = 1007
-        class_name = "Process Activity"
-        activity_id = 3
-        process_name = to_string(ed.TargetImage) ?? "unknown"
-        process_pid = to_int(ed.TargetProcessId) ?? 0
-        parent_name = to_string(ed.SourceImage) ?? ""
-        actor_name = downcase(to_string(ed.SourceUser) ?? "")
-        if contains(actor_name, "\\") {
-            ap = split(actor_name, "\\")
-            actor_name = to_string(ap[-1])
-        }
-    } else if eid == 4103 {
-        # PowerShell module logging — script_activity (1009), Execute (1).
-        # Payload carries the CommandInvocation/ParameterBinding text.
-        category_uid = 1
-        category_name = "System Activity"
-        class_uid = 1009
-        class_name = "Script Activity"
-        activity_id = 1
-    } else if eid == 4104 {
-        # PowerShell script block — script_activity (1009), Execute (1).
-        # 4104 carries no user/process identity; actor.name falls through to
-        # "unknown" via the shared default.
-        category_uid = 1
-        category_name = "System Activity"
-        class_uid = 1009
-        class_name = "Script Activity"
-        activity_id = 1
-    } else if eid == 4776 {
-        # NTLM credential validation — authentication (3002), Logon (1).
-        activity_id = 1
-        status_id = 1
-        actor_name = downcase(to_string(ed.TargetUserName) ?? "")
-        actor_domain = downcase(to_string(ed.TargetDomainName) ?? "")
-        src_host = downcase(to_string(ed.Workstation) ?? "")
+    if eid == 4648 {
+      src.hostname = computer
+      target_server = downcase(to_string(ed.TargetServerName) ?? "")
+      if target_server != "" && target_server != "localhost" && target_server != "-" {
+        dst_host = target_server
+      }
     }
-
-    if actor_name == "" {
-        actor_name = "unknown"
+    if src.hostname == "-" {
+      src.hostname = ""
     }
-
-    if src_ip != "" {
-        ipv4_ok = is_ipv4(src_ip)
-        ipv6_ok = is_ipv6(src_ip)
-        if !ipv4_ok && !ipv6_ok {
-            src_ip = ""
-        }
+    .src_endpoint = src
+    if dst_host != "" {
+      .dst_endpoint = {"hostname": dst_host}
     }
-    if dst_ip != "" {
-        dst_v4 = is_ipv4(dst_ip)
-        dst_v6 = is_ipv6(dst_ip)
-        if !dst_v4 && !dst_v6 {
-            dst_ip = ""
-        }
+    # Authentication needs a service or a destination: Kerberos events name the service, the others the package.
+    service_name = to_string(ed.ServiceName) ?? ""
+    package = to_string(ed.AuthenticationPackageName) ?? ""
+    if package == "" {
+      package = to_string(ed.PackageName) ?? ""
     }
-
-    type_uid = class_uid * 100 + activity_id
-
-    . = {
-        "category_uid": category_uid,
-        "class_uid": class_uid,
-        "class_name": class_name,
-        "category_name": category_name,
-        "type_uid": type_uid,
-        "activity_id": activity_id,
-        "severity_id": severity_id,
-        "status_id": status_id,
-        "time": time_ms,
-        "message": msg,
-        "metadata": {
-            "version": "1.9.0",
-            "uid": record_uid,
-            "event_code": to_string(eid),
-            "log_name": log_name,
-            "log_provider": log_provider,
-            "product": {
-                "name": "Windows",
-                "vendor_name": "Microsoft",
-            },
-        },
-        "unmapped": {
-            "windows_event_id": to_string(eid),
-            "logon_type": to_string(ed.LogonType) ?? "",
-            "computer": computer,
-            "src_ip": src_ip,
-            "src_port": src_port,
-            "src_host": src_host,
-            "dst_ip": dst_ip,
-            "dst_port": dst_port,
-            "service_name": to_string(ed.ServiceName) ?? "",
-        },
+    if service_name != "" && service_name != "-" {
+      .service = {"name": service_name, "uid": to_string(ed.ServiceSid) ?? ""}
+    } else if dst_host == "" {
+      .service = {"name": "Windows"}
+      if package != "" {
+        .service = {"name": package}
+      }
     }
-
-    if class_uid == 1007 {
-        # NewProcessName is typically a full path; Sigma Image → process.file.path.
-        process_path = process_name
-        process_basename = process_name
-        if contains(process_path, "\\") {
-            pp = split(process_path, "\\")
-            process_basename = to_string(pp[-1])
-        } else if contains(process_path, "/") {
-            pp = split(process_path, "/")
-            process_basename = to_string(pp[-1])
-        } else if process_path != "" && process_path != "unknown" {
-            process_path = "C:\\Windows\\System32\\" + process_path
-        }
-        parent_path = parent_name
-        parent_basename = parent_name
-        if contains(parent_path, "\\") {
-            ppp = split(parent_path, "\\")
-            parent_basename = to_string(ppp[-1])
-        } else if contains(parent_path, "/") {
-            ppp = split(parent_path, "/")
-            parent_basename = to_string(ppp[-1])
-        } else if parent_path != "" {
-            parent_path = "C:\\Windows\\System32\\" + parent_path
-        }
-        .device = { "hostname": computer, "type_id": 2 }
-        .process = {
-            "name": process_basename,
-            "cmd_line": process_cmd,
-            "file": { "path": process_path, "name": process_basename },
-            "pid": process_pid,
-            "uid": to_string(process_pid),
-        }
-        if process_pid == 0 {
-            .process.uid = process_basename
-        }
-        .actor = {
-            "user": {
-                "name": actor_name,
-                "uid": actor_uid,
-                "domain": actor_domain,
-            },
-        }
-        if parent_name != "" {
-            .actor.process = {
-                "name": parent_basename,
-                "file": { "path": parent_path, "name": parent_basename },
-                "uid": parent_basename,
-            }
-        }
-    } else if class_uid == 4001 {
-        process_path = process_name
-        process_basename = process_name
-        if contains(process_path, "\\") {
-            pp = split(process_path, "\\")
-            process_basename = to_string(pp[-1])
-        } else if contains(process_path, "/") {
-            pp = split(process_path, "/")
-            process_basename = to_string(pp[-1])
-        }
-        # device and actor belong to the host profile in Network Activity; the connecting process is the actor's.
-        .metadata.profiles = ["host"]
-        .device = { "hostname": computer, "type_id": 2 }
-        .src_endpoint = { "ip": src_ip, "port": src_port }
-        .dst_endpoint = { "ip": dst_ip, "port": dst_port }
-        .actor = {
-            "user": { "name": actor_name },
-            "process": {
-                "name": process_basename,
-                "file": { "path": process_path, "name": process_basename, "type_id": 1 },
-                "pid": process_pid,
-                "uid": to_string(process_pid),
-            },
-        }
-        if process_pid == 0 {
-            .actor.process.uid = process_basename
-        }
-        .unmapped.protocol = to_string(ed.Protocol) ?? ""
-    } else if class_uid == 3002 || class_uid == 3003 {
-        # Authentication / Authorize Session: device belongs to the host profile here; the computer is dst_endpoint.
-        .user = {
-            "name": actor_name,
-            "uid": actor_uid,
-            "domain": actor_domain,
-        }
-        .actor = {
-            "user": {
-                "name": actor_name,
-                "uid": actor_uid,
-                "domain": actor_domain,
-            },
-        }
-        .dst_endpoint = { "hostname": dst_host }
-        if src_ip != "" || src_host != "" {
-            .src_endpoint = {
-                "ip": src_ip,
-                "port": src_port,
-                "hostname": src_host,
-            }
-            if src_ip == "" {
-                del(.src_endpoint.ip)
-            }
-        }
-        if eid == 4776 {
-            .service = { "name": to_string(ed.PackageName) ?? "NTLM" }
-        }
+    package_l = downcase(package)
+    if eid == 4768 || eid == 4769 || contains(package_l, "kerberos") {
+      .auth_protocol_id = 2
+      .auth_protocol = "Kerberos"
+    } else if eid == 4776 || contains(package_l, "ntlm") || contains(package_l, "msv1_0") {
+      .auth_protocol_id = 1
+      .auth_protocol = "NTLM"
     }
-
-    if class_uid == 1009 {
-        # script_activity requires device; Windows carries the host in Computer.
-        .device = { "hostname": downcase(computer), "type_id": 2 }
-        if actor_name == "unknown" {
-            uid_name = downcase(to_string(raw.UserID) ?? "")
-            if contains(uid_name, "\\") {
-                uid_parts = split(uid_name, "\\")
-                uid_name = to_string(uid_parts[-1])
-            }
-            if uid_name != "" {
-                actor_name = uid_name
-            }
-        }
-        .actor = { "user": { "name": actor_name } }
-        sb = to_string(ed.ScriptBlockText) ?? ""
-        if sb == "" {
-            sb = to_string(ed.Payload) ?? ""
-        }
-        if sb == "" {
-            sb = msg
-        }
-        script_uid = to_string(ed.ScriptBlockId) ?? ""
-        if script_uid == "" {
-            script_uid = to_string(ed.MessageNumber) ?? ""
-        }
-        .script = {
-            "uid": script_uid,
-            "type_id": 1,
-            "script_content": { "value": sb },
-        }
-        sp = to_string(ed.Path) ?? ""
-        if sp != "" {
-            if contains(sp, "\\") {
-                sp_parts = split(sp, "\\")
-                .script.name = to_string(sp_parts[-1])
-            } else {
-                .script.name = sp
-            }
-        } else if eid == 4103 {
-            ci = parse_regex(sb, r'(?m)^CommandInvocation\((?P<name>[^)]+)\)') ?? {}
-            cmd_name = to_string(get(ci, ["name"]) ?? "") ?? ""
-            if cmd_name != "" {
-                .script.name = cmd_name
-            }
-        }
-        .unmapped.message_number = to_string(ed.MessageNumber) ?? ""
-        .unmapped.message_total = to_string(ed.MessageTotal) ?? ""
-        if eid == 4103 {
-            .unmapped.context_info = to_string(ed.ContextInfo) ?? ""
-        }
+    # Windows logon types carry the same numbers in OCSF.
+    logon_type = to_int(ed.LogonType) ?? 0
+    logon_caption = get({"2": "Interactive", "3": "Network", "4": "Batch", "5": "OS Service", "7": "Unlock", "8": "Network Cleartext", "9": "New Credentials", "10": "Remote Interactive", "11": "Cached Interactive", "12": "Cached Remote Interactive", "13": "Cached Unlock"}, [to_string(logon_type)]) ?? null
+    if logon_caption != null {
+      .logon_type_id = logon_type
+      .logon_type = logon_caption
+      .is_remote = includes([3, 8, 10, 12], logon_type)
     }
+    .session = {"uid": to_string(ed.TargetLogonId) ?? ""}
+    # The process that asked for the logon, with its hexadecimal PID.
+    logon_process_path = to_string(ed.ProcessName) ?? ""
+    logon_pid = parse_int(to_string(ed.ProcessId) ?? "") ?? 0
+    if logon_process_path != "" && logon_process_path != "-" && logon_pid > 0 {
+      logon_process_name = string(split(logon_process_path, "\\")[-1]) ?? logon_process_path
+      .logon_process = {"name": logon_process_name, "pid": logon_pid, "file": {"name": logon_process_name, "path": logon_process_path, "type_id": 1}}
     }
+    # Outcome: 4625 is a failed logon; Kerberos and NTLM validation carry a status code, 0x0 for success.
+    status_code = downcase(to_string(ed.Status) ?? "")
+    failed = eid == 4625 || (includes([4768, 4769, 4776], eid) && status_code != "" && status_code != "0x0" && status_code != "0")
+    if failed {
+      .status_id = 2
+      .status = "Failure"
+      .severity_id = 2
+      .status_code = status_code
+      .status_detail = to_string(ed.FailureReason) ?? ""
+    } else if eid != 4648 {
+      # 4648 records that explicit credentials were used for an attempt; it does not say how the attempt ended.
+      .status_id = 1
+      .status = "Success"
+    }
+    .unmapped = {
+      "sub_status": to_string(ed.SubStatus) ?? "",
+      "logon_process_name": strip_whitespace(to_string(ed.LogonProcessName) ?? ""),
+      "ticket_encryption_type": to_string(ed.TicketEncryptionType) ?? "",
+    }
+    # A package that is neither Kerberos nor NTLM (Negotiate, for example) is kept in its own words.
+    if !exists(.auth_protocol_id) {
+      .unmapped.authentication_package = package
+    }
+  }
+  .user = user
+}
+.category_uid = to_int(floor(class_uid / 1000))
+.class_uid = class_uid
+.activity_id = activity_id
+.type_uid = class_uid * 100 + activity_id
+. = compact(., array: false)

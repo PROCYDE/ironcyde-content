@@ -1,0 +1,13 @@
+---
+# A permitted inbound connection without a process ID: the application cannot be an actor process, and a protocol outside the common ones has only its number.
+raw_sample: '{"EventID":5156,"Computer":"WEB1","event_data":{"Application":"System","Direction":"%%14592","SourceAddress":"2001:db8::10","SourcePort":"0","DestAddress":"2001:db8::20","DestPort":"0","Protocol":"47"},"TimeCreated":"2026-10-15T09:20:19Z"}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  actor: null
+  src_endpoint.ip: 2001:db8::10
+  src_endpoint.port: null
+  connection_info.direction_id: 1
+  connection_info.protocol_num: 47
+  connection_info.protocol_name: null
+  metadata.profiles: [host]

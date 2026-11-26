@@ -1,0 +1,15 @@
+---
+# An NTLM credential validation on a domain controller: Logon over NTLM from the named workstation; no computer name, so the package is the service.
+raw_sample: '{"EventID":4776,"event_data":{"PackageName":"MICROSOFT_AUTHENTICATION_PACKAGE_V1_0","TargetUserName":"alice","Workstation":"WEB2","Status":"0xC0000064"},"TimeCreated":"2026-10-15T09:23:02Z"}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  status_id: 2
+  status_code: '0xc0000064'
+  user.name: alice
+  src_endpoint.hostname: web2
+  auth_protocol_id: 1
+  service.name: MICROSOFT_AUTHENTICATION_PACKAGE_V1_0
+  dst_endpoint: null
+  device: null
+  metadata.profiles: []

@@ -1,0 +1,18 @@
+---
+# ProcessCreate with only an image: the event's own ID identifies the process, a parent without an ID stays out, and the required actor and device are placeholders. Without any event time the process has no creation time.
+raw_sample: '{"EventID":1,"event_data":{"RuleName":"-","Image":"notepad.exe","ParentImage":"C:\\Windows\\explorer.exe","IntegrityLevel":"AppContainer"}}'
+expected:
+  class_uid: 1007
+  type_uid: 100701
+  process.created_time: null
+  process.name: notepad.exe
+  process.file.path: null
+  process.pid: null
+  process.parent_process: null
+  process.integrity_id: null
+  actor.user.name: unknown
+  device.name: unknown
+  device.hostname: null
+  attacks: null
+  metadata.original_time: null
+  metadata.profiles: []

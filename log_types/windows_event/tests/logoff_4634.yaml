@@ -1,0 +1,15 @@
+---
+# A logoff: Logoff, with the session that ended.
+raw_sample: '{"EventID":4634,"Computer":"WEB1","event_data":{"TargetUserSid":"S-1-5-21-1111111111-2222222222-3333333333-1001","TargetUserName":"alice","TargetDomainName":"EXAMPLE","TargetLogonId":"0x5a234a5","LogonType":"10"},"TimeCreated":"2026-10-15T09:22:00Z"}'
+expected:
+  class_uid: 3002
+  type_uid: 300202
+  activity_id: 2
+  status_id: 1
+  user.name: alice
+  session.uid: '0x5a234a5'
+  logon_type_id: 10
+  logon_type: Remote Interactive
+  is_remote: true
+  src_endpoint: null
+  metadata.profiles: [host]

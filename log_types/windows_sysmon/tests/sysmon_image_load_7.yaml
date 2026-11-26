@@ -1,0 +1,20 @@
+---
+# ImageLoad: Module Activity, Load, with the module file, its hashes and description.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":7,"event_data":{"RuleName":"suspicious module","UtcTime":"2026-10-15 09:46:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\System32\\rundll32.exe","ImageLoaded":"C:\\Users\\Public\\payload.dll","FileVersion":"10.0.19041","Description":"Example library","Company":"Example Corp","OriginalFileName":"payload.dll","Hashes":"MD5=00000000000000000000000000000009","Signed":"false","SignatureStatus":"Unavailable","User":"EXAMPLE\\alice"}}'
+expected:
+  class_uid: 1005
+  category_uid: 1
+  type_uid: 100501
+  activity_id: 1
+  module.load_type_id: 1
+  module.file.path: 'C:\Users\Public\payload.dll'
+  module.file.name: payload.dll
+  module.file.desc: Example library
+  module.file.version: 10.0.19041
+  module.file.company_name: Example Corp
+  module.file.hashes:
+    - {algorithm_id: 1, algorithm: MD5, value: "00000000000000000000000000000009"}
+  actor.process.name: rundll32.exe
+  actor.user.name: alice
+  attacks: null
+  metadata.profiles: []

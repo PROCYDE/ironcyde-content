@@ -1,0 +1,15 @@
+---
+# A DNS query that failed with an error outside the DNS response codes (a timeout), with IPv4-mapped and IPv6 results from an earlier answer; no computer, so the client endpoint is a placeholder.
+raw_sample: '{"EventID":22,"event_data":{"UtcTime":"2026-10-15 09:44:01.000","QueryName":"slow.example.org","QueryStatus":"1460","QueryResults":"::ffff:192.0.2.80;2001:db8::80;"}}'
+expected:
+  class_uid: 4003
+  type_uid: 400306
+  rcode_id: 99
+  rcode: '1460'
+  status_id: 2
+  answers:
+    - {rdata: 192.0.2.80}
+    - {rdata: "2001:db8::80"}
+  src_endpoint.name: unknown
+  actor.user.name: unknown
+  metadata.profiles: [host]
