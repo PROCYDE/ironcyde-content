@@ -23,6 +23,59 @@ expected:
 Assertions cover meaningful stable values, not generated execution timestamps. A parser receives
 the original raw text in `.message`, including when that text is JSON; decode it explicitly.
 
+## OCSF profiles
+
+An OCSF profile adds optional attributes to a class. Which attributes belong to a profile depends on
+the class: `device` is a core attribute of Process Activity (1007) but belongs to the `host` profile
+in Authentication (3002), Network Activity (4001) and API Activity (6003); `actor` is core in
+Authentication but belongs to `host` in Network Activity and Detection Finding (2004). An event that
+sets a profile attribute must name that profile in `metadata.profiles`.
+
+This matters for two reasons:
+
+- **Observables**: IRONCYDE derives observables (host names, IP addresses, users, hashes, ...) from
+  the event the way the OCSF schema defines them. Profile attributes yield observables only when the
+  event declares their profile, so an undeclared `device` contributes no host name.
+- **Validation**: OCSF validation reports a profile attribute whose profile is not declared as an
+  error, and the content test fails that case.
+
+To find the profiles a parser branch needs, take each attribute the branch sets, including nested
+ones, and look it up in the class it emits, using the OCSF version in `metadata.version`:
+
+1. On a class page of the [OCSF schema browser](https://schema.ocsf.io), profile attributes are marked
+   with their profile; the class's own attribute list decides, not the object's general description.
+2. For a nested attribute, check the object as well: `device.container` and `process.container`
+   belong to the `container` profile, `process.euid` to `linux/linux_users` or `macos/macos_users`,
+   and the `*_dt` time attributes to `datetime`, whichever class contains them.
+3. Declare each such profile once. An attribute that lists several profiles needs only one of them.
+   Core attributes need no declaration.
+
+Declare the profiles per class and per branch, next to the code that sets the attributes, and keep
+profiles a branch already declares (for example `security_control` on findings):
+
+```vrl
+if class_uid == 4001 {
+  # device and actor belong to the host profile in Network Activity.
+  .metadata.profiles = ["host"]
+  .device = {"hostname": host, "type_id": 0}
+  .actor = {"user": {"name": user}}
+}
+```
+
+Do not move data to `unmapped` or drop it to avoid a declaration. Assert the profiles in the
+regression case of every branch that sets them; list assertions compare the whole list:
+
+```yaml
+expected:
+  class_uid: 4001
+  device.hostname: web1
+  metadata.profiles: [host]
+```
+
+The content test reports an undeclared profile attribute as an OCSF validation error
+(`validation_attribute_requires_profile`) on the case that produces it, so each branch that sets
+profile attributes needs a regression case.
+
 ## Test data rules
 
 This repository is public, and everything in it, including its Git history and every pushed branch,

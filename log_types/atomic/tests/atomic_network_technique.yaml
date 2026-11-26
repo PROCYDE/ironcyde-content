@@ -1,0 +1,10 @@
+raw_sample: '{"technique_uid":"T1046","technique_name":"Network Service Discovery","tactic_uid":"TA0007","tactic_name":"Discovery","process":"nmap.exe","cmd_line":"nmap.exe -sT 198.51.100.0/24","host":"web1","user":"alice","atomic_test":"T1046-3","class_uid":4001,"category_uid":4,"activity_id":1,"severity_id":3}'
+expected:
+  class_uid: 4001
+  category_uid: 4
+  type_uid: 400101
+  actor.user.name: alice
+  actor.process.name: nmap.exe
+  device.hostname: web1
+  src_endpoint.hostname: web1
+  metadata.profiles: [host]

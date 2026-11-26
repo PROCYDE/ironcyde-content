@@ -2,3 +2,4 @@
 raw_sample: '{"technique_uid":"T1055.001","technique_name":"Process Injection: DLL Injection (CreateRemoteThread)","tactic_uid":"TA0005","tactic_name":"Defense Evasion","process":"C:\\Windows\\System32\\rundll32.exe","cmd_line":"rundll32.exe C:\\Users\\Public\\inject.dll,CreateRemoteThread target=explorer.exe","host":"CTDL-WKS-12","user":"ssmith","atomic_test":"T1055.001-1","class_uid":1007,"category_uid":1,"activity_id":1,"severity_id":4,"timestamp":"2026-10-15T09:38:47Z"}'
 expected:
   class_uid: 1007
+  metadata.profiles: []

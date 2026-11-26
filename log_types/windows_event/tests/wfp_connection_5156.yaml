@@ -1,0 +1,12 @@
+raw_sample: '{"EventID":5156,"Channel":"Security","Computer":"WEB1","message":"The Windows Filtering Platform has permitted a connection.","event_data":{"ProcessID":"1234","Application":"\\device\\harddiskvolume2\\windows\\system32\\svchost.exe","Direction":"%%14593","SourceAddress":"192.0.2.10","SourcePort":"49712","DestAddress":"198.51.100.20","DestPort":"443","Protocol":"6"},"TimeCreated":"2026-10-15T09:20:18Z","EventRecordID":4711}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  device.hostname: web1
+  actor.user.name: unknown
+  actor.process.name: svchost.exe
+  src_endpoint.ip: 192.0.2.10
+  dst_endpoint.ip: 198.51.100.20
+  dst_endpoint.port: 443
+  metadata.event_code: '5156'
+  metadata.profiles: [host]

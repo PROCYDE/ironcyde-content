@@ -1,0 +1,10 @@
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"client":{"ipAddress":"198.51.100.7","userAgent":{"rawUserAgent":"Mozilla/5.0 (X11; Linux x86_64) Firefox/128.0","os":"Linux","browser":"FIREFOX"}},"device":{"id":"guoEXAMPLEDEVICE0000","name":"web1"},"displayMessage":"Update application","eventType":"application.lifecycle.update","outcome":{"result":"SUCCESS"},"published":"2026-10-15T10:02:11.000Z","severity":"INFO","debugContext":{"debugData":{"requestUri":"/api/v1/apps/0oaEXAMPLEAPP0000000"}},"transaction":{"id":"EXAMPLETRANSACTION00"},"uuid":"00000000-0000-4000-8000-000000000002"}'
+expected:
+  class_uid: 6003
+  type_uid: 600303
+  actor.user.name: Alice Example
+  api.operation: application.lifecycle.update
+  device.hostname: web1
+  dst_endpoint.svc_name: /api/v1/apps/0oaEXAMPLEAPP0000000
+  metadata.event_code: application.lifecycle.update
+  metadata.profiles: [host]

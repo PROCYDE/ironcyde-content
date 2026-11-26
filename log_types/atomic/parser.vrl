@@ -122,13 +122,26 @@ if raw == null || (to_string(raw.technique_uid) ?? "") == "" {
         process_path = "C:\\Windows\\System32\\" + process_name
       }
     }
-    .actor = {"user": {"name": user}}
-    .device = {"hostname": host, "type_id": 99, "type": "Other"}
-    .process = {
+    process = {
       "name": process_basename,
       "cmd_line": cmd_line,
       "file": {"path": process_path, "name": process_basename, "type_id": 1},
       "uid": process_basename,
+    }
+    .actor = {"user": {"name": user}}
+    .device = {"hostname": host, "type_id": 99, "type": "Other"}
+    if class_uid == 4001 {
+      # Network Activity has no process attribute: the process that connects is the actor's, from the test host.
+      .actor.process = process
+      .src_endpoint = {"hostname": host}
+    } else {
+      .process = process
+    }
+    # actor and device are core in System Activity (1xxx), Windows registry classes (201xxx) and the few classes
+    # below; in every other OCSF 1.9.0 class at least one of them belongs to the host profile.
+    system_class = (class_uid >= 1000 && class_uid < 2000) || (class_uid >= 201000 && class_uid < 202000)
+    if !system_class && !includes([2006, 5001, 5002, 5019, 5020], class_uid) {
+      .metadata.profiles = ["host"]
     }
   }
 }

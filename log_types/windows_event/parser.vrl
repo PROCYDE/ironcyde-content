@@ -393,19 +393,23 @@ if !is_object(raw) {
             pp = split(process_path, "/")
             process_basename = to_string(pp[-1])
         }
+        # device and actor belong to the host profile in Network Activity; the connecting process is the actor's.
+        .metadata.profiles = ["host"]
         .device = { "hostname": computer, "type_id": 2 }
         .src_endpoint = { "ip": src_ip, "port": src_port }
         .dst_endpoint = { "ip": dst_ip, "port": dst_port }
-        .process = {
-            "name": process_basename,
-            "file": { "path": process_path, "name": process_basename },
-            "pid": process_pid,
-            "uid": to_string(process_pid),
+        .actor = {
+            "user": { "name": actor_name },
+            "process": {
+                "name": process_basename,
+                "file": { "path": process_path, "name": process_basename, "type_id": 1 },
+                "pid": process_pid,
+                "uid": to_string(process_pid),
+            },
         }
         if process_pid == 0 {
-            .process.uid = process_basename
+            .actor.process.uid = process_basename
         }
-        .actor = { "user": { "name": actor_name } }
         .unmapped.protocol = to_string(ed.Protocol) ?? ""
     } else if class_uid == 3002 || class_uid == 3003 {
         # Authentication / Authorize Session — OCSF 1.3 has no device on 3002/3003.
