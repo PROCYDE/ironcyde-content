@@ -16,12 +16,69 @@ contains a nonempty `raw_sample` and may contain dot-separated expected field as
 raw_sample: 'Jun 14 15:16:01 host sshd[123]: Failed password for root from 192.0.2.10 port 51000 ssh2'
 expected:
   class_uid: 3002
+  type_uid: 300201
   status_id: 2
-  actor.user.name: root
+  user.name: root
+  src_endpoint.ip: 192.0.2.10
+  metadata.profiles: []
 ```
 
 Assertions cover meaningful stable values, not generated execution timestamps. A parser receives
 the original raw text in `.message`, including when that text is JSON; decode it explicitly.
+
+## Quality rules for this repository
+
+IRONCYDE itself accepts simple parsers: a custom Log Type may map a handful of fields, cover one event
+shape and carry a single case, and it installs and runs as long as its output is valid. The rules in
+this section are stricter on purpose. They apply to the official content in this repository only, and
+CI enforces them here, not in the product.
+
+**Every branch has a case.**
+
+- Each class a parser can emit, and each branch that shapes the event differently (an activity, an
+  outcome, a fallback for a missing field, a placeholder for a required attribute), has at least one
+  regression case.
+- Every case asserts `class_uid`, `type_uid` and `metadata.profiles`, and beyond that the values the
+  branch is there to produce. Assert absence with `null` where a branch must leave a field out.
+- Write each class a parser emits as a literal (`class_uid = 4001`), so the coverage check can read it.
+- Rejections cannot be asserted: a case whose sample the parser aborts fails. Say in the parser's header
+  what it rejects and why.
+
+**The output is valid OCSF and complete.**
+
+- No validation errors, and no warnings other than missing recommended attributes: no deprecated class
+  or attribute, and every `*_id` enum next to a caption carries the schema's caption for that ID
+  (`status_id: 2` with `status: Failure`). For `99` (Other) the caption is the source's own word.
+- `type_uid` is `class_uid * 100 + activity_id`, and the activity says what happened; do not default
+  every event to the class's first activity.
+- Fill recommended attributes where the source has the data: outcome (`status_id`, `status_code`,
+  `status_detail`), `metadata.uid`, `metadata.original_time`, `metadata.log_name`, ports, protocols,
+  byte counts, sessions, hashes. `content test --strict` lists what is still missing.
+- Never invent a value. A missing severity is `0` (Unknown), not Medium; an unknown direction or device
+  type is `0`; a bare executable name gets no made-up path. Where OCSF requires an attribute the source
+  does not have (an actor, a device), the placeholder is the string `unknown`, and the case shows it.
+- A record a class cannot represent (no address for a network class, no file for a file class) is
+  rejected, not emitted invalid or bent into another shape.
+
+**Observables are where OCSF puts them.**
+
+- Host names, addresses, users, processes, hashes and URLs go to their OCSF attributes: `device`,
+  `src_endpoint`/`dst_endpoint`, `actor`, `user`, `process`, `file.hashes`, `url`; in a finding, to
+  `evidences` and `resources`. They are what observables are derived from; in `unmapped` they are lost.
+- `unmapped` holds only what OCSF has no attribute for. Do not copy mapped values into it.
+- Declare the profiles of the attributes a branch sets, exactly: no profile without one of its
+  attributes, no profile attribute without its profile (see [OCSF profiles](#ocsf-profiles)).
+
+**Parsers are robust and cheap.**
+
+- A missing or mistyped field never aborts the parser and never reads as a real value. In VRL,
+  `to_int(null)` is `0`, `to_string(null)` is `""` and `get()` of a missing key is `null`, none of them
+  an error, so `a ?? b` does not fall through to `b`: test for `null` or `""` and try the alternatives
+  one by one.
+- Parse the message once. Keep regular expressions few and anchored, and run them only in the branch
+  that needs them.
+- End with `. = compact(., array: false)`, so empty strings, nulls and empty objects do not reach the
+  event while `metadata.profiles: []` stays.
 
 ## OCSF profiles
 
@@ -50,8 +107,9 @@ ones, and look it up in the class it emits, using the OCSF version in `metadata.
 3. Declare each such profile once. An attribute that lists several profiles needs only one of them.
    Core attributes need no declaration.
 
-Declare the profiles per class and per branch, next to the code that sets the attributes, and keep
-profiles a branch already declares (for example `security_control` on findings):
+Declare the profiles per class and per branch, next to the code that sets the attributes, and only
+when the branch really sets one of them (a finding without an action or disposition does not declare
+`security_control`):
 
 ```vrl
 if class_uid == 4001 {
@@ -75,6 +133,8 @@ expected:
 The content test reports an undeclared profile attribute as an OCSF validation error
 (`validation_attribute_requires_profile`) on the case that produces it, so each branch that sets
 profile attributes needs a regression case.
+
+Every event sets `metadata.profiles`, to `[]` when a branch uses no profile, and every case asserts it.
 
 ## Test data rules
 
@@ -149,6 +209,52 @@ docker run --rm --network none -v "$PWD:/content:ro" \
 
 `--log-type <key>` limits the run to one Log Type, `--strict` fails cases on OCSF recommendations too, and
 `--format json` prints the complete report, including each case's normalized event.
+
+Two more checks hold the content to the [quality rules](#quality-rules-for-this-repository):
+
+- **Case coverage** (`content-checks` workflow):
+  [`check_case_coverage.py`](.github/content-checks/check_case_coverage.py) reads the classes each parser
+  can emit from `parser.vrl` and fails when one has no case, when a case does not assert `class_uid`,
+  `type_uid` and `metadata.profiles`, or when a case's `type_uid` does not match its class and activity.
+- **Content quality** (`content-test` workflow):
+  [`check_content_report.py`](.github/content-checks/check_content_report.py) reads the report of a
+  strict run and fails on every OCSF warning except a missing recommended attribute, and on an event
+  without `metadata.profiles`.
+
+Run them locally:
+
+```bash
+python3 .github/content-checks/check_case_coverage.py
+```
+
+```bash
+docker run --rm --network none -v "$PWD:/content:ro" \
+  registry.procyde.online/ironcyde/ironcyde-api:<version> content test --format json --strict /content > report.json
+python3 .github/content-checks/check_content_report.py report.json
+```
+
+The strict run itself exits non-zero as long as recommended attributes are missing; the checker decides.
+
+### Moving to a new OCSF version
+
+The workflow pins one IRONCYDE release, and that release fixes the OCSF version the content is checked
+against. The checks and the schema therefore always change together with the pin, never underneath a
+pull request. A newer schema changes what the checks report: events that still declare the old
+`metadata.version` get a version warning, attributes are deprecated, and optional attributes become
+recommended.
+
+Upgrade in one pull request:
+
+1. Raise the image pin in [`content-test.yml`](.github/workflows/content-test.yml) to the release that
+   brings the new schema.
+2. Set `metadata.version` in every parser to the new version.
+3. Fix what the content quality check now reports (deprecated classes and attributes, changed enum
+   captions), and fill the newly recommended attributes where the sources have the data.
+4. List changed field paths in the pull request.
+
+Pull requests are tested with the workflow from `main`, so this pull request is still checked by the old
+release in CI: run the content test and the content quality check locally with the new release and say
+so in the pull request. Until then, parsers stay on the version the pinned release validates.
 
 ## Publish a reviewed update
 
