@@ -1,0 +1,20 @@
+---
+# Single sign-on to an application after an MFA challenge: the application is the service; a device name that is not a host name is the endpoint's name; LDAP as provider.
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"client":{"ipAddress":"2001:db8::12"},"device":{"name":"Alice''s Phone"},"displayMessage":"User single sign on to app","eventType":"user.authentication.sso","outcome":{"result":"CHALLENGE"},"published":"2026-10-15T09:45:00.000Z","severity":"INFO","authenticationContext":{"authenticationProvider":"LDAP","credentialType":"OTP","externalSessionId":"unknown"},"target":[{"id":"0oaEXAMPLEAPP0000001","type":"AppInstance","alternateId":"Example App","displayName":"Example App"},{"id":"0uaEXAMPLEAPPUSER001","type":"AppUser","alternateId":"alice","displayName":"Alice Example"}],"uuid":"00000000-0000-4000-8000-000000000002"}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  severity_id: 1
+  status_id: 99
+  status: CHALLENGE
+  service.name: Example App
+  service.uid: 0oaEXAMPLEAPP0000001
+  auth_protocol_id: 12
+  auth_factors:
+    - {factor_type_id: 7, factor_type: OTP}
+  src_endpoint.ip: 2001:db8::12
+  src_endpoint.name: Alice's Phone
+  src_endpoint.hostname: null
+  session: null
+  is_mfa: null
+  metadata.profiles: []

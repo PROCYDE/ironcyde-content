@@ -1,0 +1,18 @@
+---
+# Snort 3 field names, a dropped packet and a time without a year (the ingest time is used).
+raw_sample: '{"timestamp":"10/14-14:39:43.000000","sid":2100002,"msg":"Example exploit attempt","class":"attempted-admin","priority":1,"proto":"UDP","src_addr":"2001:db8::44","src_port":5353,"dst_addr":"2001:db8::35","dest_port":161,"action":"drop"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 4
+  action_id: 2
+  disposition_id: 6
+  disposition: Dropped
+  finding_info.uid: snort-1-2100002
+  finding_info.analytic.category: attempted-admin
+  evidences:
+    - src_endpoint: {ip: "2001:db8::44", port: 5353}
+      dst_endpoint: {ip: "2001:db8::35", port: 161}
+      connection_info: {direction_id: 0, protocol_name: udp, protocol_num: 17}
+  metadata.original_time: 10/14-14:39:43.000000
+  metadata.profiles: [security_control]

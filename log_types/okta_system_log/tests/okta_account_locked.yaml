@@ -1,0 +1,10 @@
+---
+# user.account.lock: User Management, Lock, for the target user.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"eventType":"user.account.lock","outcome":{"result":"SUCCESS"},"severity":"INFO","target":[{"id":"00uEXAMPLEUSER000002","type":"User","alternateId":"bob@example.com","displayName":"Bob Example"}]}'
+expected:
+  class_uid: 3007
+  type_uid: 300706
+  activity_id: 6
+  user.name: bob@example.com
+  actor.user.name: admin@example.com
+  metadata.profiles: []

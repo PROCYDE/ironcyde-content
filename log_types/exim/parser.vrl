@@ -1,115 +1,203 @@
-# Exim4 mainlog → OCSF Email Activity (class_uid 4009) for SMTP VRFY / mail recon.
+# Exim main log lines -> OCSF Email Activity (4009), with the host profile for the mail host.
 #
-# Schema: OCSF 1.9.0 — 4009 email_activity (SMTP).
-# NOT 5001 Device Inventory Info. NOT 2004 Detection Finding (that is for security
-# products / scanner_finding). VRFY enumeration → activity_id 3 (Scan).
-#
-# Gateway envelope: event=<json> with message=full mainlog line, hostname=mail host.
-# Promotes VRFY / RCPT / auth-shaped mail lines; unrelated text → no_match.
+# Input is the log line itself, or a JSON object with message (the line), hostname|host and optionally src_ip.
+#   "<= sender ..."          message arrival            -> Receive, Inbound
+#   "=> rcpt ...", "-> ..."  delivery                   -> Send (Outbound over remote SMTP, else Local)
+#   "** rcpt ..."            delivery failed            -> Send, Failure
+#   "== rcpt ..."            delivery deferred          -> Send, Other (Deferred)
+#   "... rejected VRFY|RCPT|EXPN|MAIL ..."              -> Other, named by the SMTP command, Failure
+#   "VRFY failed for ..."   address verification failed -> Email Activity with an address, otherwise SMTP
+#                                                          Network Activity if a client or server is known
+# Unrelated lines (queue runs, "Completed", connections) and bounces without an address are rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
 text = string(.message) ?? ""
 raw = parse_json(text) ?? null
 if !is_object(raw) {
-    if .message != null || .program != null {
-        raw = .
-    }
+  raw = {"message": text, "hostname": .hostname, "src_ip": .src_ip}
 }
-if !is_object(raw) {
+line = to_string(raw.message) ?? ""
+# to_string(null) is "", not an error, so alternatives are tried one by one.
+host = to_string(raw.hostname) ?? ""
+if host == "" {
+  host = to_string(raw.host) ?? ""
+}
+
+head = parse_regex(line, r'^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?: (?P<tz>[+-]\d{4}))?(?: \[\d+\])? (?:(?P<id>[0-9A-Za-z]{6}-[0-9A-Za-z]{6,11}-[0-9A-Za-z]{2,4}) )?(?P<rest>.*)$') ?? null
+if head == null {
+  abort "no_match"
+}
+rest = string!(head.rest)
+message_uid = string(head.id) ?? ""
+
+# The line's own time. Without a zone (log_timezone unset) it is taken as UTC, so the result does not depend on
+# where the parser runs.
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+tz = string(head.tz) ?? "+0000"
+parsed_ts = parse_timestamp(string!(head.ts) + " " + tz, format: "%Y-%m-%d %H:%M:%S %z") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
+
+# H=name (helo) [address]: the remote host, as Exim verified it (name) and as it introduced itself (helo).
+peer = parse_regex(rest, r'\bH=(?:(?P<name>[^\s(\[]+) )?(?:\((?P<helo>[^)]*)\) )?\[(?P<ip>[0-9a-fA-F:.]+)\]') ?? {}
+peer_ip = string(peer.ip) ?? ""
+if peer_ip == "" {
+  peer_ip = to_string(raw.src_ip) ?? ""
+}
+if !(is_ipv4(peer_ip) || is_ipv6(peer_ip)) {
+  peer_ip = ""
+}
+remote = compact({"ip": peer_ip, "hostname": string(peer.name) ?? ""})
+local = compact({"hostname": host})
+
+class_uid = 4009
+activity_id = 99
+activity_name = null
+direction_id = 0
+status_id = null
+status = null
+status_detail = null
+command = null
+severity_id = 1
+email = {"message_uid": message_uid}
+src = {}
+dst = {}
+
+flag = string(split(rest, " ", 2)[0]) ?? ""
+if includes(["<=", "=>", "->", "**", "=="], flag) {
+  addr = string(split(rest, " ", 3)[1]) ?? ""
+  # "<= <>" is a bounce without an envelope sender; "=> user <user@example.com>" names the original address.
+  original = parse_regex(rest, r'^\S+ \S+ <(?P<addr>[^>\s]+)>') ?? {}
+  if exists(original.addr) {
+    addr = string!(original.addr)
+  }
+  if addr == "<>" || !contains(addr, "@") {
     abort "no_match"
-}
-    msg = to_string(raw.message) ?? ""
-    host = to_string(raw.hostname) ?? to_string(raw.host) ?? to_string(raw.ait_mail_host) ?? ""
-    if host == "" {
-        host = "exim-host"
+  }
+  if flag == "<=" {
+    activity_id = 2
+    direction_id = 1
+    status_id = 1
+    status = "Success"
+    email.from = addr
+    size = parse_regex(rest, r'\bS=(?P<size>\d+)') ?? {}
+    if exists(size.size) {
+      email.size = to_int!(size.size)
     }
-    program = downcase(to_string(raw.program) ?? "exim4")
-    src_ip = to_string(raw.src_ip) ?? ""
-    if src_ip == "" {
-        ip_caps = parse_regex(msg, r'\[(?P<ip>[0-9a-fA-F:.]+)\]') ?? {}
-        src_ip = to_string(ip_caps.ip)
+    src = remote
+    dst = local
+  } else {
+    activity_id = 1
+    email.to = [addr]
+    transport = parse_regex(rest, r'\bT=(?P<t>\S+)') ?? {}
+    transport_name = string(transport.t) ?? ""
+    if contains(transport_name, "smtp") {
+      direction_id = 2
+    } else if transport_name != "" {
+      direction_id = 4
     }
-
-    msg_l = downcase(msg)
-    is_mail = false
-    if contains(msg_l, "vrfy ") || contains(msg_l, "vrfy failed") || contains(msg_l, "rcpt ") || contains(msg_l, "smtp") || contains(program, "exim") {
-        is_mail = true
-    }
-    # Require recognizable exim mainlog shape (timestamp + action) when not tagged exim.
-    if !is_mail {
-        abort "no_match"
+    src = local
+    dst = remote
+    if flag == "**" {
+      status_id = 2
+      status = "Failure"
+      severity_id = 2
+      reason = parse_regex(rest, r': (?P<reason>.+)$') ?? {}
+      status_detail = string(reason.reason) ?? null
+    } else if flag == "==" {
+      status_id = 99
+      status = "Deferred"
+      reason = parse_regex(rest, r'defer \(-?\d+\): (?P<reason>.+)$') ?? {}
+      status_detail = string(reason.reason) ?? null
     } else {
-        vrfy = contains(msg_l, "vrfy")
-        severity_id = 3
-        if vrfy {
-            severity_id = 4
-        }
-
-        # OCSF 1.9 email_activity: 1=Send 2=Receive 3=Scan 4=Trace 5=MTA Relay 99=Other
-        class_uid = 4009
-        category_uid = 4
-        activity_id = 99
-        activity_name = "Other"
-        if vrfy {
-            activity_id = 3
-            activity_name = "Scan"
-        } else if contains(msg_l, "rcpt") || contains(msg_l, "smtp") {
-            activity_id = 5
-            activity_name = "MTA Relay"
-        }
-        type_uid = class_uid * 100 + activity_id
-        # Prefer the exim mainlog line time ("YYYY-MM-DD HH:MM:SS"); fall back to
-        # ingestion time (parsed, not raw string — to_unix_timestamp on a string
-        # errors and yields epoch 0).
-        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-        ts_caps = parse_regex(msg, r'^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') ?? {}
-        mainlog_ts = to_string(get(ts_caps, ["ts"]) ?? null) ?? ""
-        if mainlog_ts != "" {
-            # Zone-less mainlog time: pin UTC (append +0000) so parsing is
-            # deterministic and not shifted by the host's local timezone.
-            parsed_ts = parse_timestamp(mainlog_ts + " +0000", format: "%Y-%m-%d %H:%M:%S %z") ?? null
-            if parsed_ts != null {
-                time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? time_ms
-            }
-        }
-
-        user = ""
-        if vrfy {
-            caps = parse_regex(msg, r'VRFY failed for (?P<user>[^\s]+)') ?? {}
-            user = to_string(caps.user)
-        }
-
-        . = {
-            "time": time_ms,
-            "category_uid": category_uid,
-            "class_uid": class_uid,
-            "class_name": "Email Activity",
-            "category_name": "Network Activity",
-            "type_uid": type_uid,
-            "activity_id": activity_id,
-            "activity_name": activity_name,
-            "severity_id": severity_id,
-            "status_id": 1,
-            "direction_id": 1,
-            "message": msg,
-            "actor": { "user": { "name": user } },
-            "src_endpoint": { "ip": src_ip },
-            "dst_endpoint": { "hostname": host },
-            "device": { "hostname": host, "type_id": 1 },
-            "email": {
-                "from": user,
-                "to": [user],
-                "subject": msg,
-            },
-            "metadata": {
-                "product": { "name": program, "vendor_name": "exim" },
-                "version": "1.9.0",
-                "profiles": ["host"],
-            },
-            "unmapped": {
-                "program": program,
-                "device_hostname": host,
-                "vrfy": vrfy,
-            },
-        }
+      status_id = 1
+      status = "Success"
     }
+  }
+} else {
+  # Exim logs an address verification failure separately from an ACL rejection of the command.
+  rejected = parse_regex(rest, r'^(?P<cmd>VRFY) failed for <?(?P<target>[^<>\s]+)>?(?:\s|$)') ??
+    parse_regex(rest, r'rejected (?P<cmd>VRFY|RCPT|EXPN|MAIL)\b(?: failed for| from)? ?<?(?P<target>[^\s>:]*)>?(?:: (?P<reason>.*))?$') ?? null
+  if rejected == null {
+    abort "no_match"
+  }
+  command = string!(rejected.cmd)
+  activity_name = command
+  direction_id = 1
+  status_id = 2
+  status = "Failure"
+  status_detail = string(rejected.reason) ?? null
+  severity_id = 2
+  target = string(rejected.target) ?? ""
+  sender = parse_regex(rest, r'\bF=<(?P<from>[^>]*)>') ?? {}
+  from = string(sender.from) ?? ""
+  if command == "MAIL" && from == "" {
+    from = target
+    target = ""
+  }
+  if contains(from, "@") {
+    email.from = from
+  }
+  # Only a full address is an email address; a bare local part ("VRFY jsmith") names a mailbox.
+  if contains(target, "@") {
+    email.to = [target]
+  } else if target != "" {
+    email.to_mailboxes = [target]
+  }
+  # A VRFY command with only a mailbox belongs to the SMTP connection when Email Activity lacks an address.
+  if !exists(email.from) && !exists(email.to) {
+    if command != "VRFY" || (length(remote) == 0 && length(local) == 0) {
+      abort "no_match"
+    }
+    class_uid = 4001
+    activity_id = 6
+    activity_name = null
+  }
+  src = remote
+  dst = local
+}
+
+. = {
+  "category_uid": 4,
+  "class_uid": class_uid,
+  "type_uid": class_uid * 100 + activity_id,
+  "activity_id": activity_id,
+  "activity_name": activity_name,
+  "severity_id": severity_id,
+  "status_id": status_id,
+  "status": status,
+  "status_detail": status_detail,
+  "time": time_ms,
+  "message": line,
+  "src_endpoint": src,
+  "dst_endpoint": dst,
+  "metadata": {
+    "product": {"name": "Exim", "vendor_name": "Exim"},
+    "version": "1.9.0",
+    "log_name": "mainlog",
+    "original_time": string!(head.ts),
+    "profiles": [],
+  },
+  # The name the remote host gave in HELO/EHLO is its own claim, not a verified host name.
+  "unmapped": {"helo": string(peer.helo) ?? ""},
+}
+if class_uid == 4009 {
+  .direction_id = direction_id
+  .command = command
+  .message_trace_uid = message_uid
+  .email = email
+  .from = email.from
+  .to = email.to
+} else {
+  .app_protocol_name = "smtp"
+  .unmapped.smtp_command = command
+  .unmapped.smtp_target = email.to_mailboxes[0]
+}
+# The mail host is the device, which belongs to the host profile in both classes.
+if host != "" {
+  # type_id 0 (Unknown): the log does not say what kind of device the mail host is.
+  .device = {"hostname": host, "type_id": 0}
+  .metadata.profiles = ["host"]
+}
+. = compact(., array: false)

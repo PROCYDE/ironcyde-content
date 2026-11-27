@@ -1,0 +1,11 @@
+---
+# Any other event type with addresses is plain traffic, named by its event type.
+raw_sample: '{"timestamp":"2026-10-15T09:19:01.000Z","event_type":"tls","src_ip":"192.0.2.23","src_port":40113,"dest_ip":"not-an-address","dest_port":443,"proto":"TCP"}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  src_endpoint.ip: 192.0.2.23
+  dst_endpoint: null
+  traffic: null
+  metadata.log_name: tls
+  metadata.profiles: []

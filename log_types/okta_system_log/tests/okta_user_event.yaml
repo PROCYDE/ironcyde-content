@@ -1,4 +1,37 @@
 ---
-raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000000","type":"User","alternateId":"rsanchez@citadel.example","displayName":"Rick Sanchez"},"client":{"ipAddress":"203.0.113.12","userAgent":{"rawUserAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0","os":"Windows 10","browser":"CHROME"},"geographicalContext":{"country":"SC","city":"Unknown"}},"device":{"name":"CTDL-WKS-23"},"displayMessage":"User login failed","eventType":"user.session.start","outcome":{"result":"FAILURE","reason":"INVALID_CREDENTIALS"},"published":"2026-10-15T09:44:48.000Z","severity":"WARN","authenticationContext":{"authenticationStep":0,"externalSessionId":"EXAMPLESESSION0000000000000"},"uuid":"00000000-0000-4000-8000-000000000001"}'
+# A failed sign-in: Logon, Failure, with the client's location, network and device, the session and the password factor.
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"client":{"ipAddress":"203.0.113.12","userAgent":{"rawUserAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0","os":"Windows 10","browser":"CHROME"},"geographicalContext":{"country":"Germany","city":"Example City","state":"Example State","geolocation":{"lat":50.93,"lon":6.93}},"zone":"null","device":"Computer"},"device":{"id":"guoEXAMPLEDEVICE0001","name":"WEB1"},"securityContext":{"asNumber":64512,"asOrg":"example isp","isProxy":false},"displayMessage":"User login to Okta","eventType":"user.session.start","outcome":{"result":"FAILURE","reason":"INVALID_CREDENTIALS"},"published":"2026-10-15T09:44:48.000Z","severity":"WARN","authenticationContext":{"authenticationProvider":"OKTA_AUTHENTICATION_PROVIDER","credentialType":"PASSWORD","externalSessionId":"EXAMPLESESSION0000000000000"},"transaction":{"id":"EXAMPLETRANSACTION01"},"debugContext":{"debugData":{"requestUri":"/api/v1/authn?x=1"}},"uuid":"00000000-0000-4000-8000-000000000001"}'
 expected:
   class_uid: 3002
+  category_uid: 3
+  type_uid: 300201
+  activity_id: 1
+  severity_id: 2
+  status_id: 2
+  status_detail: INVALID_CREDENTIALS
+  time: 1792057488000
+  user.name: alice@example.com
+  user.full_name: Alice Example
+  user.uid: 00uEXAMPLEUSER000001
+  user.email_addr: alice@example.com
+  user.type_id: 1
+  actor.user.name: alice@example.com
+  actor.session.uid: EXAMPLESESSION0000000000000
+  session.uid: EXAMPLESESSION0000000000000
+  service.name: Okta
+  auth_factors:
+    - {factor_type_id: 11, factor_type: Password}
+  src_endpoint.ip: 203.0.113.12
+  src_endpoint.hostname: WEB1
+  src_endpoint.uid: guoEXAMPLEDEVICE0001
+  src_endpoint.location.city: Example City
+  src_endpoint.location.country: Germany
+  src_endpoint.location.lat: 50.93
+  src_endpoint.autonomous_system.number: 64512
+  http_request.user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0
+  http_request.uid: EXAMPLETRANSACTION01
+  http_request.url.path: /api/v1/authn
+  metadata.uid: 00000000-0000-4000-8000-000000000001
+  metadata.event_code: user.session.start
+  metadata.correlation_uid: EXAMPLETRANSACTION01
+  metadata.profiles: []

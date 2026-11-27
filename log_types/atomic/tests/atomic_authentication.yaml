@@ -1,0 +1,16 @@
+---
+# An authentication technique: a logoff on the host by the user, with the process that did it.
+raw_sample: '{"technique_uid":"T1078","technique_name":"Valid Accounts","tactic_uid":"TA0001","tactic_name":"Initial Access","process":"runas.exe","cmd_line":"runas /user:bob cmd","host":"web1","user":"bob","class_uid":3002,"activity_id":2,"severity_id":2}'
+expected:
+  class_uid: 3002
+  category_uid: 3
+  type_uid: 300202
+  activity_id: 2
+  user.name: bob
+  dst_endpoint.hostname: web1
+  logon_process.name: runas.exe
+  device: null
+  attacks:
+    - tactic: {uid: TA0001, name: Initial Access}
+      technique: {uid: T1078, name: Valid Accounts}
+  metadata.profiles: [security_control]

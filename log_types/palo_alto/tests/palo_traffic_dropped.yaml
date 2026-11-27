@@ -1,0 +1,13 @@
+---
+# A dropped session with src_ip/dst_ip keys; an invalid destination leaves only the source endpoint.
+raw_sample: '{"src_ip":"192.0.2.12","dst_ip":"n/a","src_port":40001,"dst_port":53,"proto":"udp","action":"drop","packets":3}'
+expected:
+  class_uid: 4001
+  type_uid: 400105
+  disposition_id: 6
+  disposition: Dropped
+  src_endpoint.port: 40001
+  dst_endpoint: null
+  traffic.packets: 3
+  firewall_rule: null
+  metadata.profiles: [security_control]

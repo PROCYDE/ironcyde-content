@@ -1,0 +1,10 @@
+---
+# A connection record without Initiated or a process: the direction is Unknown and the actor a placeholder.
+raw_sample: '{"EventID":3,"event_data":{"UtcTime":"2026-10-15 09:43:01.000","SourceIp":"192.0.2.10","DestinationIp":"198.51.100.20"}}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  connection_info.direction_id: 0
+  actor.user.name: unknown
+  device.name: unknown
+  metadata.profiles: [host]

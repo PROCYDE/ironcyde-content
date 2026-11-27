@@ -1,0 +1,13 @@
+---
+# Only an ID: no host, so no device; the severity is Unknown and the title is left out.
+raw_sample: '{"id":"ldt:00000000000000000000000000000000:10000003","Severity":"n/a"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 0
+  finding_info.uid: ldt:00000000000000000000000000000000:10000003
+  finding_info.title: null
+  device: null
+  evidences: null
+  action_id: null
+  metadata.profiles: []

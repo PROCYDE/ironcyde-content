@@ -1,0 +1,8 @@
+---
+# RegistryEvent 12 without an event type: Registry Key Activity with an Unknown activity.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":12,"event_data":{"UtcTime":"2026-10-15 09:47:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\regedit.exe","User":"EXAMPLE\\alice","EventType":"","TargetObject":"HKLM\\SOFTWARE\\Example\\Key"}}'
+expected:
+  class_uid: 201001
+  type_uid: 20100100
+  activity_id: 0
+  metadata.profiles: []

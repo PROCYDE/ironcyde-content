@@ -1,165 +1,243 @@
-# Palo Alto firewall / threat log (JSON or CEF-ish fields) → OCSF Network Activity.
+# Palo Alto Networks PAN-OS traffic and threat logs, as JSON objects -> OCSF.
 #
-# Gateway envelope: event=<JSON string>. Prefer JSON keys src/dst/sport/dport/proto/action.
-# Scale: one parse, prefix severity from action/severity. Never class 2001.
+#   a log that names a threat -> Detection Finding (2004), Create: the session's endpoints are evidence
+#   every other log           -> Network Activity (4001): Refuse when the firewall denied the session, else Traffic
+# Reads the short keys (src, dst, sport, dport, proto, action, app, rule, threat_name) and the long forms
+# (src_ip, SourceAddress, ...). The firewall's verdict goes to action/disposition and the rule to firewall_rule
+# (security_control profile). A log without a valid address is rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
-if !is_object(raw) {
-    if .src != null || .src_ip != null || .SourceAddress != null {
-        raw = .
-    }
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && (.src != null || .src_ip != null || .SourceAddress != null) {
+  raw = .
 }
 if !is_object(raw) {
-    abort "no_match"
+  abort "no_match"
 }
-    src_ip = to_string(raw.src) ?? ""
-    if src_ip == "" {
-        src_ip = to_string(raw.src_ip) ?? ""
-    }
-    if src_ip == "" {
-        src_ip = to_string(raw.SourceAddress) ?? ""
-    }
-    dst_ip = to_string(raw.dst) ?? ""
-    if dst_ip == "" {
-        dst_ip = to_string(raw.dst_ip) ?? ""
-    }
-    if dst_ip == "" {
-        dst_ip = to_string(raw.DestinationAddress) ?? ""
-    }
-    sport = to_int(raw.sport) ?? 0
-    if sport == 0 {
-        sport = to_int(raw.src_port) ?? 0
-    }
-    if sport == 0 {
-        sport = to_int(raw.SourcePort) ?? 0
-    }
-    dport = to_int(raw.dport) ?? 0
-    if dport == 0 {
-        dport = to_int(raw.dst_port) ?? 0
-    }
-    if dport == 0 {
-        dport = to_int(raw.DestinationPort) ?? 0
-    }
-    proto = downcase(to_string(raw.proto) ?? "")
-    if proto == "" {
-        proto = downcase(to_string(raw.Protocol) ?? "tcp")
-    }
-    action = downcase(to_string(raw.action) ?? "")
-    if action == "" {
-        action = downcase(to_string(raw.Action) ?? "")
-    }
-    app = to_string(raw.app) ?? ""
-    if app == "" {
-        app = to_string(raw.Application) ?? ""
-    }
-    rule = to_string(raw.rule) ?? ""
-    if rule == "" {
-        rule = to_string(raw.Rule) ?? ""
-    }
-    threat = to_string(raw.threat_name) ?? ""
-    if threat == "" {
-        threat = to_string(raw.Threat_Name) ?? ""
-    }
 
-    if src_ip != "" {
-        ok4 = is_ipv4(src_ip)
-        ok6 = is_ipv6(src_ip)
-        if !ok4 && !ok6 { src_ip = "" }
-    }
-    if dst_ip != "" {
-        ok4 = is_ipv4(dst_ip)
-        ok6 = is_ipv6(dst_ip)
-        if !ok4 && !ok6 { dst_ip = "" }
-    }
+# to_string(null) is "" and to_int(null) is 0, not errors, so alternatives are tried one by one.
+src_ip = to_string(raw.src) ?? ""
+if src_ip == "" {
+  src_ip = to_string(raw.src_ip) ?? ""
+}
+if src_ip == "" {
+  src_ip = to_string(raw.SourceAddress) ?? ""
+}
+if !(is_ipv4(src_ip) || is_ipv6(src_ip)) {
+  src_ip = ""
+}
+dst_ip = to_string(raw.dst) ?? ""
+if dst_ip == "" {
+  dst_ip = to_string(raw.dst_ip) ?? ""
+}
+if dst_ip == "" {
+  dst_ip = to_string(raw.DestinationAddress) ?? ""
+}
+if !(is_ipv4(dst_ip) || is_ipv6(dst_ip)) {
+  dst_ip = ""
+}
+if src_ip == "" && dst_ip == "" {
+  abort "no_match"
+}
+sport = to_int(raw.sport) ?? 0
+if sport == 0 {
+  sport = to_int(raw.src_port) ?? 0
+}
+if sport == 0 {
+  sport = to_int(raw.SourcePort) ?? 0
+}
+dport = to_int(raw.dport) ?? 0
+if dport == 0 {
+  dport = to_int(raw.dst_port) ?? 0
+}
+if dport == 0 {
+  dport = to_int(raw.DestinationPort) ?? 0
+}
+# A port belongs to an endpoint that has an address.
+src = {"ip": src_ip, "zone": to_string(raw.from_zone) ?? ""}
+if src_ip != "" && sport > 0 && sport < 65536 {
+  src.port = sport
+}
+dst = {"ip": dst_ip, "zone": to_string(raw.to_zone) ?? ""}
+if dst_ip != "" && dport > 0 && dport < 65536 {
+  dst.port = dport
+}
+src = compact(src)
+dst = compact(dst)
+if !exists(src.ip) {
+  src = {}
+}
+if !exists(dst.ip) {
+  dst = {}
+}
 
-    category_uid = 4
-    class_uid = 4001
-    class_name = "Network Activity"
-    activity_id = 1
-    severity_id = 2
-    status_id = 1
+proto = downcase(to_string(raw.proto) ?? "")
+if proto == "" {
+  proto = downcase(to_string(raw.Protocol) ?? "")
+}
+# direction_id 0 (Unknown): zones are site-specific names, not a direction.
+connection_info = {"direction_id": 0, "protocol_name": proto, "uid": to_string(raw.session_id) ?? ""}
+proto_num = get({"icmp": 1, "tcp": 6, "udp": 17, "ipv6-icmp": 58}, [proto]) ?? null
+if proto_num != null {
+  connection_info.protocol_num = proto_num
+}
+action = downcase(to_string(raw.action) ?? "")
+if action == "" {
+  action = downcase(to_string(raw.Action) ?? "")
+}
+app = to_string(raw.app) ?? ""
+if app == "" {
+  app = to_string(raw.Application) ?? ""
+}
+rule = to_string(raw.rule) ?? ""
+if rule == "" {
+  rule = to_string(raw.Rule) ?? ""
+}
+threat = to_string(raw.threat_name) ?? ""
+if threat == "" {
+  threat = to_string(raw.Threat_Name) ?? ""
+}
 
-    if action == "deny" || action == "drop" || action == "reset-both" || action == "reset-client" || action == "reset-server" {
-        status_id = 2
-        severity_id = 3
-        activity_id = 2
-    }
-    if threat != "" {
-        category_uid = 2
-        class_uid = 2004
-        class_name = "Detection Finding"
-        severity_id = 4
-        activity_id = 1
-    }
+original_time = to_string(raw.receive_time) ?? ""
+if original_time == "" {
+  original_time = to_string(raw.time_generated) ?? ""
+}
+if original_time == "" {
+  original_time = to_string(raw.timestamp) ?? ""
+}
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
 
-    type_uid = class_uid * 100 + activity_id
+# The firewall's verdict.
+denied = includes(["deny", "drop", "drop-icmp", "block", "block-url", "reset-both", "reset-client", "reset-server", "sinkhole"], action)
+allowed = includes(["allow", "alert", "continue"], action)
+action_id = null
+action_name = null
+disposition_id = null
+disposition = null
+if allowed {
+  action_id = 1
+  action_name = "Allowed"
+  disposition_id = 1
+  disposition = "Allowed"
+} else if denied {
+  action_id = 2
+  action_name = "Denied"
+  if starts_with(action, "drop") {
+    disposition_id = 6
+    disposition = "Dropped"
+  } else if starts_with(action, "reset") {
+    disposition_id = 21
+    disposition = "Reset"
+  } else {
+    disposition_id = 2
+    disposition = "Blocked"
+  }
+}
 
-    # Empty-string fields must not short-circuit ?? — check each key explicitly.
-    time_ms = 0
-    ts_str = to_string(raw.receive_time) ?? ""
-    if ts_str == "" {
-        ts_str = to_string(raw.time_generated) ?? ""
-    }
-    if ts_str == "" {
-        ts_str = to_string(raw.timestamp) ?? ""
-    }
-    if ts_str != "" {
-        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-        if parsed_ts != null {
-            time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
-        }
-    }
-    if time_ms == 0 {
-        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    }
+log_type = downcase(to_string(raw.type) ?? "")
+metadata = {
+  "version": "1.9.0",
+  "log_name": log_type,
+  "original_time": original_time,
+  "product": {"name": "PAN-OS", "vendor_name": "Palo Alto Networks"},
+  # The firewall that wrote the log, by its serial number.
+  "reporter": {"uid": to_string(raw.serial) ?? "", "name": to_string(raw.device_name) ?? ""},
+  "profiles": [],
+}
+msg = strip_whitespace("PAN-OS " + action + " " + proto + " " + src_ip + " -> " + dst_ip)
+unmapped = {
+  "nat_src": to_string(raw.natsrc) ?? "",
+  "nat_dst": to_string(raw.natdst) ?? "",
+  "url_category": to_string(raw.category) ?? "",
+}
+# A verdict the mapping does not know is kept in its own words.
+if !allowed && !denied {
+  unmapped.action = action
+}
 
-    msg = "palo " + action + " " + proto + " " + src_ip + ":" + to_string(sport) + "->" + dst_ip + ":" + to_string(dport)
-    if threat != "" {
-        msg = msg + " threat=" + threat
-    }
-    if app != "" {
-        msg = msg + " app=" + app
-    }
-
-    cat_name = "Network Activity"
-    if category_uid == 2 {
-        cat_name = "Findings"
-    }
-
-    . = {
-        "category_uid": category_uid,
-        "class_uid": class_uid,
-        "class_name": class_name,
-        "category_name": cat_name,
-        "type_uid": type_uid,
-        "activity_id": activity_id,
-        "severity_id": severity_id,
-        "status_id": status_id,
-        "time": time_ms,
-        "message": msg,
-        "src_endpoint": { "ip": src_ip, "port": sport },
-        "dst_endpoint": { "ip": dst_ip, "port": dport },
-        "connection_info": { "protocol_name": proto, "direction_id": 1 },
-        "metadata": {
-            "version": "1.9.0",
-            "uid": to_string(raw.serial) ?? "",
-            "log_name": "traffic",
-            "log_provider": "Palo Alto Networks",
-            "product": { "name": "PAN-OS", "vendor_name": "Palo Alto Networks" },
-        },
-        "unmapped": {
-            "action": action,
-            "app": app,
-            "rule": rule,
-            "threat_name": threat,
-        },
-    }
-
-    if class_uid == 2004 {
-        .finding = {
-            "title": threat,
-            "uid": threat,
-        }
-    }
+if threat != "" {
+  severity_id = to_int(get({"informational": 1, "low": 2, "medium": 3, "high": 4, "critical": 5}, [downcase(to_string(raw.severity) ?? "")]) ?? 0) ?? 0
+  threat_id = to_string(raw.threatid) ?? ""
+  evidence = {"connection_info": connection_info}
+  if length(src) > 0 {
+    evidence.src_endpoint = src
+  }
+  if length(dst) > 0 {
+    evidence.dst_endpoint = dst
+  }
+  . = {
+    "category_uid": 2,
+    "class_uid": 2004,
+    "type_uid": 200401,
+    "activity_id": 1,
+    "severity_id": severity_id,
+    "status_id": 1,
+    "status": "New",
+    "is_alert": true,
+    "time": time_ms,
+    "message": msg + " threat " + threat,
+    "finding_info": {
+      "title": threat,
+      "uid": string(%ironcyde.event_id) ?? "",
+      "analytic": {"type_id": 1, "type": "Rule", "name": threat, "uid": threat_id},
+    },
+    "evidences": [evidence],
+    "metadata": metadata,
+    "unmapped": unmapped,
+  }
+  .unmapped.app = app
+} else {
+  . = {
+    "category_uid": 4,
+    "class_uid": 4001,
+    "type_uid": 400106,
+    "activity_id": 6,
+    "severity_id": 1,
+    "time": time_ms,
+    "message": msg,
+    "src_endpoint": src,
+    "dst_endpoint": dst,
+    "connection_info": connection_info,
+    "app_name": app,
+    "metadata": metadata,
+    "unmapped": unmapped,
+  }
+  if denied {
+    .type_uid = 400105
+    .activity_id = 5
+    .status_id = 2
+    .status = "Failure"
+  } else if allowed {
+    .status_id = 1
+    .status = "Success"
+  }
+  traffic = {}
+  if raw.bytes_sent != null && raw.bytes_received != null {
+    bytes_out = to_int(raw.bytes_sent) ?? 0
+    bytes_in = to_int(raw.bytes_received) ?? 0
+    traffic = {"bytes_out": bytes_out, "bytes_in": bytes_in, "bytes": bytes_out + bytes_in}
+  }
+  if raw.packets != null {
+    traffic.packets = to_int(raw.packets) ?? null
+  }
+  if length(traffic) > 0 {
+    .traffic = traffic
+  }
+}
+# action, disposition and firewall_rule belong to the security_control profile.
+if action_id != null {
+  .action_id = action_id
+  .action = action_name
+  .disposition_id = disposition_id
+  .disposition = disposition
+  .metadata.profiles = ["security_control"]
+}
+if rule != "" {
+  .firewall_rule = {"name": rule}
+  .metadata.profiles = ["security_control"]
+}
+. = compact(., array: false)

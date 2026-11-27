@@ -1,0 +1,11 @@
+---
+# A logon whose package is neither Kerberos nor NTLM and whose event names no account: the required user is a placeholder.
+raw_sample: '{"EventID":4624,"Computer":"WEB1","event_data":{"TargetUserName":"-","LogonType":"99","AuthenticationPackageName":"Negotiate"},"TimeCreated":"2026-10-15T09:23:03Z"}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  user.name: unknown
+  auth_protocol_id: null
+  logon_type_id: null
+  is_remote: null
+  metadata.profiles: [host]

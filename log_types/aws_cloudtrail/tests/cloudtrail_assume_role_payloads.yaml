@@ -1,0 +1,26 @@
+---
+# Synthetic payload based on AWS's IAM and STS CloudTrail examples, with inert credential placeholders.
+raw_sample: >-
+  {"eventName":"AssumeRole","eventSource":"sts.example","eventType":"AwsApiCall","readOnly":true,
+  "userIdentity":{"type":"IAMUser","userName":"alice","accountId":"123456789012"},
+  "sourceIPAddress":"192.0.2.30","requestID":"00000000-0000-4000-8000-000000000006",
+  "requestParameters":{"roleArn":"arn:aws:iam::123456789012:role/ExampleRole","roleSessionName":"example-session",
+  "tokenCode":"000000","userName":{"tokenCode":"000000"}},
+  "responseElements":{"credentials":{"sessionToken":"EXAMPLETOKEN"},
+  "assumedRoleUser":{"arn":"arn:aws:sts::123456789012:assumed-role/ExampleRole/example-session",
+  "assumedRoleId":"EXAMPLEROLE:example-session","sessionToken":"EXAMPLETOKEN"}}}
+expected:
+  class_uid: 6003
+  type_uid: 600302
+  api.request.data:
+    roleArn: arn:aws:iam::123456789012:role/ExampleRole
+    roleSessionName: example-session
+  api.request.data.tokenCode: null
+  api.request.data.userName: null
+  api.response.data:
+    assumedRoleUser:
+      arn: arn:aws:sts::123456789012:assumed-role/ExampleRole/example-session
+      assumedRoleId: EXAMPLEROLE:example-session
+  api.response.data.credentials: null
+  api.response.data.assumedRoleUser.sessionToken: null
+  metadata.profiles: [cloud]

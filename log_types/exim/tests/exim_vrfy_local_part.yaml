@@ -1,0 +1,12 @@
+---
+# A VRFY probe for a bare mailbox name from a known sender: the name is a mailbox, not an address.
+raw_sample: '{"message":"2026-10-15 09:55:48 H=(scanner) [203.0.113.166] F=<probe@example.net> rejected VRFY jsmith: administrative prohibition","hostname":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400999
+  command: VRFY
+  email.from: probe@example.net
+  email.to: null
+  email.to_mailboxes: [jsmith]
+  status_detail: administrative prohibition
+  metadata.profiles: [host]

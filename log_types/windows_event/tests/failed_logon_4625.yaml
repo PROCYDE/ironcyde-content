@@ -1,17 +1,31 @@
 ---
-raw_sample: '{"EventID":4625,"Channel":"Security","Computer":"CTDL-WKS-23","message":"An account failed to log on","event_data":{"TargetUserName":"MSMITH","TargetDomainName":"CITADEL","IpAddress":"203.0.113.201","IpPort":"15198","LogonType":"3","LogonProcessName":"NtLmSsp","AuthenticationPackageName":"NTLM","TargetLogonId":"0xf19da2","Status":"0xC000006D","SubStatus":"0xC000006A","FailureReason":"%%2313"},"TimeCreated":"2026-10-15T09:20:18Z","RecordNumber":8382104}'
+# A failed network logon over NTLM, with named event data: Failure with the status code.
+raw_sample: '{"EventID":4625,"Channel":"Security","Computer":"WEB1","message":"An account failed to log on","event_data":{"SubjectUserSid":"S-1-0-0","SubjectUserName":"-","SubjectDomainName":"-","TargetUserName":"ALICE","TargetDomainName":"EXAMPLE","IpAddress":"::ffff:203.0.113.201","IpPort":"15198","LogonType":"3","LogonProcessName":"NtLmSsp ","AuthenticationPackageName":"NTLM","WorkstationName":"-","Status":"0xC000006D","SubStatus":"0xC000006A","FailureReason":"%%2313"},"TimeCreated":"2026-10-15T09:20:18Z","RecordNumber":8382104}'
 expected:
-  activity_id: 1
-  category_uid: 3
   class_uid: 3002
-  dst_endpoint.hostname: ctdl-wks-23
+  category_uid: 3
+  type_uid: 300201
+  activity_id: 1
+  severity_id: 2
+  status_id: 2
+  status_code: '0xc000006d'
+  status_detail: '%%2313'
+  time: 1792056018000
   message: An account failed to log on
+  user.name: alice
+  user.domain: example
+  actor: null
+  src_endpoint.ip: 203.0.113.201
+  src_endpoint.port: 15198
+  src_endpoint.hostname: null
+  dst_endpoint.hostname: web1
+  device.hostname: web1
+  auth_protocol_id: 1
+  auth_protocol: NTLM
+  logon_type_id: 3
+  is_remote: true
   metadata.event_code: '4625'
+  metadata.uid: '8382104'
   metadata.product.name: Windows
   metadata.product.vendor_name: Microsoft
-  severity_id: 2
-  src_endpoint.ip: 203.0.113.201
-  status_id: 2
-  type_uid: 300201
-  user.domain: citadel
-  user.name: msmith
+  metadata.profiles: [host]

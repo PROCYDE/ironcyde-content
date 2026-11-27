@@ -1,0 +1,12 @@
+---
+# ProcessAccess that names only the target image and a source user: the user is the actor and the event's own ID identifies the target.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":10,"event_data":{"UtcTime":"2026-10-15 09:42:00.000","TargetImage":"C:\\Windows\\System32\\lsass.exe","SourceUser":"EXAMPLE\\alice","CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+9d4c4"}}'
+expected:
+  class_uid: 1007
+  type_uid: 100703
+  process.name: lsass.exe
+  process.pid: null
+  actor.user.name: alice
+  actor.process: null
+  requested_permissions: null
+  metadata.profiles: []

@@ -1,0 +1,12 @@
+---
+# A reset connection with src/dst keys; an invalid responder address leaves only the source endpoint.
+raw_sample: '{"ts":1792056883,"src":"192.0.2.23","sport":40001,"dst":"unknown","dport":443,"proto":"tcp","conn_state":"RSTO"}'
+expected:
+  class_uid: 4001
+  type_uid: 400103
+  status_id: 1
+  src_endpoint.ip: 192.0.2.23
+  src_endpoint.port: 40001
+  dst_endpoint: null
+  connection_info.direction_id: 0
+  metadata.profiles: []

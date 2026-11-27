@@ -1,8 +1,12 @@
 ---
 raw_sample: '{"date":1794911704.997902,"ProviderName":"Microsoft-Windows-Sysmon","ProviderGuid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","EventID":11,"Version":2,"Level":4,"Task":11,"Opcode":0,"Keywords":"0x8000000000000000","TimeCreated":"2026-11-17 05:35:03 -0500","EventRecordID":71088,"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"FS01.corp.example.test","StringInserts":["-","2026-11-17 10:35:03.069","{11111111-1111-1111-1111-111111111111}",5072,"C:\\Windows\\Explorer.EXE","C:\\Users\\domainuser\\AppData\\Roaming\\Microsoft\\Windows\\Themes\\TranscodedWallpaper","2026-11-16 06:22:34.734","CORP\\domainuser"],"range_id":"TEST"}'
 expected:
-  activity_id: 1
-  actor.user.name: domainuser
   class_uid: 1001
+  type_uid: 100101
+  activity_id: 1
   file.name: TranscodedWallpaper
-  file.path: C:\Users\domainuser\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper
+  file.path: 'C:\Users\domainuser\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper'
+  actor.user.name: domainuser
+  message: Sysmon event 11
+  metadata.uid: '71088'
+  metadata.profiles: []

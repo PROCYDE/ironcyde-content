@@ -1,0 +1,18 @@
+---
+# A message arrives: Receive, Inbound, with the message ID and size.
+raw_sample: '{"message":"2026-10-15 09:56:00 1tAbCd-000001-2X <= bob@example.net H=mx.example.net [198.51.100.25] P=esmtps S=2048 id=0001@example.net","hostname":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400902
+  activity_id: 2
+  direction_id: 1
+  status_id: 1
+  severity_id: 1
+  email.from: bob@example.net
+  email.size: 2048
+  email.message_uid: 1tAbCd-000001-2X
+  message_trace_uid: 1tAbCd-000001-2X
+  src_endpoint.ip: 198.51.100.25
+  src_endpoint.hostname: mx.example.net
+  dst_endpoint.hostname: mail1
+  metadata.profiles: [host]

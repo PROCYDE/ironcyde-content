@@ -1,0 +1,19 @@
+---
+# An accepted (inbound) connection with host names only for the source, an invalid source address and an unlisted protocol.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":3,"event_data":{"UtcTime":"2026-10-15 09:43:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4","Image":"System","User":"NT AUTHORITY\\SYSTEM","Protocol":"sctp","Initiated":"false","SourceIp":"-","SourceHostname":"CLIENT1.example.test","SourcePort":"50000","DestinationIp":"2001:db8::10","DestinationPort":"445"}}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  src_endpoint.ip: null
+  src_endpoint.hostname: client1.example.test
+  src_endpoint.port: 50000
+  dst_endpoint.ip: 2001:db8::10
+  dst_endpoint.port: 445
+  connection_info.direction_id: 1
+  connection_info.protocol_name: sctp
+  connection_info.protocol_num: null
+  actor.process.name: System
+  actor.process.file.path: null
+  actor.user.name: system
+  actor.user.domain: nt authority
+  metadata.profiles: [host]

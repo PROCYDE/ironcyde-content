@@ -1,0 +1,13 @@
+---
+# RegistryEvent 12, CreateKey: Registry Key Activity, Create.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":12,"event_data":{"UtcTime":"2026-10-15 09:47:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\regedit.exe","User":"EXAMPLE\\alice","EventType":"CreateKey","TargetObject":"HKLM\\SOFTWARE\\Example\\NewKey"}}'
+expected:
+  class_uid: 201001
+  category_uid: 1
+  type_uid: 20100101
+  activity_id: 1
+  reg_key.path: 'HKLM\SOFTWARE\Example\NewKey'
+  actor.process.name: regedit.exe
+  actor.user.name: alice
+  device.hostname: web1.example.test
+  metadata.profiles: []

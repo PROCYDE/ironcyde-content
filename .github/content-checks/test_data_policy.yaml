@@ -81,6 +81,8 @@ non_domains:
     reason: Falco output field placeholder in samples, not a host
   - value: container.id
     reason: Falco output field name that the parser reads, not a host
+  - value: container.image.id
+    reason: Falco output field name that the parser reads, not a host
 
 # Public patterns that must never appear in content (internal domains are already public knowledge).
 denylist_patterns:
@@ -90,24 +92,33 @@ denylist_patterns:
 # Values that are allowed anyway. Each needs the exact value, the files it may appear in (globs) and a
 # reason. An exception that no longer matches anything fails the check, so the list stays current.
 exceptions:
-  - value: goauthentik.io
-    paths: ["log_types/authentik/*"]
-    reason: Authentik's vendor name as the parser sets it in metadata.product.vendor_name, not a host in the samples
-  - value: s3.amazonaws.com
-    paths: ["log_types/aws_cloudtrail/parser.vrl"]
-    reason: public AWS service endpoint in a comment that explains how the parser derives the service name
   - value: iam.amazonaws.com
-    paths: ["log_types/aws_cloudtrail/tests/cloudtrail_event.yaml"]
+    paths: ["log_types/aws_cloudtrail/tests/*"]
     reason: public AWS service endpoint that CloudTrail reports as eventSource
-  - value: cloudtrail.eu-central-1.amazonaws.com
-    paths: ["log_types/aws_cloudtrail/tests/cloudtrail_event.yaml"]
-    reason: public regional AWS service endpoint that CloudTrail reports, identifies no account
-  - value: falcon.eu-1.crowdstrike.com
-    paths: ["log_types/crowdstrike_falcon/tests/falcon_detection.yaml"]
-    reason: CrowdStrike's public EU cloud console host in a detection link, identifies no customer
+  - value: ec2.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/*"]
+    reason: public AWS service endpoint that CloudTrail reports as eventSource; the parser comment shows the form
   - value: docker.io
-    paths: ["log_types/falco/tests/falco_write_below_binary.yaml"]
+    paths: ["log_types/falco/tests/*"]
     reason: public Docker Hub registry name in a container image reference
   - value: audit.k8s.io
-    paths: ["log_types/kubernetes_audit/tests/get_endpoints.yaml"]
+    paths: ["log_types/kubernetes_audit/*"]
     reason: Kubernetes API group of audit events (apiVersion audit.k8s.io/v1), not a host
+  - value: authorization.k8s.io
+    paths: ["log_types/kubernetes_audit/*"]
+    reason: Kubernetes annotation key prefix (authorization.k8s.io/decision), not a host
+  - value: s3.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/tests/*"]
+    reason: public AWS service endpoint that CloudTrail reports as eventSource
+  - value: signin.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/tests/*"]
+    reason: public AWS service endpoint that CloudTrail reports as eventSource
+  - value: autoscaling.amazonaws.com
+    paths: ["log_types/aws_cloudtrail/tests/*"]
+    reason: public AWS service name that CloudTrail reports as invokedBy and sourceIPAddress
+  - value: rbac.authorization.k8s.io
+    paths: ["log_types/kubernetes_audit/tests/*"]
+    reason: Kubernetes API group of RBAC objects, not a host
+  - value: rolebindings.rbac.authorization.k8s.io
+    paths: ["log_types/kubernetes_audit/tests/*"]
+    reason: Kubernetes resource name in an API server message (resource.group), not a host

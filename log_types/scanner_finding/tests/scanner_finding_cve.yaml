@@ -1,0 +1,19 @@
+---
+# A resolved vulnerability finding: CVE IDs become vulnerabilities, a plain technique stays a technique.
+raw_sample: '{"schema":"ironcyde.scanner_finding.v1","tool":"trivy","title":"openssl: example vulnerability","severity":"critical","category":"vulnerability","technique_ids":["T1190"],"cve":["CVE-2024-0001"],"target":{"ip":"2001:db8::23"},"timestamp":"2026-10-15T09:29:00Z","status":"fixed"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 5
+  status_id: 4
+  status: Resolved
+  vulnerabilities:
+    - cve: {uid: CVE-2024-0001}
+  finding_info.attacks:
+    - technique: {uid: T1190}
+  resources:
+    - {name: "2001:db8::23", ip: "2001:db8::23", role_id: 1, role: Target}
+  evidences:
+    - dst_endpoint: {ip: "2001:db8::23"}
+  metadata.uid: null
+  metadata.profiles: []

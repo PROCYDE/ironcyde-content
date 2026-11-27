@@ -1,0 +1,10 @@
+---
+# The newer EVE DNS format puts the name and type in a queries list.
+raw_sample: '{"timestamp":"2026-10-15T09:18:48.200Z","event_type":"dns","src_ip":"192.0.2.23","src_port":51001,"dest_ip":"198.51.100.1","dest_port":53,"proto":"UDP","dns":{"version":3,"type":"request","id":4712,"queries":[{"rrname":"mail.example.com","rrtype":"MX"}]}}'
+expected:
+  class_uid: 4003
+  type_uid: 400301
+  query.hostname: mail.example.com
+  query.type: MX
+  transaction_id: 4712
+  metadata.profiles: []

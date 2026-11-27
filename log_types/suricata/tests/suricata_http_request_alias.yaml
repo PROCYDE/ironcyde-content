@@ -1,0 +1,11 @@
+---
+# A shipper can supply the EVE HTTP fields under http_request.
+raw_sample: '{"event_type":"http","src_ip":"192.0.2.23","dest_ip":"203.0.113.80","proto":"TCP","http_request":{"hostname":"www.example.com","url":"/example?key=value","http_method":"GET","status":200}}'
+expected:
+  class_uid: 4002
+  type_uid: 400203
+  http_request.http_method: GET
+  http_request.url.url_string: http://www.example.com/example?key=value
+  http_response.code: 200
+  status_id: 1
+  metadata.profiles: []

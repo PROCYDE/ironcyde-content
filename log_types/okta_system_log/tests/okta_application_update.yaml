@@ -1,0 +1,22 @@
+---
+# An admin changes an application: API Activity, Update, with the targets as resources and the request path.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"client":{"ipAddress":"198.51.100.7","userAgent":{"rawUserAgent":"Mozilla/5.0 (X11; Linux x86_64) Firefox/128.0","os":"Linux","browser":"FIREFOX"}},"device":{"id":"guoEXAMPLEDEVICE0000","name":"web1"},"displayMessage":"Update application","eventType":"application.lifecycle.update","outcome":{"result":"SUCCESS"},"published":"2026-10-15T10:02:11.000Z","severity":"INFO","debugContext":{"debugData":{"url":"/api/v1/apps/0oaEXAMPLEAPP0000000?expand=user"}},"transaction":{"id":"EXAMPLETRANSACTION00"},"target":[{"id":"0oaEXAMPLEAPP0000000","type":"AppInstance","alternateId":"Example App","displayName":"Example App"}],"uuid":"00000000-0000-4000-8000-000000000004"}'
+expected:
+  class_uid: 6003
+  category_uid: 6
+  type_uid: 600303
+  activity_id: 3
+  status_id: 1
+  api.operation: application.lifecycle.update
+  api.service.name: Okta
+  api.request.uid: EXAMPLETRANSACTION00
+  actor.user.name: admin@example.com
+  src_endpoint.ip: 198.51.100.7
+  src_endpoint.hostname: web1
+  src_endpoint.uid: guoEXAMPLEDEVICE0000
+  http_request.url.path: /api/v1/apps/0oaEXAMPLEAPP0000000
+  resources:
+    - {name: Example App, uid: 0oaEXAMPLEAPP0000000, type: AppInstance}
+  device: null
+  user: null
+  metadata.profiles: []

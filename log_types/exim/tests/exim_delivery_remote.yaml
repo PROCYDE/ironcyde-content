@@ -1,0 +1,14 @@
+---
+# A delivery over remote SMTP: Send, Outbound, to the next host.
+raw_sample: '{"message":"2026-10-15 09:56:01 1tAbCd-000001-2X => alice@example.org R=dnslookup T=remote_smtp H=mx.example.org [203.0.113.25] C=\"250 OK\"","hostname":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400901
+  activity_id: 1
+  direction_id: 2
+  status_id: 1
+  email.to: [alice@example.org]
+  src_endpoint.hostname: mail1
+  dst_endpoint.ip: 203.0.113.25
+  dst_endpoint.hostname: mx.example.org
+  metadata.profiles: [host]

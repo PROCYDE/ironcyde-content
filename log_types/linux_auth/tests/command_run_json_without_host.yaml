@@ -1,0 +1,11 @@
+---
+# A sudo command in the JSON form without a host name: the required device is a placeholder.
+raw_sample: '{"message":"bob : TTY=pts/1 ; PWD=/root ; USER=root ; COMMAND=/usr/bin/whoami","program":"sudo"}'
+expected:
+  class_uid: 1007
+  type_uid: 100701
+  actor.user.name: bob
+  device.name: unknown
+  device.hostname: null
+  metadata.original_time: null
+  metadata.profiles: []

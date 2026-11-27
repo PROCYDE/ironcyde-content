@@ -1,0 +1,12 @@
+---
+# SetValue with a QWORD on a key's default value.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":13,"event_data":{"UtcTime":"2026-10-15 09:47:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\regedit.exe","User":"EXAMPLE\\alice","EventType":"SetValue","TargetObject":"HKLM\\SOFTWARE\\Example\\(Default)","Details":"QWORD (0x00000000000000ff)"}}'
+expected:
+  class_uid: 201002
+  type_uid: 20100202
+  reg_value.path: 'HKLM\SOFTWARE\Example'
+  reg_value.name: (Default)
+  reg_value.is_default: true
+  reg_value.type_id: 8
+  reg_value.reg_integer_data: 255
+  metadata.profiles: []

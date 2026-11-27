@@ -1,0 +1,10 @@
+---
+# An authentication technique without a host or user: the required user and endpoint are placeholders.
+raw_sample: '{"technique_uid":"T1110","class_uid":3002}'
+expected:
+  class_uid: 3002
+  type_uid: 300201
+  user.name: unknown
+  dst_endpoint.name: unknown
+  logon_process: null
+  metadata.profiles: [security_control]

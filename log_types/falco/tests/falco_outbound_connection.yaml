@@ -1,0 +1,23 @@
+---
+# A network rule: Network Activity, Open, with the client and server tuple, the process as actor (host profile) and the container.
+raw_sample: '{"output":"Unexpected outbound connection","priority":"Error","rule":"Unexpected outbound connection destination","time":"2026-10-15T09:17:02Z","output_fields":{"evt.type":"connect","fd.cip":"192.0.2.23","fd.cport":40112,"fd.sip":"203.0.113.80","fd.sport":443,"fd.l4proto":"tcp","proc.name":"curl","proc.pid":4242,"user.name":"alice","container.id":"0123456789ab","container.image.id":"sha256:0000000000000000000000000000000000000000000000000000000000000003","container.image.repository":"docker.io/library/nginx","container.image.tag":"1.27"},"hostname":"node1","tags":["T1071.001"]}'
+expected:
+  class_uid: 4001
+  category_uid: 4
+  type_uid: 400101
+  severity_id: 3
+  src_endpoint.ip: 192.0.2.23
+  src_endpoint.port: 40112
+  dst_endpoint.ip: 203.0.113.80
+  dst_endpoint.port: 443
+  connection_info.protocol_name: tcp
+  connection_info.protocol_num: 6
+  actor.process.name: curl
+  actor.process.container.image.uid: sha256:0000000000000000000000000000000000000000000000000000000000000003
+  actor.process.container.image.name: docker.io/library/nginx
+  actor.process.container.image.labels: ["1.27"]
+  device.hostname: node1
+  attacks:
+    - technique: {uid: T1071}
+      sub_technique: {uid: T1071.001}
+  metadata.profiles: [security_control, host, container]

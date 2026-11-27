@@ -1,0 +1,12 @@
+---
+# A ptrace rule: one process opens another; without a host name the pod names the device, without a user the actor is a placeholder.
+raw_sample: '{"output":"Detected ptrace attach","priority":"Warning","rule":"PTRACE attached to process","time":"2026-10-15T09:17:01Z","output_fields":{"evt.type":"ptrace","proc.name":"gdb","k8s.pod.name":"debug-0","container.id":"0123456789ac"}}'
+expected:
+  class_uid: 1007
+  type_uid: 100703
+  severity_id: 2
+  process.name: gdb
+  actor.user.name: unknown
+  device.name: debug-0
+  device.hostname: null
+  metadata.profiles: [container]

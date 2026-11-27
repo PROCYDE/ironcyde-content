@@ -1,0 +1,11 @@
+---
+# A listening socket without addresses: Listen; the node is the only endpoint known.
+raw_sample: '{"output":"Process is listening on a port","priority":"Informational","rule":"Unexpected listen on port","output_fields":{"evt.type":"listen","proc.name":"nc"},"hostname":"node1"}'
+expected:
+  class_uid: 4001
+  type_uid: 400107
+  src_endpoint.hostname: node1
+  dst_endpoint: null
+  connection_info: null
+  metadata.original_time: null
+  metadata.profiles: [host]

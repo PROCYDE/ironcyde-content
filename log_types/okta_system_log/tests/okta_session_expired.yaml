@@ -1,0 +1,8 @@
+---
+# An expired session: Logoff.
+raw_sample: '{"actor":{"id":"00uEXAMPLEUSER000001","type":"User","alternateId":"alice@example.com","displayName":"Alice Example"},"eventType":"user.session.expire","outcome":{"result":"SUCCESS"},"severity":"INFO"}'
+expected:
+  class_uid: 3002
+  type_uid: 300202
+  activity_id: 2
+  metadata.profiles: []

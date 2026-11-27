@@ -1,0 +1,10 @@
+---
+# Only an event name: Update, with the placeholders the required actor and source need.
+raw_sample: '{"eventName":"ModifyInstanceAttribute","eventSource":"ec2.amazonaws.com"}'
+expected:
+  class_uid: 6003
+  type_uid: 600303
+  actor.user.name: unknown
+  src_endpoint.name: unknown
+  cloud.provider: AWS
+  metadata.profiles: [cloud]

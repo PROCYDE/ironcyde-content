@@ -1,0 +1,15 @@
+---
+# A rejected attempt in the flat key form, with an ISO 8601 time.
+raw_sample: '{"ts":"2026-10-15T09:34:43.000Z","orig_h":"203.0.113.9","orig_p":40022,"resp_h":"192.0.2.23","resp_p":22,"proto":"tcp","conn_state":"REJ","local_orig":false,"local_resp":true}'
+expected:
+  class_uid: 4001
+  type_uid: 400105
+  activity_id: 5
+  status_id: 2
+  time: 1792056883000
+  src_endpoint.ip: 203.0.113.9
+  dst_endpoint.ip: 192.0.2.23
+  dst_endpoint.port: 22
+  connection_info.direction_id: 1
+  metadata.uid: null
+  metadata.profiles: []

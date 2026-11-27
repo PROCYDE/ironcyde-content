@@ -1,0 +1,11 @@
+---
+# A local delivery names the mailbox and the original address: Send, Local.
+raw_sample: '{"message":"2026-10-15 09:56:02 1tAbCd-000001-2X => alice <alice@example.com> R=local_user T=mail_spool","hostname":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400901
+  direction_id: 4
+  status_id: 1
+  email.to: [alice@example.com]
+  dst_endpoint: null
+  metadata.profiles: [host]

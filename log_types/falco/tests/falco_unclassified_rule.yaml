@@ -1,0 +1,10 @@
+---
+# A rule name without a known keyword and without a file: Detection Finding, with the user as evidence and an Unknown severity.
+raw_sample: '{"output":"Something unusual happened","rule":"Custom anomaly","output_fields":{"user.name":"carol"},"hostname":"node1"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 0
+  evidences:
+    - user: {name: carol}
+  metadata.profiles: []

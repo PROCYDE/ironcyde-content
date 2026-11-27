@@ -1,0 +1,19 @@
+---
+# A failed Kerberos ticket-granting ticket request: Authentication Ticket, Failure, with the service.
+raw_sample: '{"EventID":4768,"Computer":"DC1.example.test","event_data":{"TargetUserName":"bob","TargetDomainName":"EXAMPLE.TEST","TargetSid":"S-1-0-0","ServiceName":"krbtgt/EXAMPLE.TEST","ServiceSid":"S-1-0-0","TicketOptions":"0x40810010","Status":"0x18","TicketEncryptionType":"0xffffffff","PreAuthType":"2","IpAddress":"::ffff:192.0.2.44","IpPort":"49200"},"TimeCreated":"2026-10-15T09:23:00Z"}'
+expected:
+  class_uid: 3002
+  type_uid: 300203
+  activity_id: 3
+  status_id: 2
+  status_code: '0x18'
+  severity_id: 2
+  user.name: bob
+  user.uid: S-1-0-0
+  service.name: krbtgt/EXAMPLE.TEST
+  auth_protocol_id: 2
+  auth_protocol: Kerberos
+  src_endpoint.ip: 192.0.2.44
+  src_endpoint.port: 49200
+  dst_endpoint.hostname: dc1.example.test
+  metadata.profiles: [host]

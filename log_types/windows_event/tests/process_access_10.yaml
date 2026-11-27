@@ -1,0 +1,20 @@
+---
+# A Sysmon ProcessAccess record sent as a Windows event: Open, with the opening process as actor and the access mask.
+raw_sample: '{"EventID":10,"Computer":"WEB1","event_data":{"SourceProcessId":"4242","SourceImage":"C:\\Tools\\procdump.exe","TargetProcessId":"644","TargetImage":"C:\\Windows\\System32\\lsass.exe","GrantedAccess":"0x1410","SourceUser":"EXAMPLE\\Alice"},"TimeCreated":"2026-10-15T09:26:00Z"}'
+expected:
+  class_uid: 1007
+  type_uid: 100703
+  activity_id: 3
+  process.name: lsass.exe
+  process.pid: 644
+  process.file.path: C:\Windows\System32\lsass.exe
+  process.parent_process: null
+  actor.process.name: procdump.exe
+  actor.process.pid: 4242
+  actor.user.name: alice
+  actor.user.domain: example
+  requested_permissions: 5136
+  device.hostname: web1
+  metadata.log_name: Microsoft-Windows-Sysmon/Operational
+  metadata.log_provider: Microsoft-Windows-Sysmon
+  metadata.profiles: []

@@ -1,0 +1,18 @@
+---
+# A user is denied creating a secret: Create, Failure, with the server message and the API group.
+raw_sample: '{"kind":"Event","apiVersion":"audit.k8s.io/v1","level":"Metadata","auditID":"00000000-0000-0000-0000-000000000010","stage":"ResponseComplete","requestURI":"/apis/rbac.authorization.k8s.io/v1/namespaces/default/rolebindings","verb":"create","user":{"username":"alice@example.com","groups":["system:authenticated"]},"sourceIPs":["2001:db8::7"],"objectRef":{"resource":"rolebindings","namespace":"default","name":"admin-binding","apiGroup":"rbac.authorization.k8s.io","apiVersion":"v1"},"responseStatus":{"metadata":{},"status":"Failure","message":"rolebindings.rbac.authorization.k8s.io is forbidden","reason":"Forbidden","code":403},"requestReceivedTimestamp":"2026-11-16T21:49:00.000000Z","annotations":{"authorization.k8s.io/decision":"forbid"}}'
+expected:
+  class_uid: 6003
+  type_uid: 600301
+  status_id: 2
+  status_code: "403"
+  status_detail: rolebindings.rbac.authorization.k8s.io is forbidden
+  api.group.name: rbac.authorization.k8s.io
+  api.response.code: 403
+  api.response.message: rolebindings.rbac.authorization.k8s.io is forbidden
+  actor.user.name: alice@example.com
+  actor.user.type_id: null
+  actor.authorizations:
+    - {decision: forbid}
+  src_endpoint.ip: 2001:db8::7
+  metadata.profiles: []

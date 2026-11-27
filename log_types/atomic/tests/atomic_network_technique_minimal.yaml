@@ -1,0 +1,11 @@
+---
+# A network technique without a host, user or process: the required endpoint, device and actor are placeholders.
+raw_sample: '{"technique_uid":"T1046","class_uid":"4001"}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  src_endpoint.name: unknown
+  device.name: unknown
+  actor.user.name: unknown
+  actor.process: null
+  metadata.profiles: [security_control, host]

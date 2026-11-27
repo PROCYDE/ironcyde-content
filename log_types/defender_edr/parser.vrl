@@ -1,133 +1,222 @@
-# Microsoft Defender for Endpoint alert JSON → OCSF Detection Finding (2004) / Process (1007).
-# Gateway envelope. Never class_uid 2001. Scale: one parse_json, fixed unmapped keys.
+# Microsoft Defender for Endpoint alerts (JSON) -> OCSF Detection Finding (2004), Create.
+#
+# Reads the PascalCase fields and their camelCase forms. The device goes to device, the alerted process, its file
+# and hashes, the account and the remote address to evidences, the threat name to malware.
+# An object that names no alert (no title and no ID) is rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
-if !is_object(raw) {
-    if .AlertId != null || .alertId != null || .Title != null || .title != null {
-        raw = .
-    }
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && (.AlertId != null || .alertId != null || .Title != null || .title != null) {
+  raw = .
 }
 if !is_object(raw) {
-    abort "no_match"
+  abort "no_match"
 }
-    title = to_string(raw.Title) ?? ""
-    if title == "" {
-        title = to_string(raw.title) ?? "Defender alert"
-    }
-    alert_id = to_string(raw.AlertId) ?? ""
-    if alert_id == "" {
-        alert_id = to_string(raw.alertId) ?? ""
-    }
-    severity_raw = downcase(to_string(raw.Severity) ?? "")
-    if severity_raw == "" {
-        severity_raw = downcase(to_string(raw.severity) ?? "medium")
-    }
-    severity_id = 3
-    if severity_raw == "informational" || severity_raw == "low" {
-        severity_id = 2
-    } else if severity_raw == "medium" {
-        severity_id = 3
-    } else if severity_raw == "high" {
-        severity_id = 4
-    } else if severity_raw == "critical" {
-        severity_id = 5
-    }
 
-    category_uid = 2
-    class_uid = 2004
-    activity_id = 1
-    type_uid = class_uid * 100 + activity_id
+# to_string(null) is "", not an error, so alternatives are tried one by one.
+title = to_string(raw.Title) ?? ""
+if title == "" {
+  title = to_string(raw.title) ?? ""
+}
+alert_id = to_string(raw.AlertId) ?? ""
+if alert_id == "" {
+  alert_id = to_string(raw.alertId) ?? ""
+}
+if title == "" && alert_id == "" {
+  abort "no_match"
+}
+severity_name = downcase(to_string(raw.Severity) ?? "")
+if severity_name == "" {
+  severity_name = downcase(to_string(raw.severity) ?? "")
+}
+severity_id = to_int(get({"informational": 1, "low": 2, "medium": 3, "high": 4, "critical": 5}, [severity_name]) ?? 0) ?? 0
 
-    host = to_string(raw.DeviceName) ?? ""
-    if host == "" {
-        host = to_string(raw.deviceName) ?? ""
-    }
-    if host == "" {
-        host = to_string(raw.ComputerDnsName) ?? ""
-    }
-    actor = to_string(raw.AccountName) ?? ""
-    if actor == "" {
-        actor = to_string(raw.accountName) ?? ""
-    }
-    proc = to_string(raw.FileName) ?? ""
-    if proc == "" {
-        proc = to_string(raw.fileName) ?? ""
-    }
-    if proc == "" {
-        proc = to_string(raw.ProcessName) ?? ""
-    }
-    cmd = to_string(raw.ProcessCommandLine) ?? ""
-    if cmd == "" {
-        cmd = to_string(raw.processCommandLine) ?? ""
-    }
-    src_ip = to_string(raw.RemoteIP) ?? ""
-    if src_ip == "" {
-        src_ip = to_string(raw.remoteIP) ?? ""
-    }
-    if src_ip != "" {
-        ok4 = is_ipv4(src_ip)
-        ok6 = is_ipv6(src_ip)
-        if !ok4 && !ok6 { src_ip = "" }
-    }
+host = to_string(raw.DeviceName) ?? ""
+if host == "" {
+  host = to_string(raw.deviceName) ?? ""
+}
+if host == "" {
+  host = to_string(raw.ComputerDnsName) ?? ""
+}
+device_uid = to_string(raw.DeviceId) ?? ""
+if device_uid == "" {
+  device_uid = to_string(raw.deviceId) ?? ""
+}
+account = to_string(raw.AccountName) ?? ""
+if account == "" {
+  account = to_string(raw.accountName) ?? ""
+}
+account_domain = to_string(raw.AccountDomain) ?? ""
+if account_domain == "" {
+  account_domain = to_string(raw.accountDomain) ?? ""
+}
+proc = to_string(raw.FileName) ?? ""
+if proc == "" {
+  proc = to_string(raw.fileName) ?? ""
+}
+if proc == "" {
+  proc = to_string(raw.ProcessName) ?? ""
+}
+cmd = to_string(raw.ProcessCommandLine) ?? ""
+if cmd == "" {
+  cmd = to_string(raw.processCommandLine) ?? ""
+}
+remote_ip = to_string(raw.RemoteIP) ?? ""
+if remote_ip == "" {
+  remote_ip = to_string(raw.remoteIP) ?? ""
+}
+if !(is_ipv4(remote_ip) || is_ipv6(remote_ip)) {
+  remote_ip = ""
+}
 
-    # Empty-string fields must not short-circuit ?? — check each key explicitly.
-    time_ms = 0
-    ts_str = to_string(raw.EventTime) ?? ""
-    if ts_str == "" {
-        ts_str = to_string(raw.eventTime) ?? ""
-    }
-    if ts_str == "" {
-        ts_str = to_string(raw.Timestamp) ?? ""
-    }
-    if ts_str != "" {
-        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-        if parsed_ts != null {
-            time_ms = to_unix_timestamp(parsed_ts, unit: "milliseconds") ?? 0
-        }
-    }
-    if time_ms == 0 {
-        time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    }
+original_time = to_string(raw.EventTime) ?? ""
+if original_time == "" {
+  original_time = to_string(raw.eventTime) ?? ""
+}
+if original_time == "" {
+  original_time = to_string(raw.Timestamp) ?? ""
+}
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
 
-    msg = "defender " + title
-    if proc != "" {
-        msg = msg + " proc=" + proc
+# The alerted process. OCSF needs a process identifier: Defender's process ID, else this event's own ID.
+user = {"name": account, "domain": account_domain}
+evidence = {}
+if proc != "" || cmd != "" {
+  hashes = []
+  sha256 = to_string(raw.SHA256) ?? ""
+  if sha256 != "" {
+    hashes = push(hashes, {"algorithm_id": 3, "algorithm": "SHA-256", "value": sha256})
+  }
+  sha1 = to_string(raw.SHA1) ?? ""
+  if sha1 != "" {
+    hashes = push(hashes, {"algorithm_id": 2, "algorithm": "SHA-1", "value": sha1})
+  }
+  md5 = to_string(raw.MD5) ?? ""
+  if md5 != "" {
+    hashes = push(hashes, {"algorithm_id": 1, "algorithm": "MD5", "value": md5})
+  }
+  pid = to_int(raw.ProcessId) ?? 0
+  evidence.process = {"name": proc, "cmd_line": cmd}
+  if pid > 0 {
+    evidence.process.pid = pid
+  } else {
+    evidence.process.uid = string(%ironcyde.event_id) ?? ""
+  }
+  if account != "" {
+    evidence.process.user = user
+  }
+  if proc != "" {
+    folder = to_string(raw.FolderPath) ?? ""
+    evidence.process.file = {"name": proc, "type_id": 1}
+    if folder != "" {
+      # The directory's own separator joins it to the name: "/" on Linux and macOS, "\\" on Windows.
+      separator = if contains(folder, "/") && !contains(folder, "\\") { "/" } else { "\\" }
+      if ends_with(folder, separator) {
+        separator = ""
+      }
+      evidence.process.file.path = folder + separator + proc
     }
+    if length(hashes) > 0 {
+      evidence.process.file.hashes = hashes
+    }
+  }
+  # The initiating process is a parent only with its own process ID; without one OCSF cannot hold it.
+  parent = to_string(raw.InitiatingProcessFileName) ?? ""
+  parent_pid = to_int(raw.InitiatingProcessId) ?? 0
+  if parent != "" && parent_pid > 0 {
+    evidence.process.parent_process = {"name": parent, "pid": parent_pid, "cmd_line": to_string(raw.InitiatingProcessCommandLine) ?? ""}
+  }
+} else if account != "" {
+  evidence.user = user
+}
+if remote_ip != "" {
+  evidence.dst_endpoint = {"ip": remote_ip}
+}
 
-    . = {
-        "category_uid": category_uid,
-        "class_uid": class_uid,
-        "class_name": "Detection Finding",
-        "category_name": "Findings",
-        "type_uid": type_uid,
-        "activity_id": activity_id,
-        "severity_id": severity_id,
-        "status_id": 1,
-        "time": time_ms,
-        "message": msg,
-        "finding_info": {
-            "title": title,
-            "uid": alert_id,
-            "types": ["TTPs/Detection"],
-        },
-        "metadata": {
-            "version": "1.9.0",
-            "uid": alert_id,
-            "log_name": "Alert",
-            "log_provider": "Microsoft Defender for Endpoint",
-            "product": { "name": "Microsoft Defender for Endpoint", "vendor_name": "Microsoft" },
-            "profiles": ["security_control"],
-        },
-        "unmapped": {
-            "alert_id": alert_id,
-            "severity": severity_raw,
-            "category": to_string(raw.Category) ?? to_string(raw.category) ?? "",
-            "actor_user": actor,
-            "device_hostname": host,
-            "process_name": proc,
-            "process_cmd": cmd,
-            "src_ip": src_ip,
-        },
-    }
+# What Defender did about it. Known actions map to a disposition; any other is kept in its own words.
+remediation = to_string(raw.RemediationAction) ?? ""
+# get() gives null for an unlisted key, and to_int(null) is 0, so the fallback is explicit.
+known_disposition = get({"quarantine": 3, "block": 2, "blocked": 2, "isolate": 4, "delete": 5, "remove": 5, "allow": 1, "allowed": 1, "noaction": 16, "none": 16}, [downcase(remediation)]) ?? null
+disposition_id = 99
+if known_disposition != null {
+  disposition_id = to_int(known_disposition) ?? 99
+}
+disposition = get({"1": "Allowed", "2": "Blocked", "3": "Quarantined", "4": "Isolated", "5": "Deleted", "16": "No Action"}, [to_string(disposition_id)]) ?? null
+if disposition == null {
+  disposition = remediation
+}
+
+finding_uid = alert_id
+if finding_uid == "" {
+  finding_uid = string(%ironcyde.event_id) ?? ""
+}
+msg = strip_whitespace("Defender alert " + title)
+if proc != "" {
+  msg = msg + " (" + proc + ")"
+}
+category = to_string(raw.Category) ?? ""
+if category == "" {
+  category = to_string(raw.category) ?? ""
+}
+threat = to_string(raw.ThreatName) ?? ""
+source = to_string(raw.DetectionSource) ?? ""
+
+. = {
+  "category_uid": 2,
+  "class_uid": 2004,
+  "type_uid": 200401,
+  "activity_id": 1,
+  "severity_id": severity_id,
+  "status_id": 1,
+  "status": "New",
+  "is_alert": true,
+  "time": time_ms,
+  "message": msg,
+  "finding_info": {"title": title, "uid": finding_uid},
+  # type_id 0 (Unknown): the alert does not say what kind of device it is.
+  "device": {"hostname": host, "uid": device_uid, "type_id": 0},
+  "metadata": {
+    "version": "1.9.0",
+    "uid": alert_id,
+    "log_name": "Alert",
+    "original_time": original_time,
+    "product": {"name": "Microsoft Defender for Endpoint", "vendor_name": "Microsoft"},
+    "profiles": [],
+  },
+  "unmapped": {
+    "incident_id": raw.IncidentId,
+    "report_id": raw.ReportId,
+    "initiating_process_name": to_string(raw.InitiatingProcessFileName) ?? "",
+  },
+}
+if category != "" {
+  .finding_info.types = [category]
+}
+if source != "" {
+  .finding_info.data_sources = [source]
+}
+if threat != "" {
+  # classification_ids [0] (Unknown): the threat name does not classify the malware in OCSF's terms.
+  .malware = [{"name": threat, "classification_ids": [0]}]
+}
+if length(evidence) > 0 {
+  .evidences = [evidence]
+}
+# disposition belongs to the security_control profile.
+if remediation != "" {
+  .disposition_id = disposition_id
+  .disposition = disposition
+  .metadata.profiles = ["security_control"]
+}
+if exists(.evidences[0].process.parent_process) {
+  del(.unmapped.initiating_process_name)
+}
+. = compact(., array: false)
+# device needs an identity; an alert that names no device carries none.
+if !exists(.device.hostname) && !exists(.device.uid) {
+  del(.device)
+}

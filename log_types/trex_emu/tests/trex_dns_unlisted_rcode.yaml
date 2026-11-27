@@ -1,0 +1,10 @@
+---
+# A response code OCSF does not list is Other, in the source's own spelling.
+raw_sample: '{"kind":"dns","client_ip":"203.0.113.25","ns_server":"198.51.100.1","query":"www.example.org","rcode":"BADSIG"}'
+expected:
+  class_uid: 4003
+  type_uid: 400306
+  rcode_id: 99
+  rcode: BADSIG
+  status_id: 2
+  metadata.profiles: []

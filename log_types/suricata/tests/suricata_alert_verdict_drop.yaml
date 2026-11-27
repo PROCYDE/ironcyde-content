@@ -1,0 +1,11 @@
+---
+# EVE includes the rule's action and the IPS verdict for the packet.
+raw_sample: '{"event_type":"alert","src_ip":"192.0.2.23","dest_ip":"203.0.113.80","proto":"TCP","alert":{"action":"allowed","signature_id":2000002,"signature":"Example rule match"},"verdict":{"action":"drop"}}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  action_id: 2
+  action: Denied
+  disposition_id: 6
+  disposition: Dropped
+  metadata.profiles: [security_control]

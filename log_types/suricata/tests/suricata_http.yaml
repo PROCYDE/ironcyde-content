@@ -1,0 +1,23 @@
+---
+# An HTTP request with its response: the request target and the Host header make the URL.
+raw_sample: '{"timestamp":"2026-10-15T09:18:49.000Z","event_type":"http","src_ip":"192.0.2.23","src_port":40112,"dest_ip":"203.0.113.80","dest_port":80,"proto":"TCP","app_proto":"http","http":{"hostname":"www.example.com","url":"/login?next=%2F","http_user_agent":"curl/8.5.0","http_method":"post","protocol":"HTTP/1.1","http_refer":"http://www.example.com/","status":403,"length":512,"http_content_type":"text/html"}}'
+expected:
+  class_uid: 4002
+  type_uid: 400206
+  activity_id: 6
+  http_request.http_method: POST
+  http_request.user_agent: curl/8.5.0
+  http_request.version: HTTP/1.1
+  http_request.referrer: http://www.example.com/
+  http_request.url.hostname: www.example.com
+  http_request.url.path: /login
+  http_request.url.query_string: next=%2F
+  http_request.url.scheme: http
+  http_request.url.url_string: http://www.example.com/login?next=%2F
+  http_response.code: 403
+  http_response.length: 512
+  http_response.content_type: text/html
+  status_id: 2
+  app_protocol_name: http
+  dst_endpoint.ip: 203.0.113.80
+  metadata.profiles: []

@@ -1,0 +1,20 @@
+---
+# The camelCase form: a process on a Linux host (the path keeps its own separator), and a remediation OCSF does not list.
+raw_sample: '{"alertId":"da00000000000000000001","title":"Unusual sign-in","severity":"medium","category":"InitialAccess","deviceName":"web2","accountName":"bob","fileName":"curl","ProcessId":77,"FolderPath":"/usr/bin","processCommandLine":"curl -s http://www.example.org/x","eventTime":"2026-10-15T09:30:00Z","RemediationAction":"Investigate"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 3
+  disposition_id: 99
+  disposition: Investigate
+  finding_info.title: Unusual sign-in
+  finding_info.types: [InitialAccess]
+  device.hostname: web2
+  evidences:
+    - process:
+        name: curl
+        cmd_line: curl -s http://www.example.org/x
+        pid: 77
+        user: {name: bob}
+        file: {name: curl, type_id: 1, path: /usr/bin/curl}
+  metadata.profiles: [security_control]

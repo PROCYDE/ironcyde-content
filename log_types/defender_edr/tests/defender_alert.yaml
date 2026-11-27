@@ -1,4 +1,37 @@
 ---
-raw_sample: '{"AlertId":"da00000000000000000000","IncidentId":100001,"Title":"Suspicious PowerShell download cradle","Severity":"High","Category":"Execution","DetectionSource":"WindowsDefenderAtp","ThreatName":"Trojan:PowerShell/Cobacis.A","DeviceId":"0000000000000000000000000000000000000000","DeviceName":"ctdl-wks-07.citadel.example","AccountName":"rsanchez","AccountDomain":"CITADEL","FileName":"powershell.exe","FolderPath":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0","SHA256":"e8d71359b5940c8dfb28a33bb84ce50732a42be8661d1f47f4c6c33d74f5793a","ProcessCommandLine":"powershell.exe -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA","InitiatingProcessFileName":"explorer.exe","EventTime":"2026-10-15T09:24:44Z","RemediationAction":"Quarantine","RemoteIP":"203.0.113.166","ReportId":1000001}'
+# A quarantined alert with the process, its hash, the account and the remote address.
+raw_sample: '{"AlertId":"da00000000000000000000","IncidentId":100001,"Title":"Suspicious PowerShell download cradle","Severity":"High","Category":"Execution","DetectionSource":"WindowsDefenderAtp","ThreatName":"Trojan:PowerShell/Example.A","DeviceId":"0000000000000000000000000000000000000000","DeviceName":"web1.example.test","AccountName":"alice","AccountDomain":"EXAMPLE","FileName":"powershell.exe","FolderPath":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0","SHA256":"0000000000000000000000000000000000000000000000000000000000000002","ProcessCommandLine":"powershell.exe -nop -w hidden -enc AAAA","ProcessId":4242,"InitiatingProcessFileName":"explorer.exe","InitiatingProcessId":1200,"EventTime":"2026-10-15T09:24:44Z","RemediationAction":"Quarantine","RemoteIP":"203.0.113.166","ReportId":1000001}'
 expected:
   class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 4
+  status_id: 1
+  is_alert: true
+  disposition_id: 3
+  disposition: Quarantined
+  time: 1792056284000
+  finding_info.title: Suspicious PowerShell download cradle
+  finding_info.uid: da00000000000000000000
+  finding_info.types: [Execution]
+  finding_info.data_sources: [WindowsDefenderAtp]
+  malware:
+    - {name: "Trojan:PowerShell/Example.A", classification_ids: [0]}
+  device.hostname: web1.example.test
+  device.uid: "0000000000000000000000000000000000000000"
+  evidences:
+    - process:
+        name: powershell.exe
+        cmd_line: powershell.exe -nop -w hidden -enc AAAA
+        pid: 4242
+        user: {name: alice, domain: EXAMPLE}
+        file:
+          name: powershell.exe
+          type_id: 1
+          path: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+          hashes:
+            - {algorithm_id: 3, algorithm: SHA-256, value: "0000000000000000000000000000000000000000000000000000000000000002"}
+        parent_process: {name: explorer.exe, pid: 1200}
+      dst_endpoint: {ip: 203.0.113.166}
+  metadata.uid: da00000000000000000000
+  metadata.profiles: [security_control]

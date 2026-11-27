@@ -1,0 +1,11 @@
+---
+# The EVE packet verdict supplies the outcome when the signature has no action.
+raw_sample: '{"event_type":"alert","src_ip":"192.0.2.23","dest_ip":"203.0.113.80","proto":"TCP","alert":{"signature_id":2000003,"signature":"Example rule match"},"verdict":{"action":"accept"}}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  action_id: 1
+  action: Allowed
+  disposition_id: 1
+  disposition: Allowed
+  metadata.profiles: [security_control]

@@ -1,0 +1,10 @@
+---
+# A DNS query record without a status or results: no response code and no answers.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":22,"event_data":{"UtcTime":"2026-10-15 09:44:02.000","QueryName":"www.example.org","Image":"C:\\Windows\\System32\\svchost.exe"}}'
+expected:
+  class_uid: 4003
+  type_uid: 400306
+  rcode_id: null
+  answers: null
+  status_id: 1
+  metadata.profiles: [host]

@@ -1,0 +1,13 @@
+---
+# Native VRFY failure with an unqualified address and no envelope sender.
+raw_sample: '{"message":"2026-10-15 09:55:50 VRFY failed for alice H=[2001:db8::25]","hostname":"mail1"}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  status_id: 2
+  app_protocol_name: smtp
+  message: "2026-10-15 09:55:50 VRFY failed for alice H=[2001:db8::25]"
+  src_endpoint.ip: "2001:db8::25"
+  dst_endpoint.hostname: mail1
+  device.hostname: mail1
+  metadata.profiles: [host]

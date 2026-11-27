@@ -1,0 +1,15 @@
+---
+# FileDelete (archived): Delete, with the deleted file's hashes.
+raw_sample: '{"Computer":"WEB1.example.test","EventRecordID":5001,"EventID":23,"event_data":{"UtcTime":"2026-10-15 09:45:00.000","ProcessGuid":"{00000000-0000-0000-0000-000000000001}","ProcessId":"4242","User":"EXAMPLE\\alice","Image":"C:\\Windows\\System32\\cmd.exe","TargetFilename":"C:\\Users\\alice\\Downloads\\tool.exe","Hashes":"SHA256=0000000000000000000000000000000000000000000000000000000000000008","IsExecutable":"true","Archived":"true"}}'
+expected:
+  class_uid: 1001
+  category_uid: 1
+  type_uid: 100104
+  activity_id: 4
+  file.path: 'C:\Users\alice\Downloads\tool.exe'
+  file.name: tool.exe
+  file.hashes:
+    - {algorithm_id: 3, algorithm: SHA-256, value: "0000000000000000000000000000000000000000000000000000000000000008"}
+  actor.process.name: cmd.exe
+  actor.user.name: alice
+  metadata.profiles: []

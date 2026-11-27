@@ -1,0 +1,10 @@
+---
+# user.lifecycle.delete.initiated: User Management, Delete, for the target user.
+raw_sample: '{"actor":{"id":"00uEXAMPLEADMIN00000","type":"User","alternateId":"admin@example.com","displayName":"Admin Example"},"eventType":"user.lifecycle.delete.initiated","outcome":{"result":"SUCCESS"},"severity":"INFO","target":[{"id":"00uEXAMPLEUSER000002","type":"User","alternateId":"bob@example.com","displayName":"Bob Example"}]}'
+expected:
+  class_uid: 3007
+  type_uid: 300703
+  activity_id: 3
+  user.name: bob@example.com
+  actor.user.name: admin@example.com
+  metadata.profiles: []

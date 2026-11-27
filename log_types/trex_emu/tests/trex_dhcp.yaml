@@ -1,0 +1,12 @@
+---
+# Every other kind is plain traffic; a missing server address leaves only the client endpoint.
+raw_sample: '{"kind":"dhcp","client_ip":"203.0.113.25","client_mac":"00:00:5e:00:53:01","proto":"udp","sport":68,"dport":67}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  src_endpoint.ip: 203.0.113.25
+  src_endpoint.port: 68
+  dst_endpoint: null
+  connection_info.protocol_name: udp
+  metadata.log_name: dhcp
+  metadata.profiles: []

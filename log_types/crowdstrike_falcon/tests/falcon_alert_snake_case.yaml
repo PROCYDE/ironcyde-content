@@ -1,0 +1,22 @@
+---
+# The snake_case export form: a 0-100 severity, an ISO 8601 time, a process on a Linux host (the path keeps its own separator).
+raw_sample: '{"detect_name":"Suspicious Logon","detection_id":"ldt:00000000000000000000000000000000:10000002","severity":65,"hostname":"web2","user_name":"bob","filename":"curl","ProcessId":"100000000002","FilePath":"/usr/bin/","local_ip":"not-an-ip","tactic":"Initial Access","technique":"Valid Accounts","created_timestamp":"2026-10-15T09:24:48Z","PatternDispositionDescription":"Detection, standard detection."}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 4
+  action_id: 3
+  time: 1792056288000
+  finding_info.title: Suspicious Logon
+  finding_info.attacks:
+    - tactic: {name: Initial Access}
+      technique: {name: Valid Accounts}
+  device.hostname: web2
+  device.ip: null
+  evidences:
+    - process:
+        name: curl
+        uid: "100000000002"
+        user: {name: bob}
+        file: {name: curl, type_id: 1, path: /usr/bin/curl}
+  metadata.profiles: [security_control]

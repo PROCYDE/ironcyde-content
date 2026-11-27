@@ -1,0 +1,11 @@
+---
+# A finding with a user only: the user is the evidence and there is no device.
+raw_sample: '{"technique_uid":"T1087","user":"carol","class_uid":2004}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  evidences:
+    - user: {name: carol}
+  device: null
+  finding_info.title: null
+  metadata.profiles: []

@@ -1,0 +1,19 @@
+---
+# A rejected recipient as a plain log line with a zone and a PID: sender, recipient and the reason; no mail host, so no device and no profile.
+raw_sample: '2026-10-15 09:55:47 +0200 [4242] H=mx.example.net (mx) [2001:db8::25] F=<bob@example.net> rejected RCPT <alice@example.com>: relay not permitted'
+expected:
+  class_uid: 4009
+  type_uid: 400999
+  activity_name: RCPT
+  command: RCPT
+  status_id: 2
+  status_detail: relay not permitted
+  time: 1792050947000
+  email.from: bob@example.net
+  email.to: [alice@example.com]
+  from: bob@example.net
+  src_endpoint.ip: 2001:db8::25
+  src_endpoint.hostname: mx.example.net
+  dst_endpoint: null
+  device: null
+  metadata.profiles: []

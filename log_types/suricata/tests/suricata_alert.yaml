@@ -1,4 +1,25 @@
 ---
-raw_sample: '{"timestamp":"2026-10-15T09:18:46.762Z","flow_id":6696885413901,"in_iface":"eth0","event_type":"alert","src_ip":"203.0.113.166","src_port":35000,"dest_ip":"192.0.2.23","dest_port":53,"proto":"TCP","tx_id":1,"alert":{"action":"allowed","gid":1,"signature_id":2027758,"rev":4,"signature":"ET SCAN Nmap Scripting Engine User-Agent Detected","category":"Attempted Information Leak","severity":2,"metadata":{"affected_product":["Any"],"attack_target":["Client_and_Server"]}},"app_proto":"dns"}'
+# An allowed alert: the signature is the analytic, the flow's endpoints are evidence.
+raw_sample: '{"timestamp":"2026-10-15T09:18:46.762Z","flow_id":6696885413901,"in_iface":"eth0","event_type":"alert","src_ip":"203.0.113.166","src_port":35000,"dest_ip":"192.0.2.23","dest_port":53,"proto":"TCP","tx_id":1,"alert":{"action":"allowed","gid":1,"signature_id":2027758,"rev":4,"signature":"ET SCAN Nmap Scripting Engine User-Agent Detected","category":"Attempted Information Leak","severity":2},"app_proto":"dns"}'
 expected:
   class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 3
+  status_id: 1
+  is_alert: true
+  action_id: 1
+  disposition_id: 1
+  time: 1792055926762
+  finding_info.title: ET SCAN Nmap Scripting Engine User-Agent Detected
+  finding_info.uid: suricata-2027758
+  finding_info.analytic.uid: "2027758"
+  finding_info.analytic.type_id: 1
+  finding_info.analytic.category: Attempted Information Leak
+  finding_info.analytic.version: "4"
+  evidences:
+    - src_endpoint: {ip: 203.0.113.166, port: 35000}
+      dst_endpoint: {ip: 192.0.2.23, port: 53}
+      connection_info: {direction_id: 0, protocol_name: tcp, protocol_num: 6, uid: "6696885413901"}
+  metadata.log_name: alert
+  metadata.profiles: [security_control]

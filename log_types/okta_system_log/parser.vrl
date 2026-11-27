@@ -1,325 +1,388 @@
-# Okta System Log JSON → OCSF (authentication / account / API).
-#
-# Input is a gateway Kafka envelope:
-#   event_id, source_id, source_type, ingested_at, event=<Okta LogEvent JSON string>
-# Offline/tests may also pass Okta fields already flattened on the root.
-#
-# Maps the public System Log shape (eventType, actor, client, outcome, published).
-# Never emits deprecated security_finding 2001.
+# Okta System Log events (LogEvent JSON) -> OCSF. The event type picks the class:
+#   user.mfa.factor.*                                          -> User Management (3007): Enable/Disable MFA Factors
+#   user.session.*, user.authentication.*, user.mfa.*, *login*, *sso* -> Authentication (3002)
+#   user.account.*, user.lifecycle.*, user.credential.*, *password* -> User Management (3007)
+#   group.*                                                    -> Group Management (3006)
+#   security.*, *threat*, *risk*                               -> Detection Finding (2004)
+#   everything else (application, policy, system, ...)         -> API Activity (6003)
+# The actor is the Okta principal by login (alternateId), with the display name as full name. The client is the
+# source endpoint, with Okta's own geolocation and network details. An object without an event type is rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
-text = string(.message) ?? ""
-raw = parse_json(text) ?? null
-if !is_object(raw) {
-    if .eventType != null {
-        raw = .
-    }
+raw = parse_json(string(.message) ?? "") ?? null
+if !is_object(raw) && .eventType != null {
+  raw = .
 }
 if !is_object(raw) {
-    abort "no_match"
+  abort "no_match"
 }
-    actor_obj = if is_object(raw.actor) { raw.actor } else { {} }
-    client_obj = if is_object(raw.client) { raw.client } else { {} }
-    outcome_obj = if is_object(raw.outcome) { raw.outcome } else { {} }
-    auth_ctx = if is_object(raw.authenticationContext) { raw.authenticationContext } else { {} }
-    ua_obj = if is_object(client_obj.userAgent) { client_obj.userAgent } else { {} }
-    device_obj = if is_object(raw.device) { raw.device } else { {} }
+event_type = to_string(raw.eventType) ?? ""
+if event_type == "" {
+  abort "no_match"
+}
+event_type_l = downcase(event_type)
+actor_obj = if is_object(raw.actor) { raw.actor } else { {} }
+client = if is_object(raw.client) { raw.client } else { {} }
+outcome_obj = if is_object(raw.outcome) { raw.outcome } else { {} }
+auth_ctx = if is_object(raw.authenticationContext) { raw.authenticationContext } else { {} }
+sec_ctx = if is_object(raw.securityContext) { raw.securityContext } else { {} }
+device_obj = if is_object(raw.device) { raw.device } else { {} }
+debug_data = if is_object(raw.debugContext.debugData) { raw.debugContext.debugData } else { {} }
+display = to_string(raw.displayMessage) ?? ""
+if display == "" {
+  display = event_type
+}
 
-    group_uid = ""
-    group_name = ""
-    if is_array(raw.target) {
-        t0 = get(raw.target, [0]) ?? {}
-        if is_object(t0) {
-            ttype0 = downcase(to_string(t0.type) ?? "")
-            if contains(ttype0, "group") || ttype0 == "usergroup" {
-                group_uid = to_string(t0.id) ?? ""
-                group_name = to_string(t0.displayName) ?? to_string(t0.alternateId) ?? ""
-            }
-        }
-        if group_uid == "" {
-            t1 = get(raw.target, [1]) ?? {}
-            if is_object(t1) {
-                ttype1 = downcase(to_string(t1.type) ?? "")
-                if contains(ttype1, "group") || ttype1 == "usergroup" {
-                    group_uid = to_string(t1.id) ?? ""
-                    group_name = to_string(t1.displayName) ?? to_string(t1.alternateId) ?? ""
-                }
-            }
-        }
+# The targets by type: the user and the group an event is about, and everything else as resources.
+target_user = {}
+target_group = {}
+target_app = {}
+resources = []
+for_each(array(raw.target) ?? []) -> |_i, t| {
+  if is_object(t) {
+    target_type = to_string(t.type) ?? ""
+    target_type_l = downcase(target_type)
+    target_id = to_string(t.id) ?? ""
+    target_name = to_string(t.displayName) ?? ""
+    target_alt = to_string(t.alternateId) ?? ""
+    if target_type_l == "user" && length(target_user) == 0 {
+      login = target_alt
+      if login == "" || login == "unknown" {
+        login = target_name
+      }
+      target_user = compact({"name": login, "uid": target_id, "full_name": target_name})
+      if contains(target_alt, "@") {
+        target_user.email_addr = target_alt
+      }
+    } else if contains(target_type_l, "group") && length(target_group) == 0 {
+      group_name = target_name
+      if group_name == "" {
+        group_name = target_alt
+      }
+      target_group = compact({"name": group_name, "uid": target_id})
+    } else if target_type_l == "appinstance" && length(target_app) == 0 {
+      target_app = compact({"name": target_name, "uid": target_id})
     }
-
-    event_type = to_string(raw.eventType) ?? ""
-    event_type_l = downcase(event_type)
-    display = to_string(raw.displayMessage) ?? ""
-    if display == "" {
-        display = event_type
+    resource_name = target_name
+    if resource_name == "" {
+      resource_name = target_alt
     }
-
-    outcome = upcase(to_string(outcome_obj.result) ?? "")
-    status_id = 1
-    if outcome == "FAILURE" || outcome == "DENY" || outcome == "SKIPPED" {
-        status_id = 2
-    } else if outcome == "CHALLENGE" {
-        status_id = 3
-    } else if outcome == "" || outcome == "UNKNOWN" {
-        status_id = 0
+    if resource_name != "" || target_id != "" {
+      resources = push(resources, compact({"name": resource_name, "uid": target_id, "type": target_type}))
     }
+  }
+}
 
-    sev_raw = upcase(to_string(raw.severity) ?? "INFO")
-    severity_id = 1
-    if sev_raw == "WARN" || sev_raw == "WARNING" {
-        severity_id = 2
-    } else if sev_raw == "ERROR" {
-        severity_id = 3
+# Outcome: SUCCESS/ALLOW and FAILURE/DENY are OCSF's Success and Failure; CHALLENGE and SKIPPED are neither.
+outcome = upcase(to_string(outcome_obj.result) ?? "")
+status_id = null
+status = null
+if outcome == "SUCCESS" || outcome == "ALLOW" {
+  status_id = 1
+  status = "Success"
+} else if outcome == "FAILURE" || outcome == "DENY" {
+  status_id = 2
+  status = "Failure"
+} else if outcome != "" && outcome != "UNKNOWN" {
+  status_id = 99
+  status = outcome
+}
+okta_severity = upcase(to_string(raw.severity) ?? "")
+severity_id = to_int(get({"DEBUG": 1, "INFO": 1, "WARN": 2, "WARNING": 2, "ERROR": 3}, [okta_severity]) ?? 0) ?? 0
+if status_id == 2 && severity_id < 2 {
+  severity_id = 2
+}
+
+original_time = to_string(raw.published) ?? ""
+time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
+parsed_ts = parse_timestamp(original_time, format: "%+") ?? null
+if parsed_ts != null {
+  time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+}
+
+# The actor: the login (alternateId) is the name, the display name the full name.
+actor_login = to_string(actor_obj.alternateId) ?? ""
+actor_display = to_string(actor_obj.displayName) ?? ""
+actor_name = actor_login
+if actor_name == "" || actor_name == "unknown" {
+  actor_name = actor_display
+}
+actor_user = {"name": actor_name, "uid": to_string(actor_obj.id) ?? "", "full_name": actor_display}
+if contains(actor_login, "@") {
+  actor_user.email_addr = actor_login
+}
+actor_type = to_string(actor_obj.type) ?? ""
+if actor_type == "User" {
+  actor_user.type_id = 1
+  actor_user.type = "User"
+} else if actor_type == "SystemPrincipal" {
+  actor_user.type_id = 3
+  actor_user.type = "System"
+} else if actor_type != "" {
+  actor_user.type_id = 99
+  actor_user.type = actor_type
+}
+actor_user = compact(actor_user)
+# Required identities are placeholders when the event names none.
+if !exists(actor_user.name) && !exists(actor_user.uid) {
+  actor_user = {"name": "unknown"}
+}
+actor = {"user": actor_user}
+session_uid = to_string(auth_ctx.externalSessionId) ?? ""
+if session_uid == "" {
+  session_uid = to_string(auth_ctx.rootSessionId) ?? ""
+}
+if session_uid != "" && session_uid != "unknown" {
+  actor.session = {"uid": session_uid}
+}
+
+# The client: its address with Okta's geolocation and network details, and the device it reports. A device name
+# that is a host name is the endpoint's host name; any other is just its name.
+src = {}
+client_ip = to_string(client.ipAddress) ?? ""
+if is_ipv4(client_ip) || is_ipv6(client_ip) {
+  src.ip = client_ip
+  geo = if is_object(client.geographicalContext) { client.geographicalContext } else { {} }
+  location = {"city": to_string(geo.city) ?? "", "country": to_string(geo.country) ?? "", "region": to_string(geo.state) ?? ""}
+  # Coordinates are numbers, with or without a fraction.
+  if geo.geolocation.lat != null && geo.geolocation.lon != null {
+    lat = to_float(geo.geolocation.lat) ?? null
+    lon = to_float(geo.geolocation.lon) ?? null
+    if lat != null && lon != null {
+      location.lat = lat
+      location.long = lon
     }
-    if status_id == 2 && severity_id < 2 {
-        severity_id = 2
+  }
+  location = compact(location)
+  if exists(location.city) || exists(location.country) || exists(location.region) {
+    src.location = location
+  }
+  as_org = to_string(sec_ctx.asOrg) ?? ""
+  if is_integer(sec_ctx.asNumber) {
+    src.autonomous_system = compact({"number": sec_ctx.asNumber, "name": as_org})
+  } else if as_org != "" {
+    src.autonomous_system = {"name": as_org}
+  }
+}
+device_name = to_string(device_obj.name) ?? ""
+if device_name != "" {
+  if match(device_name, r'^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$') {
+    src.hostname = device_name
+  } else {
+    src.name = device_name
+  }
+}
+device_uid = to_string(device_obj.id) ?? ""
+if device_uid != "" {
+  src.uid = device_uid
+}
+
+txn_id = to_string(raw.transaction.id) ?? ""
+http_request = {"user_agent": to_string(client.userAgent.rawUserAgent) ?? "", "uid": txn_id}
+request_url = to_string(debug_data.url) ?? ""
+request_uri = to_string(debug_data.requestUri) ?? ""
+if starts_with(request_url, "/") && request_uri == "" {
+  request_uri = request_url
+}
+if request_uri != "" {
+  http_request.url = {"path": string!(split(request_uri, "?", 2)[0])}
+}
+http_request = compact(http_request)
+
+metadata = {
+  "version": "1.9.0",
+  "uid": to_string(raw.uuid) ?? "",
+  "event_code": event_type,
+  "log_name": "System Log",
+  "original_time": original_time,
+  "correlation_uid": txn_id,
+  "product": {"name": "Okta", "vendor_name": "Okta"},
+  "profiles": [],
+}
+unmapped = {
+  "legacy_event_type": to_string(raw.legacyEventType) ?? "",
+  "client_zone": to_string(client.zone) ?? "",
+  "client_device": to_string(client.device) ?? "",
+  "client_os": to_string(client.userAgent.os) ?? "",
+  "client_browser": to_string(client.userAgent.browser) ?? "",
+  "is_proxy": sec_ctx.isProxy,
+  "target": raw.target,
+}
+
+class_uid = 6003
+activity_id = 99
+. = {
+  "severity_id": severity_id,
+  "time": time_ms,
+  "message": display,
+  "metadata": metadata,
+  "unmapped": unmapped,
+}
+
+if starts_with(event_type_l, "user.mfa.factor.") {
+  class_uid = 3007
+  activity_id = if contains(event_type_l, "deactivate") || contains(event_type_l, "reset") { 13 } else if contains(event_type_l, "activate") { 12 } else { 99 }
+} else if starts_with(event_type_l, "user.session") || starts_with(event_type_l, "user.authentication") || starts_with(event_type_l, "user.mfa.") || contains(event_type_l, "login") || contains(event_type_l, "sso") {
+  class_uid = 3002
+  # A session ends with ".end", a logout, a revocation, an expiry or a clear; "extend" is not an end.
+  activity_id = if contains(event_type_l, ".end") || contains(event_type_l, "logout") || contains(event_type_l, "revoke") || contains(event_type_l, "expire") || contains(event_type_l, ".clear") { 2 } else { 1 }
+} else if starts_with(event_type_l, "user.account") || starts_with(event_type_l, "user.lifecycle") || starts_with(event_type_l, "user.credential") || contains(event_type_l, "password") {
+  class_uid = 3007
+  activity_id = if contains(event_type_l, "reset_password") || contains(event_type_l, "forgot_password") {
+    9
+  } else if contains(event_type_l, "password") {
+    8
+  } else if contains(event_type_l, "unlock") {
+    7
+  } else if contains(event_type_l, "lock") {
+    6
+  } else if contains(event_type_l, "delete") {
+    3
+  } else if contains(event_type_l, "deactivate") || contains(event_type_l, ".suspend") {
+    5
+  } else if contains(event_type_l, "activate") || contains(event_type_l, "unsuspend") {
+    4
+  } else if contains(event_type_l, "create") {
+    1
+  } else if contains(event_type_l, "update") {
+    2
+  } else {
+    99
+  }
+} else if starts_with(event_type_l, "group.") {
+  class_uid = 3006
+  activity_id = if contains(event_type_l, "user_membership.add") {
+    3
+  } else if contains(event_type_l, "user_membership.remove") {
+    4
+  } else if contains(event_type_l, "privilege.grant") {
+    1
+  } else if contains(event_type_l, "privilege.revoke") {
+    2
+  } else if contains(event_type_l, "delete") {
+    5
+  } else if contains(event_type_l, "create") {
+    6
+  } else if contains(event_type_l, "update") {
+    9
+  } else {
+    99
+  }
+} else if starts_with(event_type_l, "security.") || contains(event_type_l, "threat") || contains(event_type_l, "risk") {
+  class_uid = 2004
+  activity_id = 1
+} else {
+  activity_id = if contains(event_type_l, "delete") || contains(event_type_l, "revoke") {
+    4
+  } else if contains(event_type_l, "update") || contains(event_type_l, "modify") {
+    3
+  } else if contains(event_type_l, "create") || contains(event_type_l, "add") {
+    1
+  } else if contains(event_type_l, "read") || contains(event_type_l, "view") || contains(event_type_l, "export") {
+    2
+  } else {
+    99
+  }
+}
+# Activity Other is named by the event type.
+if activity_id == 99 {
+  .activity_name = event_type
+}
+
+if class_uid == 2004 {
+  # The finding's status is its own (New); Okta's outcome says what was done about the request.
+  .status_id = 1
+  .status = "New"
+  .is_alert = true
+  finding_uid = to_string(raw.uuid) ?? ""
+  if finding_uid == "" {
+    finding_uid = string(%ironcyde.event_id) ?? ""
+  }
+  .finding_info = {"title": display, "uid": finding_uid, "types": [event_type]}
+  evidence = {"actor": actor}
+  if length(src) > 0 {
+    evidence.src_endpoint = src
+  }
+  if length(http_request) > 0 {
+    evidence.http_request = http_request
+  }
+  .evidences = [evidence]
+  # action and disposition belong to the security_control profile.
+  if outcome == "DENY" {
+    .action_id = 2
+    .action = "Denied"
+    .disposition_id = 2
+    .disposition = "Blocked"
+    .metadata.profiles = ["security_control"]
+  } else if outcome == "ALLOW" {
+    .action_id = 1
+    .action = "Allowed"
+    .disposition_id = 1
+    .disposition = "Allowed"
+    .metadata.profiles = ["security_control"]
+  }
+  .status_detail = to_string(outcome_obj.reason) ?? ""
+} else {
+  .status_id = status_id
+  .status = status
+  .status_detail = to_string(outcome_obj.reason) ?? ""
+  .actor = actor
+  .src_endpoint = src
+  .http_request = http_request
+  if class_uid == 3002 {
+    # The user who authenticates is the actor; the service is the application signed in to, else Okta itself.
+    .user = actor_user
+    .service = {"name": "Okta"}
+    if length(target_app) > 0 {
+      .service = target_app
     }
-
-    # Class selection from eventType prefix / keywords.
-    category_uid = 3
-    class_uid = 3002
-    class_name = "Authentication"
-    category_name = "Identity & Access Management"
-    activity_id = 1
-
-    if starts_with(event_type_l, "user.session") || starts_with(event_type_l, "user.authentication") || contains(event_type_l, "login") || contains(event_type_l, "mfa") || contains(event_type_l, "sso") {
-        class_uid = 3002
-        class_name = "Authentication"
-        if contains(event_type_l, "end") || contains(event_type_l, "logout") || contains(event_type_l, "revoke") {
-            activity_id = 2
-        } else if status_id == 2 {
-            activity_id = 1
-        } else {
-            activity_id = 1
-        }
-    } else if starts_with(event_type_l, "user.account") || starts_with(event_type_l, "user.lifecycle") || starts_with(event_type_l, "user.credential") || contains(event_type_l, "password") {
-        class_uid = 3001
-        class_name = "Account Change"
-        activity_id = 1
-        if contains(event_type_l, "delete") || contains(event_type_l, "deactivate") {
-            activity_id = 4
-        } else if contains(event_type_l, "update") || contains(event_type_l, "change") || contains(event_type_l, "reset") {
-            activity_id = 3
-        } else if contains(event_type_l, "create") || contains(event_type_l, "activate") || contains(event_type_l, "import") {
-            activity_id = 1
-        }
-    } else if starts_with(event_type_l, "group.") {
-        class_uid = 3006
-        class_name = "Group Management"
-        activity_id = 1
-        if contains(event_type_l, "remove") || contains(event_type_l, "delete") {
-            activity_id = 4
-        } else if contains(event_type_l, "add") || contains(event_type_l, "create") {
-            activity_id = 1
-        } else {
-            activity_id = 3
-        }
-    } else if starts_with(event_type_l, "policy.") || starts_with(event_type_l, "security.") || contains(event_type_l, "threat") || contains(event_type_l, "risk") {
-        # Detection finding (modern), never 2001.
-        category_uid = 2
-        category_name = "Findings"
-        class_uid = 2004
-        class_name = "Detection Finding"
-        activity_id = 1
-        if severity_id < 3 {
-            severity_id = 3
-        }
-    } else {
-        # App / system / API-ish catch-all.
-        category_uid = 6
-        category_name = "Application Activity"
-        class_uid = 6003
-        class_name = "API Activity"
-        activity_id = 1
-        if contains(event_type_l, "delete") || contains(event_type_l, "revoke") {
-            activity_id = 4
-        } else if contains(event_type_l, "update") || contains(event_type_l, "modify") {
-            activity_id = 3
-        } else if contains(event_type_l, "create") || contains(event_type_l, "add") {
-            activity_id = 1
-        } else {
-            activity_id = 2
-        }
+    if exists(actor.session) {
+      .session = actor.session
     }
-
-    type_uid = class_uid * 100 + activity_id
-
-    time_ms = to_unix_timestamp(ingested, unit: "milliseconds")
-    ts_str = to_string(raw.published) ?? ""
-    if ts_str != "" {
-        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-        if parsed_ts != null {
-            time_ms = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
-        }
+    if contains(event_type_l, "mfa") {
+      .is_mfa = true
     }
-
-    caller = to_string(actor_obj.displayName) ?? ""
-    if caller == "" {
-        caller = to_string(actor_obj.alternateId) ?? ""
+    if upcase(to_string(auth_ctx.authenticationProvider) ?? "") == "LDAP" {
+      .auth_protocol_id = 12
+      .auth_protocol = "LDAP"
     }
-    actor_uid = to_string(actor_obj.id) ?? ""
-    actor_email = to_string(actor_obj.alternateId) ?? ""
-
-    src_ip = to_string(client_obj.ipAddress) ?? ""
-    if src_ip != "" {
-        ipv4_ok = is_ipv4(src_ip)
-        ipv6_ok = is_ipv6(src_ip)
-        if !ipv4_ok && !ipv6_ok {
-            src_ip = ""
-        }
+    credential = upcase(to_string(auth_ctx.credentialType) ?? "")
+    factor = get({"PASSWORD": {"factor_type_id": 11, "factor_type": "Password"}, "OTP": {"factor_type_id": 7, "factor_type": "OTP"}, "SMS": {"factor_type_id": 1, "factor_type": "SMS"}, "EMAIL": {"factor_type_id": 8, "factor_type": "Email"}}, [credential]) ?? null
+    if factor != null {
+      .auth_factors = [factor]
     }
-
-    ua = to_string(ua_obj.rawUserAgent) ?? ""
-    session_uid = to_string(auth_ctx.externalSessionId) ?? ""
-    if session_uid == "" {
-        session_uid = to_string(auth_ctx.rootSessionId) ?? ""
+  } else if class_uid == 3007 {
+    # The account that changed is the target user; an event without one changed the actor's own account.
+    .user = actor_user
+    if length(target_user) > 0 {
+      .user = target_user
     }
-
-    host = to_string(device_obj.name) ?? ""
-    if host == "" {
-        host = to_string(client_obj.device) ?? ""
+  } else if class_uid == 3006 {
+    # group is required; an event without a group target names none.
+    .group = {"name": "unknown"}
+    if length(target_group) > 0 {
+      .group = target_group
     }
-
-    txn_id = ""
-    if is_object(raw.transaction) {
-        txn_id = to_string(raw.transaction.id) ?? ""
+    if length(target_user) > 0 {
+      .users = [target_user]
     }
-
-    req_uri = ""
-    if is_object(raw.debugContext) && is_object(raw.debugContext.debugData) {
-        req_uri = to_string(raw.debugContext.debugData.requestUri) ?? ""
+  } else {
+    # API Activity: the event type is the operation, the targets are the resources. src_endpoint is required.
+    .api = {"operation": event_type, "service": {"name": "Okta"}}
+    if txn_id != "" {
+      .api.request = {"uid": txn_id}
     }
-
-    . = {
-        "category_uid": category_uid,
-        "class_uid": class_uid,
-        "class_name": class_name,
-        "category_name": category_name,
-        "type_uid": type_uid,
-        "activity_id": activity_id,
-        "severity_id": severity_id,
-        "status_id": status_id,
-        "time": time_ms,
-        "message": display,
-        "actor": {
-            "user": {
-                "name": caller,
-                "uid": actor_uid,
-                "email_addr": actor_email,
-            },
-            "session": {
-                "uid": session_uid,
-            },
-        },
-        "user": {
-            "name": caller,
-            "uid": actor_uid,
-            "email_addr": actor_email,
-        },
-        "src_endpoint": {
-            "ip": src_ip,
-        },
-        "device": {
-            "hostname": host,
-            "uid": to_string(device_obj.id) ?? "",
-            "name": host,
-        },
-        "metadata": {
-            "version": "1.9.0",
-            "uid": to_string(raw.uuid) ?? "",
-            "event_code": event_type,
-            "log_name": "Okta System Log",
-            "log_provider": "Okta",
-            "correlation_uid": txn_id,
-            "product": {
-                "name": "Okta System Log",
-                "vendor_name": "Okta",
-            },
-        },
-        "unmapped": {
-            "event_type": event_type,
-            "api_operation": event_type,
-            "api_service": "okta",
-            "legacy_event_type": to_string(raw.legacyEventType) ?? "",
-            "outcome": outcome,
-            "outcome_reason": to_string(outcome_obj.reason) ?? "",
-            "okta_severity": sev_raw,
-            "client_device": to_string(client_obj.device) ?? "",
-            "browser": to_string(ua_obj.browser) ?? "",
-            "os": to_string(ua_obj.os) ?? "",
-            "source_ip_raw": to_string(client_obj.ipAddress) ?? "",
-            "request_uri": req_uri,
-        },
+    if length(resources) > 0 {
+      .resources = resources
+      del(.unmapped.target)
     }
-
-    if ua != "" {
-        .http_request = {
-            "user_agent": ua,
-            "uid": txn_id,
-        }
+    if length(src) == 0 {
+      .src_endpoint = {"name": "unknown"}
     }
-
-    if class_uid == 6003 && req_uri != "" {
-        .dst_endpoint = {
-            "svc_name": req_uri,
-        }
-    }
-
-    if class_uid == 2004 {
-        # Detection Finding requires finding_info; enable security_control for the
-        # profile-gated fields the finding class carries. 2004 has no actor,
-        # http_request, or src_endpoint attribute, so those move to unmapped.
-        .finding_info = {
-            "title": display,
-            "uid": to_string(raw.uuid) ?? "",
-            "types": ["TTPs/Detection"],
-        }
-        .metadata.profiles = ["security_control"]
-        .unmapped.okta_actor = to_string(get(.actor, ["user", "name"]) ?? null) ?? ""
-        .unmapped.okta_actor_uid = to_string(get(.actor, ["user", "uid"]) ?? null) ?? ""
-        del(.actor)
-        if exists(.user) {
-            del(.user)
-        }
-        if exists(.http_request) {
-            .unmapped.http_user_agent = to_string(get(.http_request, ["user_agent"]) ?? null) ?? ""
-            del(.http_request)
-        }
-        if exists(.src_endpoint) {
-            .unmapped.client_ip = to_string(get(.src_endpoint, ["ip"]) ?? null) ?? ""
-            del(.src_endpoint)
-        }
-    }
-
-    if class_uid == 3002 {
-        # 3002 requires at_least_one of service/dst_endpoint; Okta is the
-        # authentication service, so declare it.
-        .service = {"name": "okta"}
-    }
-
-    if class_uid == 3001 || class_uid == 3002 || class_uid == 3006 {
-        # device is host-profile gated on IAM classes; the client zone info
-        # stays in unmapped.
-        if exists(.device) {
-            .unmapped.device_zone = to_string(get(.device, ["uid"]) ?? null) ?? ""
-            .unmapped.device_hostname = to_string(get(.device, ["hostname"]) ?? null) ?? ""
-            del(.device)
-        }
-    }
-
-    # Group Management (3006) requires group; api/device are not class attributes at 1.9.0.
-    if class_uid == 3006 {
-        gname = group_name
-        if gname == "" {
-            gname = event_type
-        }
-        .group = {
-            "uid": group_uid,
-            "name": gname,
-        }
-        .unmapped.okta_api_operation = event_type
-        .unmapped.okta_device_hostname = host
-        del(.api)
-        del(.device)
-    }
+  }
+}
+.category_uid = to_int(floor(class_uid / 1000))
+.class_uid = class_uid
+.activity_id = activity_id
+.type_uid = class_uid * 100 + activity_id
+. = compact(., array: false)

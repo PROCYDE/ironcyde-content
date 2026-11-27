@@ -1,0 +1,12 @@
+---
+# A risk evaluation that let the request through: a finding with the request allowed; an actor type OCSF does not list.
+raw_sample: '{"actor":{"id":"0oaEXAMPLECLIENT0001","type":"PublicClientApp","alternateId":"client-app","displayName":"Example Client"},"eventType":"user.risk.detect","outcome":{"result":"ALLOW"},"severity":"INFO"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 1
+  action_id: 1
+  disposition_id: 1
+  evidences:
+    - actor: {user: {name: client-app, uid: 0oaEXAMPLECLIENT0001, full_name: Example Client, type_id: 99, type: PublicClientApp}}
+  metadata.profiles: [security_control]

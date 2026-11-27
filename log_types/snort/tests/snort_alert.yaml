@@ -1,4 +1,24 @@
 ---
+# An alert that let the packet pass: the rule is the analytic, the endpoints are evidence.
 raw_sample: '{"timestamp":"2026-10-14T14:39:42.887+0000","gid":1,"sid":2100001,"rev":1,"msg":"ET SCAN Potential SSH Scan","classification":"policy-violation","priority":2,"proto":"TCP","src_ip":"203.0.113.44","src_port":42000,"dst_ip":"198.51.100.35","dst_port":22,"action":"alert"}'
 expected:
   class_uid: 2004
+  category_uid: 2
+  type_uid: 200401
+  severity_id: 3
+  status_id: 1
+  is_alert: true
+  action_id: 1
+  disposition_id: 1
+  time: 1791988782887
+  finding_info.title: ET SCAN Potential SSH Scan
+  finding_info.uid: snort-1-2100001
+  finding_info.analytic.uid: "1:2100001"
+  finding_info.analytic.type_id: 1
+  finding_info.analytic.category: policy-violation
+  evidences:
+    - src_endpoint: {ip: 203.0.113.44, port: 42000}
+      dst_endpoint: {ip: 198.51.100.35, port: 22}
+      connection_info: {direction_id: 0, protocol_name: tcp, protocol_num: 6}
+  metadata.log_name: alert
+  metadata.profiles: [security_control]

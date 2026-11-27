@@ -1,0 +1,13 @@
+---
+# A suppressed finding against a URL only: the URL names the resource.
+raw_sample: '{"schema":"ironcyde.scanner_finding.v1","tool":"nuclei","title":"Example exposed panel","severity":"info","target":{"url":"http://www.example.org/admin"},"status":"suppressed"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 1
+  status_id: 3
+  resources:
+    - {name: "http://www.example.org/admin", role_id: 1, role: Target}
+  evidences:
+    - url: {url_string: "http://www.example.org/admin", scheme: http, hostname: www.example.org, path: /admin}
+  metadata.profiles: []

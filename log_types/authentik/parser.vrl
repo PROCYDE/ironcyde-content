@@ -1,93 +1,163 @@
-raw = string(.message) ?? ""
-e = parse_json(raw) ?? {}
+# authentik events (JSON) -> OCSF Authentication (3002).
+#
+#   login, authorize_application -> Logon; login_failed -> Logon, Failure; logout -> Logoff
+#   every other action           -> Other, named by the action
+# The service is the application the user was authorized for, else authentik itself. An object without an action
+# is rejected.
+
+ingested = timestamp(%ironcyde.ingested_at) ?? now()
+e = parse_json(string(.message) ?? "") ?? null
 if !is_object(e) {
   abort "not a JSON object"
 }
+action = string(e.action) ?? ""
+if action == "" {
+  abort "not an authentik event"
+}
 
-ingested = timestamp(%ironcyde.ingested_at) ?? now()
-ts_str = string(e.created) ?? ""
-ts = parse_timestamp(ts_str, "%+") ?? ingested
+original_time = string(e.created) ?? ""
+ts = parse_timestamp(original_time, "%+") ?? ingested
 time_ms = to_unix_timestamp(ts, unit: "milliseconds")
 
-action = string(e.action) ?? ""
-
 activity_id = 1
-type_uid = 300201
 status_id = 1
+status = "Success"
 severity_id = 1
-activity_name = null
 if action == "logout" {
   activity_id = 2
-  type_uid = 300202
-} else if match(action, r'login_failed|auth_fail') {
+} else if action == "login_failed" {
   status_id = 2
+  status = "Failure"
   severity_id = 3
 } else if action != "login" && action != "authorize_application" {
   activity_id = 99
-  type_uid = 300299
-  activity_name = action
 }
 
-auth_protocol_id = 0
+ctx = if is_object(e.context) { e.context } else { {} }
+app = if is_object(ctx.authorized_application) { ctx.authorized_application } else { {} }
+request = if is_object(ctx.http_request) { ctx.http_request } else { {} }
+client_id = string(request.args.client_id) ?? ""
+
+# The user: the event's user object when present (pk, username, email), else the flat user_email.
+u = if is_object(e.user) { e.user } else { {} }
+email = string(u.email) ?? ""
+if email == "" {
+  email = string(e.user_email) ?? ""
+}
+username = string(u.username) ?? ""
+if username == "" {
+  username = email
+}
+if username == "" && action == "login_failed" {
+  username = string(ctx.username) ?? ""
+}
+user = {"name": username, "uid": to_string(u.pk) ?? ""}
+if contains(email, "@") {
+  user.email_addr = email
+}
+user = compact(user)
+# user is required; an event without one names none.
+if length(user) == 0 {
+  user = {"name": "unknown"}
+}
+
+client_ip = string(e.client_ip) ?? ""
+src = {}
+if is_ipv4(client_ip) || is_ipv6(client_ip) {
+  src.ip = client_ip
+  # authentik's GeoIP and ASN enrichment of the client address.
+  if is_object(ctx.geo) {
+    location = {"city": string(ctx.geo.city) ?? "", "country": string(ctx.geo.country) ?? "", "continent": string(ctx.geo.continent) ?? ""}
+    # Coordinates are numbers, with or without a fraction.
+    if ctx.geo.lat != null && ctx.geo.long != null {
+      lat = to_float(ctx.geo.lat) ?? null
+      long = to_float(ctx.geo.long) ?? null
+      if lat != null && long != null {
+        location.lat = lat
+        location.long = long
+      }
+    }
+    location = compact(location)
+    if exists(location.city) || exists(location.country) {
+      src.location = location
+    }
+  }
+  if is_object(ctx.asn) && is_integer(ctx.asn.asn) {
+    src.autonomous_system = compact({"number": ctx.asn.asn, "name": string(ctx.asn.as_org) ?? ""})
+  }
+}
+
+# OAuth2 authorizations are named by their action; other protocols are not told apart.
+auth_protocol_id = null
 auth_protocol = null
-if match(action, r'oauth|authorize|token') {
+if action == "authorize_application" && (client_id != "" || contains(string(e.app) ?? "", "oauth2")) {
   auth_protocol_id = 6
   auth_protocol = "OAUTH 2.0"
-} else if match(action, r'oidc') {
-  auth_protocol_id = 4
-  auth_protocol = "OpenID"
 }
-
-ctx = e.context
-app_name = if is_object(ctx) { string(ctx.authorized_application.name) ?? "" } else { "" }
-app_pk = if is_object(ctx) { string(ctx.authorized_application.pk) ?? "" } else { "" }
-flow = if is_object(ctx) { string(ctx.flow) ?? null } else { null }
-scopes = if is_object(ctx) { string(ctx.scopes) ?? null } else { null }
-client_id = if is_object(ctx) { string(ctx.http_request.args.client_id) ?? null } else { null }
-auth_method = if is_object(ctx) { string(ctx.auth_method) ?? null } else { null }
-
 is_mfa = null
-if is_object(ctx) && is_object(ctx.auth_method_args) && is_array(ctx.auth_method_args.mfa_devices) && length(array!(ctx.auth_method_args.mfa_devices)) > 0 {
+if is_array(ctx.auth_method_args.mfa_devices) && length(array!(ctx.auth_method_args.mfa_devices)) > 0 {
   is_mfa = true
 }
 
-s_name = app_name
-if s_name == "" {
-  s_name = "authentik"
+service = {"name": string(app.name) ?? "", "uid": string(app.pk) ?? ""}
+if service.name == "" && service.uid == "" {
+  service = {"name": "authentik"}
 }
-s_uid = app_pk
-if s_uid == "" {
-  s_uid = client_id
+
+method = upcase(string(request.method) ?? "")
+http_request = {"user_agent": string(request.user_agent) ?? "", "uid": string(request.request_id) ?? ""}
+if includes(["CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT", "TRACE", "PATCH"], method) {
+  http_request.http_method = method
 }
-if s_uid == "" {
-  s_uid = "authentik"
+path = string(request.path) ?? ""
+if path != "" {
+  http_request.url = {"path": path}
 }
-svc = { "name": s_name, "uid": s_uid }
+
+# What is left of the context after the mapped parts.
+rest = ctx
+rest = remove!(rest, ["geo"])
+rest = remove!(rest, ["asn"])
+rest = remove!(rest, ["authorized_application"])
+if is_object(rest.http_request) {
+  rest = remove!(rest, ["http_request", "user_agent"])
+  rest = remove!(rest, ["http_request", "request_id"])
+  rest = remove!(rest, ["http_request", "path"])
+  rest = remove!(rest, ["http_request", "method"])
+}
 
 . = {
   "class_uid": 3002,
   "category_uid": 3,
   "activity_id": activity_id,
-  "activity_name": activity_name,
-  "type_uid": type_uid,
+  "type_uid": 300200 + activity_id,
   "time": time_ms,
   "severity_id": severity_id,
   "status_id": status_id,
-  "message": "Authentik: " + action + " by " + (string(e.user_email) ?? "unknown"),
+  "status": status,
+  "message": "authentik: " + action + " by " + (string(user.name) ?? "unknown"),
   "auth_protocol_id": auth_protocol_id,
   "auth_protocol": auth_protocol,
   "is_mfa": is_mfa,
-  "metadata": { "product": { "name": "authentik", "vendor_name": "goauthentik.io" }, "version": "1.9.0" },
-  "user": { "name": string(e.user_email) ?? null },
-  "src_endpoint": { "ip": string(e.client_ip) ?? null },
-  "service": svc,
-  "session": { "uid": flow },
+  "user": user,
+  "src_endpoint": src,
+  "service": service,
+  "http_request": http_request,
+  "metadata": {
+    "product": {"name": "authentik", "vendor_name": "Authentik Security"},
+    "version": "1.9.0",
+    "log_name": "events",
+    "log_provider": string(e.app) ?? "",
+    "event_code": action,
+    "original_time": original_time,
+    "profiles": [],
+  },
   "unmapped": {
-    "action": action,
-    "app": e.app,
-    "context": ctx,
-    "scopes": scopes,
-    "client_id": client_id,
-    "auth_method": auth_method
-  }
+    "context": rest,
+  },
 }
+# Activity Other is named by the action.
+if activity_id == 99 {
+  .activity_name = action
+}
+. = compact(., array: false)

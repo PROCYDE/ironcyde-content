@@ -1,0 +1,17 @@
+---
+# A completed connection with a numeric epoch time; unset fields ("-") are left out.
+raw_sample: '{"ts":1792056883.25,"uid":"CAbCdE1fGhIjKlMnO","id.orig_h":"2001:db8::10","id.orig_p":51000,"id.resp_h":"2001:db8::53","id.resp_p":53,"proto":"udp","service":"-","conn_state":"SF","local_orig":true,"local_resp":true}'
+expected:
+  class_uid: 4001
+  type_uid: 400106
+  status_id: 1
+  time: 1792056883250
+  src_endpoint.ip: 2001:db8::10
+  dst_endpoint.port: 53
+  connection_info.protocol_num: 17
+  connection_info.protocol_ver_id: 6
+  connection_info.direction_id: 3
+  app_protocol_name: null
+  traffic: null
+  duration: null
+  metadata.profiles: []

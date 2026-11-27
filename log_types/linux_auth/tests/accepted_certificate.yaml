@@ -6,3 +6,11 @@ expected:
   actor.user.name: 'bob'
   dst_endpoint.hostname: 'web1'
   src_endpoint.ip: '203.0.113.9'
+  metadata.profiles: []
+  src_endpoint.port: 51000
+  service.name: sshd
+  is_remote: true
+  status: Success
+  type_uid: 300201
+  metadata.log_name: auth
+  metadata.original_time: 'Oct  6 10:00:01'
