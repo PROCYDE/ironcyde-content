@@ -96,11 +96,11 @@ if starts_with(program, "sudo") {
 # whose failed attempts came before it.
 if is_object(sudo_run) {
   run = object!(sudo_run)
-  cmd = string!(run.cmd)
+  cmd = string(run.cmd)
   # An optional group that did not match comes back null.
   reason = ""
   if is_string(run.reason) {
-    reason = string!(run.reason)
+    reason = string(run.reason)
   }
   executable = string(split(cmd, " ")[0]) ?? cmd
   executable_name = string(split(executable, "/")[-1]) ?? executable
@@ -132,14 +132,14 @@ if is_object(sudo_run) {
     "severity_id": severity_id,
     "time": time_ms,
     "message": msg,
-    "actor": {"user": {"name": string!(run.user)}},
+    "actor": {"user": {"name": string(run.user)}},
     "device": device,
     "process": {
       "uid": process_uid,
       "cmd_line": cmd,
       "name": executable_name,
       "file": {"path": executable, "name": executable_name, "type_id": 1},
-      "user": {"name": string!(run.runas)},
+      "user": {"name": string(run.runas)},
       "working_directory": run.pwd,
       "session": {"terminal": run.tty},
     },
