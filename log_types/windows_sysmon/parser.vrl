@@ -43,7 +43,7 @@ if msg_text == "" {
 }
 fields = {}
 if msg_text != "" {
-    normalised = replace(string!(msg_text), "\r\n", "\n")
+    normalised = replace(msg_text, "\r\n", "\n")
     lines = split(normalised, "\n")
     body = normalised
     if length(lines) > 0 {
