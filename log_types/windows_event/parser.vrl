@@ -202,11 +202,13 @@ if eid == 4688 || eid == 10 {
   if parent_pid > 0 {
     parent.pid = parent_pid
   }
-  # A parent process needs its PID; without one only its name is known, and that stays with the actor.
+  # Both events identify an acting process. Only process creation identifies it as a parent.
   actor = {}
   if parent_pid > 0 {
-    process.parent_process = parent
     actor.process = parent
+    if eid == 4688 {
+      process.parent_process = parent
+    }
   }
   if eid == 10 {
     source_user = downcase(to_string(ed.SourceUser) ?? "")

@@ -1,0 +1,9 @@
+---
+# When the local process accepts a connection, the remote peer is the client.
+raw_sample: '{"rule":"Unexpected inbound connection","output":"Example inbound connection","output_fields":{"evt.type":"accept4","fd.lip":"2001:db8::80","fd.lport":443,"fd.rip":"2001:db8::23","fd.rport":42010,"fd.l4proto":"tcp"}}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  src_endpoint: {ip: "2001:db8::23", port: 42010}
+  dst_endpoint: {ip: "2001:db8::80", port: 443}
+  metadata.profiles: [host]

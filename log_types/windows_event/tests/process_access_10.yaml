@@ -8,6 +8,7 @@ expected:
   process.name: lsass.exe
   process.pid: 644
   process.file.path: C:\Windows\System32\lsass.exe
+  process.parent_process: null
   actor.process.name: procdump.exe
   actor.process.pid: 4242
   actor.user.name: alice

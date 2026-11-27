@@ -1,0 +1,14 @@
+---
+# Synthetic verification failure using the native message format in Exim's smtp_in.c.
+raw_sample: '{"message":"2026-10-15 09:55:49 VRFY failed for alice@example.com H=relay.example.net (relay) [203.0.113.166]","hostname":"mail1"}'
+expected:
+  class_uid: 4009
+  type_uid: 400999
+  activity_name: VRFY
+  command: VRFY
+  status_id: 2
+  email.from: null
+  email.to: [alice@example.com]
+  src_endpoint: {hostname: relay.example.net, ip: 203.0.113.166}
+  dst_endpoint.hostname: mail1
+  metadata.profiles: [host]

@@ -6,8 +6,9 @@
 #   "** rcpt ..."            delivery failed            -> Send, Failure
 #   "== rcpt ..."            delivery deferred          -> Send, Other (Deferred)
 #   "... rejected VRFY|RCPT|EXPN|MAIL ..."              -> Other, named by the SMTP command, Failure
-# Email Activity needs an address, so every other line (queue runs, "Completed", connections, bounces from <>
-# without a recipient) is rejected.
+#   "VRFY failed for ..."   address verification failed -> Email Activity with an address, otherwise SMTP
+#                                                          Network Activity if a client or server is known
+# Unrelated lines (queue runs, "Completed", connections) and bounces without an address are rejected.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
 text = string(.message) ?? ""
@@ -50,6 +51,7 @@ if !(is_ipv4(peer_ip) || is_ipv6(peer_ip)) {
 remote = compact({"ip": peer_ip, "hostname": string(peer.name) ?? ""})
 local = compact({"hostname": host})
 
+class_uid = 4009
 activity_id = 99
 activity_name = null
 direction_id = 0
@@ -114,7 +116,9 @@ if includes(["<=", "=>", "->", "**", "=="], flag) {
     }
   }
 } else {
-  rejected = parse_regex(rest, r'rejected (?P<cmd>VRFY|RCPT|EXPN|MAIL)\b(?: failed for| from)? ?<?(?P<target>[^\s>:]*)>?(?:: (?P<reason>.*))?$') ?? null
+  # Exim logs an address verification failure separately from an ACL rejection of the command.
+  rejected = parse_regex(rest, r'^(?P<cmd>VRFY) failed for <?(?P<target>[^<>\s]+)>?(?:\s|$)') ??
+    parse_regex(rest, r'rejected (?P<cmd>VRFY|RCPT|EXPN|MAIL)\b(?: failed for| from)? ?<?(?P<target>[^\s>:]*)>?(?:: (?P<reason>.*))?$') ?? null
   if rejected == null {
     abort "no_match"
   }
@@ -141,9 +145,14 @@ if includes(["<=", "=>", "->", "**", "=="], flag) {
   } else if target != "" {
     email.to_mailboxes = [target]
   }
-  # The email object needs a sender or a recipient address.
+  # A VRFY command with only a mailbox belongs to the SMTP connection when Email Activity lacks an address.
   if !exists(email.from) && !exists(email.to) {
-    abort "no_match"
+    if command != "VRFY" || (length(remote) == 0 && length(local) == 0) {
+      abort "no_match"
+    }
+    class_uid = 4001
+    activity_id = 6
+    activity_name = null
   }
   src = remote
   dst = local
@@ -151,22 +160,16 @@ if includes(["<=", "=>", "->", "**", "=="], flag) {
 
 . = {
   "category_uid": 4,
-  "class_uid": 4009,
-  "type_uid": 400900 + activity_id,
+  "class_uid": class_uid,
+  "type_uid": class_uid * 100 + activity_id,
   "activity_id": activity_id,
   "activity_name": activity_name,
   "severity_id": severity_id,
   "status_id": status_id,
   "status": status,
   "status_detail": status_detail,
-  "direction_id": direction_id,
   "time": time_ms,
   "message": line,
-  "command": command,
-  "message_trace_uid": message_uid,
-  "email": email,
-  "from": email.from,
-  "to": email.to,
   "src_endpoint": src,
   "dst_endpoint": dst,
   "metadata": {
@@ -179,7 +182,19 @@ if includes(["<=", "=>", "->", "**", "=="], flag) {
   # The name the remote host gave in HELO/EHLO is its own claim, not a verified host name.
   "unmapped": {"helo": string(peer.helo) ?? ""},
 }
-# The mail host is the device; device belongs to the host profile in Email Activity.
+if class_uid == 4009 {
+  .direction_id = direction_id
+  .command = command
+  .message_trace_uid = message_uid
+  .email = email
+  .from = email.from
+  .to = email.to
+} else {
+  .app_protocol_name = "smtp"
+  .unmapped.smtp_command = command
+  .unmapped.smtp_target = email.to_mailboxes[0]
+}
+# The mail host is the device, which belongs to the host profile in both classes.
 if host != "" {
   # type_id 0 (Unknown): the log does not say what kind of device the mail host is.
   .device = {"hostname": host, "type_id": 0}

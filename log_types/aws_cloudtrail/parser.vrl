@@ -4,6 +4,7 @@
 # -> Create, Update/Modify/Set/Send -> Update, Delete/Stop/Remove/Detach -> Delete, anything else -> Other.
 # The actor is the stable identity (user name, else the role or user segment of the ARN, else the account), never
 # an assumed-role session name. A record without an event name is rejected.
+# Request and response payloads contribute selected scalar fields. Raw service payloads can contain credentials.
 
 ingested = timestamp(%ironcyde.ingested_at) ?? now()
 raw = parse_json(string(.message) ?? "") ?? null
@@ -152,14 +153,32 @@ request_uid = to_string(raw.requestID) ?? ""
 if request_uid != "" {
   api.request = {"uid": request_uid}
   if is_object(raw.requestParameters) {
-    api.request.data = raw.requestParameters
+    request = raw.requestParameters
+    request_data = compact({
+      "userName": string(request.userName) ?? "",
+      "policyName": string(request.policyName) ?? "",
+      "roleArn": string(request.roleArn) ?? "",
+      "roleSessionName": string(request.roleSessionName) ?? "",
+    })
+    if length(request_data) > 0 {
+      api.request.data = request_data
+    }
   }
 }
 if error_code != "" {
   api.response = {"error": error_code, "error_message": to_string(raw.errorMessage) ?? ""}
 }
 if is_object(raw.responseElements) {
-  api.response.data = raw.responseElements
+  response = raw.responseElements
+  response_data = compact({
+    "assumedRoleUser": {
+      "arn": string(response.assumedRoleUser.arn) ?? "",
+      "assumedRoleId": string(response.assumedRoleUser.assumedRoleId) ?? "",
+    },
+  })
+  if length(response_data) > 0 {
+    api.response.data = response_data
+  }
 }
 
 resources = []

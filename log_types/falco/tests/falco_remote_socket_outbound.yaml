@@ -1,0 +1,10 @@
+---
+# A connect rule reports the remote socket without the client/server fields.
+raw_sample: '{"rule":"Unexpected outbound connection","output":"Example outbound connection","hostname":"node1","output_fields":{"evt.type":"connect","fd.rip":"203.0.113.80","fd.rport":443,"fd.l4proto":"tcp","proc.pid":4242}}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  dst_endpoint: {ip: 203.0.113.80, port: 443}
+  src_endpoint: null
+  actor.process.pid: 4242
+  metadata.profiles: [host]

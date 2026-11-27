@@ -1,0 +1,9 @@
+---
+# The older destination field still identifies the peer when fd.sip is missing.
+raw_sample: '{"rule":"Unexpected outbound connection","output":"Example outbound connection","output_fields":{"evt.type":"connect","fd.cip":"192.0.2.23","fd.dip":"203.0.113.80"}}'
+expected:
+  class_uid: 4001
+  type_uid: 400101
+  src_endpoint.ip: 192.0.2.23
+  dst_endpoint.ip: 203.0.113.80
+  metadata.profiles: [host]

@@ -1,0 +1,18 @@
+---
+# Synthetic sample using the default alert_json fields from the Snort 3 Rule Writing Guide.
+raw_sample: '{"timestamp":"10/14-14:39:43.000000","pkt_num":5,"proto":"TCP","pkt_gen":"stream_tcp","pkt_len":97,"dir":"C2S","src_ap":"192.0.2.44:50284","dst_ap":"198.51.100.35:80","rule":"3:2100004:2","action":"would_drop"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  severity_id: 0
+  finding_info.title: "Rule 3:2100004"
+  finding_info.analytic.uid: "3:2100004"
+  finding_info.analytic.version: "2"
+  evidences:
+    - src_endpoint: {ip: 192.0.2.44, port: 50284}
+      dst_endpoint: {ip: 198.51.100.35, port: 80}
+      connection_info: {direction_id: 0, protocol_name: tcp, protocol_num: 6}
+  action_id: null
+  disposition_id: null
+  metadata.original_time: "10/14-14:39:43.000000"
+  metadata.profiles: []

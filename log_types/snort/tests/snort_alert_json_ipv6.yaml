@@ -1,0 +1,15 @@
+---
+# Snort's alert_json logger appends :port to the unbracketed IPv6 address.
+raw_sample: '{"proto":"TCP","src_ap":"2001:db8::44:5353","dst_ap":"2001:db8::35:443","rule":"1:2100005:0","action":"drop"}'
+expected:
+  class_uid: 2004
+  type_uid: 200401
+  finding_info.analytic.uid: "1:2100005"
+  finding_info.analytic.version: "0"
+  evidences:
+    - src_endpoint: {ip: "2001:db8::44", port: 5353}
+      dst_endpoint: {ip: "2001:db8::35", port: 443}
+      connection_info: {direction_id: 0, protocol_name: tcp, protocol_num: 6}
+  action_id: 2
+  disposition_id: 6
+  metadata.profiles: [security_control]
